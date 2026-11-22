@@ -91,6 +91,7 @@ def copy_licenses(dst):
     lic = dst / "licenses"
     lic.mkdir(exist_ok=True)
     shutil.copy2(ROOT / "THIRD_PARTY.md", dst / "THIRD_PARTY.md")
+    shutil.copy2(ROOT / "LICENSE", dst / "LICENSE.txt")
     shutil.copy2(ROOT / "third_party" / "CascLib" / "LICENSE", lic / "CascLib.txt")
     shutil.copy2(ROOT / "third_party" / "pybg3" / "LICENSE", lic / "pybg3.txt")
     shutil.copy2(ROOT / "web" / "node_modules" / "three" / "LICENSE", lic / "three.js.txt")

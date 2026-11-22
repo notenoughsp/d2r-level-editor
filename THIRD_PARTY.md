@@ -1,5 +1,7 @@
 # Third-party components
 
+The D2R Level Editor itself is under the MIT License (`LICENSE`).
+
 The D2R Level Editor package contains these components. Their licence texts are in `licenses/`.
 
 | Component | Use | Licence |
