@@ -46,7 +46,8 @@ def run_game(runs=RUNS, moves=None):
         (PLUGIN_DIR / "moves.txt").write_text("".join(f"{x} {y}\n" for x, y in moves))
     shutil.copy2(HARNESS, PLUGIN_DIR / HARNESS.name)
     (PLUGIN_DIR / "test-harness.ini").write_text(
-        f"runs={runs}\nradius=150\nsettle_ticks=100\nwindow_x=-3840\nwindow_y=0\nwindow_w=1600\nwindow_h=900\n")
+        f"runs={runs}\nradius=150\nsettle_ticks=100\nwindow_x=-3840\nwindow_y=0\nwindow_w=1600\nwindow_h=900\n"
+        "start_level=1\n")  # the town test needs the act 1 town, wherever the character was saved
     try:
         proc = subprocess.Popen([str(GAME / "D2RLoader.exe"), "-mod", MOD], cwd=str(GAME))
         start = time.time()
@@ -114,6 +115,21 @@ def correlate(dump, expected):
     return iy - expected.shape[0] + 1, ix - expected.shape[1] + 1, corr[iy, ix]
 
 
+def same_world(a, b, min_overlap=5000):
+    """Two map logs show the same map: equal on every subtile both know, aligned in world space."""
+    (ha, ga), (hb, gb) = a, b
+    ax, ay = ha["origin"]
+    bx, by = hb["origin"]
+    x0, y0 = max(ax, bx), max(ay, by)
+    x1, y1 = min(ax + ga.shape[1], bx + gb.shape[1]), min(ay + ga.shape[0], by + gb.shape[0])
+    if x1 <= x0 or y1 <= y0:
+        return False
+    sa = ga[y0 - ay:y1 - ay, x0 - ax:x1 - ax]
+    sb = gb[y0 - by:y1 - by, x0 - bx:x1 - bx]
+    known = (sa != 0) & (sb != 0)
+    return int(known.sum()) >= min_overlap and bool((sa[known] == sb[known]).all())
+
+
 def evaluate():
     out = []
     dumps = sorted(PLUGIN_DIR.glob("run_*.txt"))
@@ -124,10 +140,12 @@ def evaluate():
     loaded = [load_dump(p) for p in dumps]
     seeds = [h["seed"][0] for h, _ in loaded]
     spawns = [tuple(h["player"]) for h, _ in loaded]
-    same_map = all(np.array_equal(loaded[0][1], g) for _, g in loaded[1:])
+    same_map = all(same_world(loaded[0], other) for other in loaded[1:])
     out.append(f"game seeds: {seeds}")
     out.append(f"player spawns: {spawns}")
-    verdict = "PASS" if same_map and len(set(spawns)) == 1 else "FAIL"
+    # The spawn may differ (a character saved elsewhere is first brought to the town), so the maps
+    # are compared where both logs overlap in world coordinates.
+    verdict = "PASS" if same_map else "FAIL"
     if len(set(seeds)) == 1 and len(loaded) > 1:
         verdict += " (all runs had the same game seed, so this only shows determinism)"
     else:
@@ -209,6 +227,8 @@ def check_collision(head, dump):
         rel = ds1_path.relative_to(PROJECT).as_posix()
         if is_outdoor_piece(rel):
             continue  # pieces of random outdoor levels: checked by random_area_phase
+        if rel not in _names():
+            continue  # a new map piece (tools/new_zone.py): no original to compare with
         d = DS1(ds1_path.read_bytes())
         orig = DS1(read_asset(rel, original=True))
         table = collision.tile_table(read_asset, d)
@@ -344,11 +364,12 @@ def movement_phase():
         if (exp[ty * 5:ty * 5 + 5, tx * 5:tx * 5 + 5] & 1).all():
             targets.append((wx + tx * 5 + 2, wy + ty * 5 + 2))
             kinds.append(("blocked", tx, ty))
-    # control: nearest free 7x7 area about 20 subtiles from the spawn
-    px, py = head["player"]
+    # control: nearest free 7x7 area 10-30 subtiles from where the last run ends (one run command
+    # paths only so far, and the spawn may be elsewhere)
+    px, py = targets[-1] if targets else head["player"]
     ox, oy = head["origin"]
     best = None
-    for r in range(18, 40):
+    for r in range(10, 30):
         for ang in range(0, 360, 15):
             import math
             cx = int(px + r * math.cos(math.radians(ang)))

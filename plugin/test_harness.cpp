@@ -68,6 +68,7 @@ BoolFn IsInGame = nullptr;
 ShutdownFn RequestShutdown = nullptr;
 
 struct Config {
+    int startLevel = -1;      // start_level=1: bring the character to this level (town) before the first map log
     std::vector<int> levels;  // levels=1,2,3: lay out these levels and list their rooms (levels_<n>.txt)
     int runs = 3, radius = 150, settleTicks = 100;
     int wx = -3840, wy = 0, ww = 1600, wh = 900;
@@ -95,6 +96,8 @@ std::atomic<int> DumpRequest{-1};   // explore dump index, done on the game thre
 // x, y, exact, flag) at RVA 0x491CA0 is what the Teleport skill (0x554C40) calls on the server; it
 // finds the target room near the unit's room, so long jumps go in hops of up to TeleportHop subtiles.
 using TeleportFn = void(__fastcall*)(void* game, void* unit, void* room, int x, int y, int exact, int flag);
+using FindRoomFn = void*(__fastcall*)(void* room, int x, int y);  // DUNGEON_FindRoomBySubtileCoords, RVA 0x38DFB0
+FindRoomFn FindRoom = nullptr;
 TeleportFn Teleport = nullptr;
 constexpr int TeleportHop = 24;
 std::atomic<long long> TeleportTarget{-1};
@@ -116,6 +119,7 @@ std::atomic<int> Run{0};            // index of the current/next run
 std::atomic<bool> Dumped{false};    // current game dumped
 std::atomic<bool> ExitRequested{false};
 void* CurrentGame = nullptr;
+bool StartWarped = false;
 int SettledTicks = 0;
 
 void Log(const char* fmt, ...) {
@@ -154,6 +158,7 @@ void ReadConfig() {
         if (std::sscanf(line, "window_w=%d", &v) == 1) Cfg.ww = v;
         if (std::sscanf(line, "window_h=%d", &v) == 1) Cfg.wh = v;
         if (std::sscanf(line, "vary_game_seed=%d", &v) == 1) Cfg.varySeed = v;
+        if (std::sscanf(line, "start_level=%d", &v) == 1) Cfg.startLevel = v;
         if (std::strncmp(line, "levels=", 7) == 0) {
             Cfg.levels.clear();
             for (char* t = std::strtok(line + 7, ", \r\n"); t; t = std::strtok(nullptr, ", \r\n")) Cfg.levels.push_back(std::atoi(t));
@@ -276,7 +281,10 @@ void __fastcall ProcessGameDetour(void* game) {
         const long long t = TeleportTarget.exchange(-1);
         for (std::uint32_t guid = 0; guid < 16; ++guid) {
             if (void* player = GetServerUnit(game, 0, guid)) {
-                Teleport(game, player, nullptr, static_cast<int>(t >> 32), static_cast<int>(t & 0xFFFFFFFF), 0, 0);
+                const int tx = static_cast<int>(t >> 32), ty = static_cast<int>(t & 0xFFFFFFFF);
+                void* here = GetRoom(player);
+                if (here && FindRoom(here, tx, ty)) Teleport(game, player, nullptr, tx, ty, 0, 0);
+                else Log("teleport to (%d,%d) skipped: no room there", tx, ty);
                 break;
             }
         }
@@ -294,10 +302,19 @@ void __fastcall ProcessGameDetour(void* game) {
     if (game != CurrentGame) {
         CurrentGame = game;
         SettledTicks = 0;
+        StartWarped = false;
     }
     if (++SettledTicks < Cfg.settleTicks) return;
     for (std::uint32_t guid = 0; guid < 16; ++guid) {
         if (void* player = GetServerUnit(game, 0, guid)) {
+            // A test needs a known start: the character may have been saved in another act or area.
+            if (Cfg.startLevel >= 0 && ServerLevel.load() != Cfg.startLevel && !StartWarped) {
+                StartWarped = true;
+                Log("run %d: player in level %d, warp to start level %d", Run.load(), ServerLevel.load(), Cfg.startLevel);
+                LevelWarp(game, player, Cfg.startLevel, 13);  // 13 = town start, as the waypoint uses for towns
+                SettledTicks = 0;
+                return;
+            }
             DumpRun(game, player);
             DumpLevels(game, player, Run.load());
             Dumped = true;
@@ -602,6 +619,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
     UnitClass = reinterpret_cast<ClassFn>(base + 0x349860);
     GetLevel = reinterpret_cast<GetLevelFn>(base + 0x3267C0);
     Teleport = reinterpret_cast<TeleportFn>(base + 0x491CA0);
+    FindRoom = reinterpret_cast<FindRoomFn>(base + 0x38DFB0);
     LevelWarp = reinterpret_cast<WarpFn>(base + 0x488180);
     LevelIdOf = reinterpret_cast<LevelIdFn>(base + 0x2EFC10);
     InitLevel = reinterpret_cast<InitLevelFn>(base + 0x3271C0);

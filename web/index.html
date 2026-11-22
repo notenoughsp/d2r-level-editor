@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <title>D2R Level Editor</title>
@@ -11,54 +11,54 @@
 <body>
 <div id="toolbar">
   <span class="title">D2R Editor</span>
-  <button id="btn-save" title="Strg+S">Speichern</button>
-  <button id="btn-undo" title="Strg+Z">Rückgängig</button>
-  <button id="btn-redo" title="Strg+Y">Wiederholen</button>
+  <button id="btn-save" title="Strg+S">Save</button>
+  <button id="btn-undo" title="Strg+Z">Undo</button>
+  <button id="btn-redo" title="Strg+Y">Redo</button>
   <span class="sep"></span>
-  <button class="mode active" data-mode="translate" title="W">Verschieben</button>
-  <button class="mode" data-mode="rotate" title="E">Drehen</button>
-  <button class="mode" data-mode="scale" title="R">Skalieren</button>
-  <button id="btn-top" title="T: Draufsicht ein/aus">Draufsicht</button>
-  <button id="btn-sd" title="Umschalten zwischen HD-Ansicht und alter Grafik (SD-Kacheln wie im Originalspiel)">Alte Grafik</button>
-  <label title="Einrasten beim Verschieben, Drehen und Skalieren"><input type="checkbox" id="snap" checked> Raster</label>
-  <input id="snap-t" class="num" type="number" step="0.1" min="0.1" value="0.5" title="Raster Verschieben (Einheiten, 10 = 1 Kachel)">
-  <input id="snap-r" class="num" type="number" step="1" min="1" value="15" title="Raster Drehen (Grad)">
-  <input id="snap-s" class="num" type="number" step="0.01" min="0.01" value="0.05" title="Raster Skalieren">
+  <button class="mode active" data-mode="translate" title="W">Move</button>
+  <button class="mode" data-mode="rotate" title="E">Rotate</button>
+  <button class="mode" data-mode="scale" title="R">Scale</button>
+  <button id="btn-top" title="T: top view on/off">Top view</button>
+  <button id="btn-sd" title="Switch between the HD view and the legacy graphics (SD tiles as in the original game)">Alte Grafik</button>
+  <label title="Snap when moving, rotating and scaling"><input type="checkbox" id="snap" checked> Snap</label>
+  <input id="snap-t" class="num" type="number" step="0.1" min="0.1" value="0.5" title="Move snap (units, 10 = 1 tile)">
+  <input id="snap-r" class="num" type="number" step="1" min="1" value="15" title="Rotation snap (degrees)">
+  <input id="snap-s" class="num" type="number" step="0.01" min="0.01" value="0.05" title="Scale snap">
   <span class="sep"></span>
-  <label><input type="checkbox" id="show-coll"> Kollision</label>
-  <label title="Spielobjekte aus der DS1: NPCs, Monster-Spawns, Truhen, Wegpunkte"><input type="checkbox" id="show-objs" checked> Spielobjekte</label>
-  <label title="Lichter, Effekte, Sounds und andere unsichtbare Objekte als Symbole zeigen"><input type="checkbox" id="show-helpers" checked> Hilfen</label>
-  <select id="tool" title="Werkzeug">
-    <option value="objects">Objekte</option>
-    <option value="block">Kollision: sperren</option>
-    <option value="blockall">Kollision: sperren + Teleport</option>
-    <option value="clear">Kollision: freimachen</option>
-    <option value="reset">Kollision: Original</option>
+  <label><input type="checkbox" id="show-coll"> Collision</label>
+  <label title="Game objects from the DS1: NPCs, monster spawns, chests, waypoints"><input type="checkbox" id="show-objs" checked> Spielobjekte</label>
+  <label title="Show lights, effects, sounds and other invisible objects as symbols"><input type="checkbox" id="show-helpers" checked> Helpers</label>
+  <select id="tool" title="Tool">
+    <option value="objects">Objects</option>
+    <option value="block">Collision: block</option>
+    <option value="blockall">Collision: block + teleport</option>
+    <option value="clear">Collision: clear</option>
+    <option value="reset">Collision: original</option>
   </select>
-  <select id="brush" title="Pinselgröße für Kollision"><option value="1">1×1</option><option value="3">3×3</option><option value="5">5×5</option></select>
+  <select id="brush" title="Collision brush size"><option value="1">1×1</option><option value="3">3×3</option><option value="5">5×5</option></select>
   <label>LOD <select id="lod"><option>0</option><option selected>1</option><option>2</option></select></label>
   <span class="sep"></span>
-  <button id="btn-export" title="Alle gespeicherten Karten als Mod in den Spielordner schreiben">Export</button>
-  <button id="btn-test" title="Exportieren und automatisch im Spiel testen (zweiter Monitor, stumm)">Im Spiel testen</button>
-  <select id="lang" title="Sprache"><option value="de">Deutsch</option><option value="en">English</option></select>
+  <button id="btn-export" title="Write all saved maps into the game folder as a mod">Export</button>
+  <button id="btn-test" title="Export and test automatically in the game (second monitor, muted)">Test in game</button>
+  <select id="lang" title="Language"><option value="de">Deutsch</option><option value="en">English</option></select>
   <span id="cursor-pos"></span>
   <span id="status"></span>
 </div>
 <div id="main">
   <div id="left">
-    <div class="tabs"><button class="tab active" data-tab="presets">Karten</button><button class="tab" data-tab="models">Modelle</button><button class="tab" data-tab="objects">Objekte</button></div>
+    <div class="tabs"><button class="tab active" data-tab="presets">Maps</button><button class="tab" data-tab="models">Models</button><button class="tab" data-tab="objects">Objects</button></div>
     <div class="pane" id="pane-presets">
-      <input id="preset-filter" placeholder="Karte suchen, z. B. act1/town">
+      <input id="preset-filter" placeholder="Search maps, e.g. act1/town">
       <ul id="preset-list" class="list"></ul>
     </div>
     <div class="pane hidden" id="pane-objects">
-      <input id="object-filter" placeholder="Objekte der Karte suchen, z. B. palisade, light">
+      <input id="object-filter" placeholder="Search objects of the map, e.g. palisade, light">
       <div id="object-count"></div>
       <ul id="object-list" class="list"></ul>
     </div>
     <div class="pane hidden" id="pane-models">
-      <input id="model-filter" placeholder="Modell suchen, z. B. palisade, tree, barrel">
-      <select id="model-cat" title="Bereich"><option value="">Alle Bereiche</option><option value="__recent">Zuletzt benutzt</option>
+      <input id="model-filter" placeholder="Search models, e.g. palisade, tree, barrel">
+      <select id="model-cat" title="Area"><option value="">Alle Bereiche</option><option value="__recent">Zuletzt benutzt</option>
         <option value="env/model/act1">Akt 1</option><option value="env/model/act2">Akt 2</option><option value="env/model/act3">Akt 3</option>
         <option value="env/model/act4">Akt 4</option><option value="env/model/expansion">Akt 5</option><option value="env/model/global">Global</option>
         <option value="env/foliage">Pflanzen</option><option value="objects/">Spielobjekte</option><option value="character/">Figuren</option></select>
@@ -66,35 +66,34 @@
       <ul id="model-list" class="list"></ul>
       <div id="preview-box">
         <canvas id="preview"></canvas>
-        <div id="preview-info">Klick = Vorschau · Doppelklick = in der Bildmitte platzieren · P = am Mauszeiger platzieren</div>
+        <div id="preview-info">Click = preview · double-click = place in the view centre · P = place at the mouse cursor</div>
       </div>
     </div>
   </div>
-  <div id="viewport"><div id="sd-view" class="hidden"><img id="sd-img" alt=""><div id="sd-hint">Alte Grafik (SD) · Rad: zoomen · Ziehen: verschieben · Doppelklick: diese Stelle in der HD-Ansicht zeigen</div></div><div id="banner" class="hidden"></div><div id="progress" class="hidden"><div id="progress-bar"></div><span id="progress-text"></span></div><div id="marquee" class="hidden"></div></div>
+  <div id="viewport"><div id="sd-view" class="hidden"><img id="sd-img" alt=""><div id="sd-hint">Legacy graphics (SD) · wheel: zoom · drag: pan · double-click: show this place in the HD view</div></div><div id="banner" class="hidden"></div><div id="progress" class="hidden"><div id="progress-bar"></div><span id="progress-text"></span></div><div id="marquee" class="hidden"></div></div>
   <div id="right">
-    <h3>Auswahl</h3>
-    <div id="props" class="empty">Nichts ausgewählt</div>
-    <h3>Spielobjekt hinzufügen</h3>
+    <h3>Selection</h3>
+    <div id="props" class="empty">Nothing selected</div>
+    <h3>Add game object</h3>
     <div id="add-obj">
-      <select id="add-obj-type"><option value="1">NPC / Monster</option><option value="2">Objekt</option></select>
+      <select id="add-obj-type"><option value="1">NPC / Monster</option><option value="2">Object</option></select>
       <select id="add-obj-id"></select>
-      <button id="add-obj-btn" title="O: am Mauszeiger hinzufügen">Hinzufügen</button>
+      <button id="add-obj-btn" title="O: add at the mouse cursor">Add</button>
     </div>
-    <h3>Karte</h3>
+    <h3>Map</h3>
     <div id="scene-info"></div>
-    <div id="replace-box" title="Ersetzt diese Karte durch eine Kopie einer anderen Karte gleicher Größe (Kacheln, Kollision, Spielobjekte, Modelle, Gelände). Das Spiel benutzt sie an dieser Stelle.">
-      <select id="replace-src"><option value="">Inhalt einer Karte gleicher Größe übernehmen … (experimentell)</option></select>
-      <button id="replace-btn">Übernehmen</button>
+    <div id="replace-box" title="Replaces this map with a copy of another map of the same size (tiles, collision, game objects, models, terrain). The game uses it at this place.">
+      <select id="replace-src"><option value="">Take over a map of the same size … (experimental)</option></select>
+      <button id="replace-btn">Apply</button>
     </div>
-    <h3>Steuerung</h3>
-    <p class="hint">Linksklick: auswählen · Shift+Klick: zur Auswahl hinzufügen/entfernen · Linke Maus ziehen: Rahmenauswahl · Esc: Auswahl aufheben<br>Strg+C/Strg+V: kopieren/einfügen (am Mauszeiger, auch in andere Karten) · Pfeiltasten: um einen Rasterschritt schieben (Shift ×10), Bild↑/Bild↓: Höhe · G: auf den Boden setzen · T: Draufsicht · O: Spielobjekt am Mauszeiger hinzufügen<br>Spielobjekte (aus der DS1, im Spiel wirksam): rote Kegel = NPCs/Monster (Linie = Laufweg), türkise Würfel = Objekte. Auswählen, ziehen, Typ ändern, löschen wie andere Objekte.<br>
+    <h3>Controls</h3>
+    <p class="hint">Left click: select · Shift+click: add to/remove from the selection · drag with the left mouse button: box selection · Esc: deselect<br>Ctrl+C/Ctrl+V: copy/paste (at the mouse cursor, also into other maps) · arrow keys: move one snap step (Shift ×10), Page Up/Down: height · G: drop to ground · T: top view · O: add a game object at the mouse cursor<br>Game objects (from the DS1, used by the game): red cones = NPCs/monsters (line = walking path), turquoise cubes = objects. Select, drag, change the type and delete them like other objects.<br>
     Rechte Maus: drehen · Mittlere Maus: verschieben · Rad: zoomen<br>
-    W/E/R: Verschieben/Drehen/Skalieren · Entf: löschen · Strg+D: duplizieren · Strg+Z/Strg+Y: rückgängig/wiederholen · F: Auswahl fokussieren · P: Modell aus der Vorschau am Mauszeiger platzieren<br>
-    Kollision: Werkzeug wählen, dann mit Linksklick/Ziehen Kacheln (10×10 Einheiten) bemalen. Rot = nicht begehbar, Blau = nur Sicht blockiert, gelber Rand = von dir geändert.
-    „Kollision unter Objekt“ verknüpft die Sperrfläche mit dem Objekt: Sie wandert beim Verschieben mit und verschwindet beim Löschen.</p>
+    W/E/R: move/rotate/scale · Del: delete · Ctrl+D: duplicate · Ctrl+Z/Ctrl+Y: undo/redo · F: focus the selection · P: place the preview model at the mouse cursor<br>
+    Collision: choose a tool, then paint tiles (10×10 units) with left click/drag. Red = not walkable, blue = blocks only line of sight, yellow border = changed by you. "Collision under object" links the blocked area to the object: it moves along and disappears when the object is deleted.</p>
   </div>
 </div>
-<div id="modal" class="hidden"><div class="modal-box"><div class="modal-head"><span id="modal-title"></span><button id="modal-close">Schließen</button></div><pre id="modal-body"></pre></div></div>
-<script type="module" src="/web/editor.js?v=25"></script>
+<div id="modal" class="hidden"><div class="modal-box"><div class="modal-head"><span id="modal-title"></span><button id="modal-close">Close</button></div><pre id="modal-body"></pre></div></div>
+<script type="module" src="/web/editor.js?v=28"></script>
 </body>
 </html>

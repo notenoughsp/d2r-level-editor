@@ -14,7 +14,8 @@ const setStatus = (t) => (statusEl.textContent = t);
 const api = (path, params = {}) => `/api/${path}?` + new URLSearchParams(params).toString();
 async function postJSON(path, params, body) {
   const res = await fetch(api(path, params), {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: body === undefined ? "" : JSON.stringify(body),
+    method: "POST", headers: { "Content-Type": "application/json", "X-D2R-Editor": "1" },
+    body: body === undefined ? "" : JSON.stringify(body),
   });
   return { ok: res.ok, data: await res.json() };
 }
@@ -80,7 +81,7 @@ function updateProgress() {
   el.classList.remove("hidden");
   const total = loadsPending + loadsDone;
   $("#progress-bar").style.width = `${Math.round((loadsDone / total) * 100)}%`;
-  $("#progress-text").textContent = `Modelle laden: ${loadsDone} / ${total}`;
+  $("#progress-text").textContent = `Loading models: ${loadsDone} / ${total}`;
 }
 function trackLoad(promise) {
   loadsPending++;
@@ -112,14 +113,14 @@ function placeholder() {
 
 // Symbols for entities without a model (lights, effects, sounds, decals...)
 const HELPER_KINDS = [
-  ["SpotLightDefinitionComponent", 0xffe066, "Licht"], ["PointLightDefinitionComponent", 0xffe066, "Licht"],
-  ["VfxDefinitionComponent", 0xc77dff, "Effekt"], ["AudioEmitterComponent", 0x5aa9ff, "Sound"],
-  ["TerrainStampDefinitionComponent", 0xb08050, "Gelände-Stempel"], ["TerrainDecalDefinitionComponent", 0xb08050, "Decal"],
+  ["SpotLightDefinitionComponent", 0xffe066, "Light"], ["PointLightDefinitionComponent", 0xffe066, "Light"],
+  ["VfxDefinitionComponent", 0xc77dff, "Effect"], ["AudioEmitterComponent", 0x5aa9ff, "Sound"],
+  ["TerrainStampDefinitionComponent", 0xb08050, "Terrain stamp"], ["TerrainDecalDefinitionComponent", 0xb08050, "Decal"],
 ];
 const helperGeometry = new THREE.OctahedronGeometry(1.2);
 let showHelpers = true;
 function helperMarker(ent) {
-  const kind = HELPER_KINDS.find(([t]) => comp(ent, t)) || [null, 0x9a9a9a, "Sonstiges"];
+  const kind = HELPER_KINDS.find(([t]) => comp(ent, t)) || [null, 0x9a9a9a, "Other"];
   const m = new THREE.Mesh(helperGeometry, new THREE.MeshBasicMaterial({ color: kind[1], wireframe: true }));
   m.position.y = 1.5;
   m.userData.helper = kind[2];
@@ -203,52 +204,65 @@ async function buildEntity(ent, parent, depth = 0) {
   return g;
 }
 
-async function addObjectFor(ent) {
-  const obj = await buildEntity(ent, root);
+async function addObjectFor(ent, into = root) {
+  const obj = await buildEntity(ent, into);
   obj.userData.entity = ent;
   entityObjects.set(ent.id, obj);
   return obj;
 }
 
+let loadToken = 0;  // the newest openPreset call; older ones stop when it changes
 async function openPreset(path) {
-  if (dirty && !confirm("Ungespeicherte Änderungen verwerfen?")) return;
-  setStatus("Lade " + path + " …");
+  if (dirty && !confirm("Discard unsaved changes?")) return;
+  const token = ++loadToken;
+  const stale = () => token !== loadToken;
+  setStatus(`Loading ${path} …`);
   selectGameObject(null);
   select([]);
   if (root) scene.remove(root);
   root = new THREE.Group();
+  const myRoot = root;
   scene.add(root);
   entityObjects.clear();
   undoStack.length = 0;
   redoStack.length = 0;
   presetPath = path;
-  doc = await (await fetch(api("preset", { path }))).json();
+  const loaded = await (await fetch(api("preset", { path }))).json();
+  if (stale()) return;
+  doc = loaded;
   if (!Array.isArray(doc.entities)) {
-    setStatus(`Karte konnte nicht geladen werden: ${path}${doc.error ? ` (${doc.error})` : ""}`);
+    setStatus(`Could not load the map: ${path}${doc.error ? ` (${doc.error})` : ""}`);
     doc = { entities: [] };
+    dirty = false;
+    updateTitle();
     return;
   }
   const draft = await (await fetch(api("draft", { path }))).json();
+  if (stale()) return;
   if (draft.doc) {
     const when = new Date(draft.time * 1000).toLocaleString(locale());
-    if (confirm(`Für diese Karte gibt es einen automatisch gesicherten, ungespeicherten Entwurf vom ${when}. Wiederherstellen?`)) {
+    if (confirm(`There is an autosaved, unsaved draft of this map from ${when}. Restore it?`)) {
       doc = draft.doc;
       restoredDraft = true;
     } else await postJSON("draft", { path });
   }
   links = await (await fetch(api("links", { path }))).json();
   await loadBiomeMaterial(doc.biomeFilename);
+  if (stale()) return;
   fillReplaceList(path);
   // The ground is either a terrain entity in the list or the mesh next to the json
   // (<name>/terrain_lod0.model).
   if (!doc.entities.some((e) => comp(e, "TerrainDefinitionComponent"))) {
-    loadModel(path.replace(/\.json$/, "/terrain_lod0.model")).then((m) => m && root.add(terrainObject(m)));
+    loadModel(path.replace(/\.json$/, "/terrain_lod0.model")).then((m) => m && myRoot.add(terrainObject(m)));
   }
   let n = 0;
-  for (const ent of doc.entities) {
-    await addObjectFor(ent);
-    if (++n % 200 === 0) setStatus(`Lade Entitäten ${n}/${doc.entities.length} …`);
+  const myDoc = doc;
+  for (const ent of myDoc.entities) {
+    if (stale()) return;  // another map was opened meanwhile
+    await addObjectFor(ent, myRoot);
+    if (++n % 200 === 0) setStatus(`Loading entities ${n}/${myDoc.entities.length} …`);
   }
+  if (stale()) return;
   dirty = restoredDraft;
   restoredDraft = false;
   frameAll();
@@ -257,8 +271,9 @@ async function openPreset(path) {
   loadGameObjects();
   renderObjectList();
   showPresetInfo(path);
-  setStatus(`${path} geladen`);
+  setStatus(`${path} loaded`);
   document.querySelectorAll("#preset-list li").forEach((li) => li.classList.toggle("active", li.dataset.path === path));
+  if (sd.on) { sd.path = null; sdLoad(); }  // the legacy view shows the newly opened map
 }
 
 // The terrain mesh has no textures of its own (the game paints it from biome tiles), so it is
@@ -299,7 +314,7 @@ async function fillReplaceList(path) {
       o.textContent = p.replace("data/hd/env/preset/", "");
       sel.appendChild(o);
     }
-    sel.options[0].textContent = `Inhalt einer Karte gleicher Größe übernehmen … (${r.presets.length}, experimentell)`;
+    sel.options[0].textContent = `Take over a map of the same size … (${r.presets.length}, experimental)`;
   } catch (e) {
     console.warn("same size list", e);
   }
@@ -307,13 +322,12 @@ async function fillReplaceList(path) {
 $("#replace-btn").addEventListener("click", async () => {
   const src = $("#replace-src").value;
   if (!presetPath || !src) return;
-  if (!confirm(`${presetPath.replace("data/hd/env/preset/", "")} wird durch eine Kopie von ${src.replace("data/hd/env/preset/", "")} ersetzt. Fortfahren?`)) return;
-  const r = await fetch(api("replace", { path: presetPath, source: src }), { method: "POST" });
-  const j = await r.json();
-  if (!r.ok) return setStatus(`Ersetzen fehlgeschlagen: ${j.error}`);
+  if (!confirm(`${presetPath.replace("data/hd/env/preset/", "")} will be replaced by a copy of ${src.replace("data/hd/env/preset/", "")}. Continue?`)) return;
+  const { ok, data: j } = await postJSON("replace", { path: presetPath, source: src });
+  if (!ok) return setStatus(`Replacing failed: ${j.error}`);
   dirty = false;
   await openPreset(presetPath);
-  setStatus(`Ersetzt durch ${src.replace("data/hd/env/preset/", "")}: ${j.files} Datei(en)`);
+  setStatus(`Replaced by ${src.replace("data/hd/env/preset/", "")}: ${j.files} file(s)`);
 });
 
 // ---------- legacy (SD) view: the map drawn from its DS1 tiles with the old graphics ----------
@@ -377,7 +391,7 @@ $("#sd-view").addEventListener("dblclick", (e) => {
   const off = camera.position.clone().sub(orbit.target);
   orbit.target.copy(target);
   camera.position.copy(target).add(off);
-  setStatus(`Kachel ${Math.floor(tx)}, ${Math.floor(ty)}`);
+  setStatus(`Tile ${Math.floor(tx)}, ${Math.floor(ty)}`);
 });
 
 function terrainObject(m) {
@@ -419,8 +433,8 @@ function updateSceneInfo() {
   const models = doc.entities.filter((e) => comp(e, "ModelDefinitionComponent")).length;
   const helpers = doc.entities.filter((e) => !comp(e, "ModelDefinitionComponent") && !comp(e, "PrefabPlacementDefinitionComponent")).length;
   updateTitle();
-  $("#scene-info").innerHTML = `<b>${doc.name}</b><br>${doc.entities.length} Objekte: ${models} Modelle, ${helpers} Hilfsobjekte<br>` +
-    `Biom: ${doc.biomeFilename || "-"}<br>${dirty ? "<span style='color:#c7a35a'>ungespeichert</span>" : "gespeichert"}`;
+  $("#scene-info").innerHTML = `<b>${doc.name}</b><br>${doc.entities.length} objects: ${models} models, ${helpers} helper objects<br>` +
+    `Biome: ${doc.biomeFilename || "-"}<br>${dirty ? "<span style='color:#c7a35a'>unsaved</span>" : "saved"}`;
 }
 
 function updateTitle() {
@@ -532,15 +546,15 @@ function showProps() {
   if (gameSel) return showGameProps();
   if (!selection.length) {
     el.className = "empty";
-    el.textContent = "Nichts ausgewählt";
+    el.textContent = "Nothing selected";
     return;
   }
   el.className = "";
-  const buttons = `<div class="prop-buttons"><button id="b-dup">Duplizieren</button><button id="b-del">Löschen</button></div>` +
-    `<div class="prop-buttons"><button id="b-ground" title="G: auf die Geländehöhe setzen">Auf den Boden</button><button id="b-rand" title="Zufällig um die Hochachse drehen (natürlicher bei Pflanzen und Steinen)">Zufällig drehen</button></div>` +
-    `<div class="prop-buttons"><button id="b-coll" title="Kacheln unter dem Objekt sperren; die Sperrfläche wandert mit dem Objekt">Kollision unter Objekt</button></div>`;
+  const buttons = `<div class="prop-buttons"><button id="b-dup">Duplizieren</button><button id="b-del">Delete</button></div>` +
+    `<div class="prop-buttons"><button id="b-ground" title="G: put onto the terrain height">Drop to ground</button><button id="b-rand" title="Turn at random around the vertical axis (looks natural for plants and rocks)">Random rotation</button></div>` +
+    `<div class="prop-buttons"><button id="b-coll" title="Block the tiles under the object; the blocked area moves with the object">Collision under object</button></div>`;
   if (selection.length > 1) {
-    el.innerHTML = `<div class="sel-count">${selection.length} Objekte ausgewählt</div>` +
+    el.innerHTML = `<div class="sel-count">${selection.length} objects selected</div>` +
       `<div class="prop-model">${selection.map((o) => o.userData.entity.name).slice(0, 12).join("<br>")}${selection.length > 12 ? "<br>…" : ""}</div>` + buttons;
   } else {
     const o = primary();
@@ -552,8 +566,8 @@ function showProps() {
     const row = (label, key, vals) => `<div class="prop-row"><span>${label}</span>` +
       vals.map((v, i) => `<input type="number" step="any" data-key="${key}" data-i="${i}" value="${v}">`).join("") + "</div>";
     const what = md ? md.filename : pf ? "Prefab: " + pf.prefab : `(${o.children[0]?.userData.helper || "kein Modell"})`;
-    const linked = links[ent.id] ? `<div class="prop-model">Kollision verknüpft: ${links[ent.id].length} Kachel(n)</div>` : "";
-    const explode = pf ? `<div class="prop-buttons"><button id="b-explode" title="Prefab durch seine einzelnen Objekte ersetzen, damit sie einzeln bearbeitbar sind (nur auf dieser Karte)">Prefab auflösen</button></div>` : "";
+    const linked = links[ent.id] ? `<div class="prop-model">Linked collision: ${links[ent.id].length} tile(s)</div>` : "";
+    const explode = pf ? `<div class="prop-buttons"><button id="b-explode" title="Replace the prefab with its single objects so they can be edited one by one (on this map only)">Explode prefab</button></div>` : "";
     el.innerHTML = `<div class="prop-name">${ent.name}</div><div class="prop-model">${what}</div>` + linked + explode +
       row("Position", "p", [o.position.x, o.position.y, o.position.z].map((v) => v.toFixed(2))) +
       row("Drehung°", "r", [deg(e.x), deg(e.y), deg(e.z)]) +
@@ -629,15 +643,15 @@ async function restoreState(entry, direction) {
 
 async function undo() {
   const entry = undoStack.pop();
-  if (!entry) return setStatus("Nichts rückgängig zu machen");
+  if (!entry) return setStatus("Nothing to undo");
   redoStack.push(snapshotState(entry.collisionSteps));
   await restoreState(entry, "undo");
-  setStatus("Rückgängig gemacht");
+  setStatus("Undone");
 }
 
 async function redo() {
   const entry = redoStack.pop();
-  if (!entry) return setStatus("Nichts zu wiederholen");
+  if (!entry) return setStatus("Nothing to redo");
   undoStack.push(snapshotState(entry.collisionSteps));
   await restoreState(entry, "redo");
   setStatus("Wiederholt");
@@ -658,7 +672,7 @@ function addDependency(modelPath) {
 }
 
 async function placeModel(modelPath, at = null) {
-  if (!doc) return alert("Zuerst eine Karte öffnen.");
+  if (!doc) return alert("Open a map first.");
   beginEdit();
   const base = modelPath.split("/").pop().replace(/\.model$/, "");
   const name = `${base}_${Date.now() % 100000}`;
@@ -679,7 +693,7 @@ async function placeModel(modelPath, at = null) {
   doc.entities.push(ent);
   select([await addObjectFor(ent)]);
   markDirty();
-  setStatus(`${base} platziert`);
+  setStatus(`${base} placed`);
 }
 
 async function duplicate() {
@@ -719,7 +733,7 @@ async function removeSelected() {
     await sendCollisionOps(ops, entry);
     await postJSON("links", { path: presetPath }, links);
   }
-  setStatus(`${gone.length} Objekt(e) gelöscht`);
+  setStatus(`${gone.length} object(s) deleted`);
 }
 
 async function save() {
@@ -731,7 +745,7 @@ async function save() {
     setStatus("Gespeichert: " + r.data.saved);
     const li = document.querySelector(`#preset-list li[data-path="${presetPath}"]`);
     if (li) li.classList.add("edited");
-  } else setStatus("Fehler beim Speichern: " + r.data.error);
+  } else setStatus(`Error while saving: ${r.data.error}`);
 }
 
 // ---------- collision (legacy DS1 grid, 1 tile = 10 units, 1 subtile = 2 units) ----------
@@ -795,8 +809,8 @@ async function sendCollisionOps(ops, entry) {
   if (r.ok) {
     if (entry) entry.collisionSteps += 1;
     showCollision(r.data);
-    setStatus(`Kollision gespeichert (${ops.length} Kachel(n)) in ${r.data.ds1}`);
-  } else setStatus("Kollision: " + r.data.error);
+    setStatus(`Collision saved (${ops.length} tile(s)) in ${r.data.ds1}`);
+  } else setStatus(`Collision: ${r.data.error}`);
 }
 
 function tilesUnder(obj) {
@@ -830,7 +844,7 @@ async function blockUnderSelection() {
     links[o.userData.entity.id] = tiles;
     for (const [tx, ty] of tiles) ops.push({ tx, ty, mode: "block" });
   }
-  if (!ops.length) { undoStack.pop(); return setStatus("Diese Kacheln sind schon gesperrt"); }
+  if (!ops.length) { undoStack.pop(); return setStatus("These tiles are already blocked"); }
   if (!$("#show-coll").checked) { $("#show-coll").checked = true; if (collMesh) collMesh.visible = true; }
   await sendCollisionOps(ops, entry);
   await postJSON("links", { path: presetPath }, links);
@@ -938,11 +952,11 @@ let previewObj = null;
 let previewToken = 0;
 async function showPreview(path) {
   const token = ++previewToken;
-  $("#preview-info").textContent = "Lade " + path.replace("data/hd/", "") + " …";
+  $("#preview-info").textContent = `Loading ${path.replace("data/hd/", "")} …`;
   const m = await loadModel(path);
   if (token !== previewToken) return;
   if (previewObj) previewScene.remove(previewObj);
-  if (!m) { $("#preview-info").textContent = "Modell konnte nicht geladen werden"; return; }
+  if (!m) { $("#preview-info").textContent = "Could not load the model"; return; }
   previewObj = new THREE.Group();
   const inner = m.clone(true);
   previewObj.add(inner);
@@ -985,7 +999,7 @@ function askModName() {
 }
 
 async function startTest() {
-  if (dirty && !confirm("Die aktuelle Karte hat ungespeicherte Änderungen. Erst speichern?")) return;
+  if (dirty && !confirm("The current map has unsaved changes. Save first?")) return;
   if (dirty) await save();
   const name = askModName();
   if (!name) return;
@@ -996,13 +1010,13 @@ async function startTest() {
   const poll = async () => {
     const s = await (await fetch(api("test"))).json();
     if (s.running) {
-      banner.textContent = `Test im Spiel läuft (zweiter Monitor, stumm) … ${Math.round(s.elapsed)} s`;
+      banner.textContent = `In-game test running (second monitor, muted) … ${Math.round(s.elapsed)} s`;
       setTimeout(poll, 2000);
     } else {
       banner.classList.add("hidden");
       const failed = /^FAIL/m.test(s.report) || !/^PASS/m.test(s.report);
-      setStatus(failed ? "Test im Spiel: Fehler gefunden" : "Test im Spiel: alles bestanden");
-      modalShow(`Test im Spiel – Mod ${s.mod}`, s.report || "(kein Bericht)");
+      setStatus(failed ? "In-game test: problems found" : "In-game test: all passed");
+      modalShow(`In-game test – mod ${s.mod}`, s.report || "(no report)");
     }
   };
   poll();
@@ -1054,16 +1068,16 @@ async function explodePrefab() {
   entityObjects.delete(ent.id);
   select(created);
   markDirty();
-  setStatus(`Prefab aufgelöst: ${created.length} Objekte`);
+  setStatus(`Prefab exploded: ${created.length} objects`);
 }
 
 // ---------- object list ----------
 function kindOf(ent) {
-  if (comp(ent, "TerrainDefinitionComponent")) return ["⛰", "Gelände"];
+  if (comp(ent, "TerrainDefinitionComponent")) return ["⛰", "Terrain"];
   if (comp(ent, "PrefabPlacementDefinitionComponent")) return ["▣", "Prefab"];
-  if (comp(ent, "ModelDefinitionComponent")) return ["■", "Modell"];
+  if (comp(ent, "ModelDefinitionComponent")) return ["■", "Model"];
   const k = HELPER_KINDS.find(([t]) => comp(ent, t));
-  return ["◆", k ? k[2] : "Sonstiges"];
+  return ["◆", k ? k[2] : "Other"];
 }
 let listTimer = null;
 function scheduleObjectList() {
@@ -1092,7 +1106,7 @@ function renderObjectList() {
     };
     ul.appendChild(li);
   }
-  $("#object-count").textContent = `${doc.entities.length} Objekte${f ? `, ${shown} passend` : ""}`;
+  $("#object-count").textContent = f ? `${doc.entities.length} objects, ${shown} matching` : `${doc.entities.length} objects`;
   markListSelection();
 }
 function markListSelection() {
@@ -1122,13 +1136,13 @@ async function showPresetInfo(path) {
     const levels = [...new Set(info.rows.filter((r) => r.levelId).map((r) => r.level))];
     if (info.shared) {
       banner.className = "warn";
-      banner.innerHTML = `<span class="close" title="Ausblenden">✕</span>Achtung: Dieses Kartenstück ist ein wiederverwendbarer Baustein ` +
-        `(${info.rows.map((r) => r.name).join(", ")}). Zufallsgebiete können es mehrfach einsetzen – Änderungen erscheinen an jeder dieser Stellen.`;
+      banner.innerHTML = `<span class="close" title="Hide">✕</span>Note: this map piece is a reusable building block ` +
+        `(${info.rows.map((r) => r.name).join(", ")}). Random areas can place it several times – changes show up at every one of those places.`;
     } else {
       const variants = Math.max(...info.rows.map((r) => r.variants));
       banner.className = "info";
-      banner.innerHTML = `<span class="close" title="Ausblenden">✕</span>Eigenes Kartenstück von: ${levels.join(", ") || "-"}` +
-        (variants > 1 ? ` – eine von ${variants} Varianten; das Spiel wählt sie per Seed (mit festem Seed immer dieselbe).` : ".");
+      banner.innerHTML = `<span class="close" title="Hide">✕</span>Own map piece of: ${levels.join(", ") || "-"}` +
+        (variants > 1 ? ` – one of ${variants} variants; the game picks one by seed (always the same with a fixed seed).` : ".");
     }
     banner.querySelector(".close").onclick = () => banner.classList.add("hidden");
   } catch { /* info is optional */ }
@@ -1221,12 +1235,12 @@ function showGameProps() {
   const list = ob.type === 1 ? gameObjects.catalog.npc : gameObjects.catalog.obj;
   const el = $("#props");
   el.className = "";
-  el.innerHTML = `<div class="prop-name">${ob.name}</div><div class="prop-model">Spielobjekt (DS1) · ${ob.type === 1 ? "NPC / Monster" : "Objekt"} · ID ${ob.id}` +
-    `${ob.path && ob.path.length ? ` · Laufweg mit ${ob.path.length} Punkten` : ""}</div>` +
-    `<div class="prop-row"><span>Typ</span><select id="go-id">${list.map((e) => `<option value="${e.id}"${e.id === ob.id ? " selected" : ""}>${e.id}: ${e.name}</option>`).join("")}</select></div>` +
+  el.innerHTML = `<div class="prop-name">${ob.name}</div><div class="prop-model">Game object (DS1) · ${ob.type === 1 ? "NPC / monster" : "Object"} · ID ${ob.id}` +
+    `${ob.path && ob.path.length ? ` · path with ${ob.path.length} points` : ""}</div>` +
+    `<div class="prop-row"><span>Type</span><select id="go-id">${list.map((e) => `<option value="${e.id}"${e.id === ob.id ? " selected" : ""}>${e.id}: ${e.name}</option>`).join("")}</select></div>` +
     `<div class="prop-row"><span>Subtile</span><input id="go-x" type="number" value="${ob.x}"><input id="go-y" type="number" value="${ob.y}"><span></span></div>` +
-    `<div class="prop-buttons"><button id="go-del">Löschen</button></div>` +
-    (gameObjects.editable ? "" : `<div class="prop-model">Diese DS1 erlaubt keine Objektänderungen.</div>`);
+    `<div class="prop-buttons"><button id="go-del">Delete</button></div>` +
+    (gameObjects.editable ? "" : `<div class="prop-model">This DS1 does not allow object changes.</div>`);
   $("#go-id").onchange = () => editGameObject(gameSel.userData.gameIndex, { id: +$("#go-id").value });
   $("#go-x").onchange = $("#go-y").onchange = () => editGameObject(gameSel.userData.gameIndex, { x: +$("#go-x").value, y: +$("#go-y").value });
   $("#go-del").onclick = () => deleteGameObject(gameSel.userData.gameIndex);
@@ -1234,7 +1248,7 @@ function showGameProps() {
 
 async function sendGameObjects(objects, entry) {
   const r = await postJSON("objects", { path: presetPath }, { objects });
-  if (!r.ok) { setStatus("Spielobjekte: " + r.data.error); return false; }
+  if (!r.ok) { setStatus(`Game objects: ${r.data.error}`); return false; }
   if (entry) entry.collisionSteps += 1; // same DS1 history as collision
   const keep = gameSel ? gameSel.userData.gameIndex : null;
   gameObjects = r.data;
@@ -1243,7 +1257,7 @@ async function sendGameObjects(objects, entry) {
   if (keep !== null && keep < gameObjects.objects.length) selectGameObject(gameRoot.children[keep]);
   else selectGameObject(null);
   loadCollision(); // the DS1 override changed; keep the overlay in sync
-  setStatus("Spielobjekte gespeichert");
+  setStatus("Game objects saved");
   return true;
 }
 
@@ -1266,7 +1280,7 @@ async function deleteGameObject(i) {
 }
 
 async function addGameObject(at) {
-  if (!gameObjects || !gameObjects.editable) return setStatus("Diese Karte hat keine bearbeitbaren Spielobjekte");
+  if (!gameObjects || !gameObjects.editable) return setStatus("This map has no editable game objects");
   const p = at || orbit.target;
   const objs = currentObjects();
   objs.push({ type: +$("#add-obj-type").value, id: +$("#add-obj-id").value, x: Math.floor(p.x / 2), y: Math.floor(p.z / 2), flags: 0 });
@@ -1306,12 +1320,12 @@ function groundHeight(x, z) {
 }
 function dropToGround() {
   return transformSelection((o) => { o.position.y = groundHeight(o.position.x, o.position.z); },
-    `${selection.length} Objekt(e) auf den Boden gesetzt`);
+    `${selection.length} object(s) dropped to the ground`);
 }
 function randomRotate() {
   return transformSelection((o) => {
     o.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.random() * Math.PI * 2));
-  }, "Zufällig gedreht");
+  }, "Rotated at random");
 }
 function nudge(dx, dy, dz) {
   return transformSelection((o) => { o.position.x += dx; o.position.y += dy; o.position.z += dz; });
@@ -1323,11 +1337,11 @@ function copySelection() {
   const anchor = primary().position;
   const items = selection.map((o) => o.userData.entity);
   localStorage.setItem("d2r-clipboard", JSON.stringify({ anchor: [anchor.x, anchor.y, anchor.z], items }));
-  setStatus(`${items.length} Objekt(e) kopiert`);
+  setStatus(`${items.length} object(s) copied`);
 }
 async function paste() {
   const clip = JSON.parse(localStorage.getItem("d2r-clipboard") || "null");
-  if (!clip || !doc) return setStatus("Zwischenablage ist leer");
+  if (!clip || !doc) return setStatus("The clipboard is empty");
   beginEdit();
   const target = cursorGround ? cursorGround.clone() : orbit.target.clone();
   const step = +$("#snap-t").value || 0.5;
@@ -1351,7 +1365,7 @@ async function paste() {
   }
   select(created);
   markDirty();
-  setStatus(`${created.length} Objekt(e) eingefügt`);
+  setStatus(`${created.length} object(s) pasted`);
 }
 
 // ---------- marquee (rectangle) selection with the left mouse button ----------
@@ -1390,7 +1404,7 @@ window.addEventListener("pointerup", () => {
     if (sx >= x0 && sx <= x1 && sy >= y0 && sy <= y1) hits.push(o);
   }
   select(m.add ? [...new Set([...selection, ...hits])] : hits);
-  setStatus(`${hits.length} Objekt(e) im Rahmen`);
+  setStatus(`${hits.length} object(s) in the box`);
   setTimeout(() => { marquee = null; }, 0); // let the click handler see that a rectangle was drawn
 });
 
@@ -1414,14 +1428,14 @@ function toggleTopView() {
 renderer.domElement.addEventListener("pointermove", () => {
   if (!cursorGround) { $("#cursor-pos").textContent = ""; return; }
   const { x, z } = cursorGround;
-  $("#cursor-pos").textContent = `x ${x.toFixed(1)}  z ${z.toFixed(1)}  ·  Kachel ${Math.floor(x / 10)},${Math.floor(z / 10)}`;
+  $("#cursor-pos").textContent = `x ${x.toFixed(1)}  z ${z.toFixed(1)}  ·  tile ${Math.floor(x / 10)},${Math.floor(z / 10)}`;
 });
 
 // ---------- autosave drafts every 60 s while there are unsaved changes ----------
 setInterval(async () => {
   if (!dirty || !doc || !presetPath) return;
   const r = await postJSON("draft", { path: presetPath }, doc);
-  if (r.ok) setStatus(`Entwurf automatisch gesichert (${new Date().toLocaleTimeString(locale())})`);
+  if (r.ok) setStatus(`Draft autosaved (${new Date().toLocaleTimeString(locale())})`);
 }, 60000);
 
 // ---------- UI wiring ----------
@@ -1452,7 +1466,7 @@ applySnap();
 
 // Changing the LOD reloads the map from disk, so unsaved edits would be lost: ask first.
 $("#lod").addEventListener("change", (e) => {
-  if (dirty && !confirm("Die Detailstufe lädt die Karte neu. Ungespeicherte Änderungen verwerfen?")) {
+  if (dirty && !confirm("The level of detail reloads the map. Discard unsaved changes?")) {
     e.target.value = String(lod);
     return;
   }
@@ -1465,15 +1479,19 @@ $("#btn-redo").addEventListener("click", redo);
 $("#btn-top").addEventListener("click", toggleTopView);
 $("#btn-test").addEventListener("click", startTest);
 $("#btn-export").addEventListener("click", async () => {
-  if (dirty && !confirm("Die aktuelle Karte hat ungespeicherte Änderungen. Trotzdem exportieren (nur Gespeichertes)?")) return;
+  if (dirty && !confirm("The current map has unsaved changes. Export anyway (saved work only)?")) return;
   const name = askModName();
   if (!name) return;
   const r = await postJSON("export", { name });
-  setStatus(r.ok ? `Exportiert: ${r.data.files} Datei(en) nach ${r.data.mod}` : "Export fehlgeschlagen: " + r.data.error);
+  setStatus(r.ok ? `Exported: ${r.data.files} file(s) to ${r.data.mod}` : `Export failed: ${r.data.error}`);
 });
 
 window.addEventListener("keydown", (e) => {
-  if (e.target.tagName === "INPUT") return;
+  const t = e.target;
+  if (t && (["INPUT", "SELECT", "TEXTAREA", "BUTTON"].includes(t.tagName) || t.isContentEditable)) return;
+  if (e.altKey || e.metaKey) return;
+  const ev = e;
+  if (ev.key.length === 1) e = { key: ev.key.toLowerCase(), ctrlKey: ev.ctrlKey, shiftKey: ev.shiftKey, preventDefault: () => ev.preventDefault() };
   if (e.ctrlKey && e.key === "s") { e.preventDefault(); save(); }
   else if (e.ctrlKey && e.key === "z") { e.preventDefault(); undo(); }
   else if (e.ctrlKey && e.key === "y") { e.preventDefault(); redo(); }
@@ -1542,7 +1560,7 @@ async function searchModels() {
     const items = cat ? all.items.filter((m) => m.startsWith(`data/hd/${cat}`)) : all.items;
     r = cat ? { items: items.slice(0, 400), total: items.length } : all;
   }
-  $("#model-count").textContent = `${r.total} Modelle${r.total > r.items.length ? ` (erste ${r.items.length})` : ""}`;
+  $("#model-count").textContent = r.total > r.items.length ? `${r.total} models (first ${r.items.length})` : `${r.total} models`;
   const ul = $("#model-list");
   ul.innerHTML = "";
   for (const m of r.items) {
@@ -1566,5 +1584,5 @@ window.editor = { THREE, scene, camera, orbit, selectGameObject, get gameRoot() 
   presets = await (await fetch(api("presets"))).json();
   renderPresets();
   searchModels();
-  setStatus(`${presets.length} Karten-Presets verfügbar`);
+  setStatus(`${presets.length} map presets available`);
 })();

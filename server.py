@@ -64,6 +64,8 @@ for line in LISTING.read_text(encoding="utf-8").splitlines()[1:]:
 
 def read_asset(vpath, original=False):
     key = vpath.replace("\\", "/").lower().lstrip("/")
+    if ".." in key.split("/") or ":" in key:
+        raise FileNotFoundError(vpath)  # only game and project paths, nothing outside
     override = PROJECT / key
     if override.exists() and not original:
         return override.read_bytes()
@@ -132,25 +134,21 @@ def same_size_presets(preset_path):
 
 
 def replace_preset(target, source):
-    """Make target a copy of source: DS1 (tiles, collision, game objects), HD preset JSON and the
-    files of its folder (terrain mesh and physics), with paths moved to the target. The game still
-    uses the target's place in lvlprest.txt, so both pieces must have the same size."""
+    """Make target a copy of source: DS1 (tiles, collision, game objects) and HD preset JSON. The
+    game still uses the target's place in lvlprest.txt, so both pieces must have the same size."""
     for pth in (target, source):
         if not pth.startswith("data/hd/env/preset/") or ".." in pth or not pth.endswith(".json"):
             raise ValueError("bad path")
     if preset_size(target) != preset_size(source):
-        raise ValueError(f"Größe passt nicht: {preset_size(source)} statt {preset_size(target)} Kacheln")
+        raise ValueError(f"Size does not match: {preset_size(source)} instead of {preset_size(target)} tiles")
     stamp = time.strftime("%Y%m%d-%H%M%S")
     backup = PROJECT.parent / "editor_state" / "replaced" / stamp
-    src_dir, dst_dir = source[:-5] + "/", target[:-5] + "/"
+    # The terrain mesh and physics stay at the source's paths: the game does not load a terrain
+    # model from a new folder (black ground, see tools/new_zone.py); both pieces have the same size.
     files = {ds1_for_preset(target): read_asset(ds1_for_preset(source))}
-    doc = read_asset(source).decode("utf-8").replace(src_dir, dst_dir)
-    j = json.loads(doc)
+    j = json.loads(read_asset(source).decode("utf-8"))
     j["name"] = json.loads(read_asset(target)).get("name", j.get("name"))
     files[target] = json.dumps(j, indent=1).encode("utf-8")
-    for n in list(names) + [p.relative_to(PROJECT).as_posix() for p in PROJECT.rglob("*") if p.is_file()]:
-        if n.startswith(src_dir):
-            files[dst_dir + n[len(src_dir):]] = read_asset(n)
     for rel, data in files.items():
         dst = PROJECT / rel
         if dst.exists():  # keep what was there, in case the replacement was a mistake
@@ -177,7 +175,7 @@ def collision_payload(ds1_path):
 
 def _excel(name):
     """Rows of a data/global/excel/<name>.txt table as dicts (tab separated, header row)."""
-    lines = read_asset(f"data/global/excel/{name}.txt", original=True).decode("latin1").splitlines()
+    lines = read_asset(f"data/global/excel/{name}.txt").decode("latin1").splitlines()  # project tables too (new zones)
     head = lines[0].split("\t")
     return [dict(zip(head, l.split("\t"))) for l in lines[1:] if l.strip()]
 
@@ -249,7 +247,7 @@ def edit_objects(ds1_path, new_objects):
     d = DS1(read_asset(ds1_path))
     o = Ds1Objects(d)
     if not o.editable:
-        raise ValueError("Die Objekte dieser DS1-Datei können nicht bearbeitet werden.")
+        raise ValueError("The game objects of this DS1 file cannot be edited.")
     moved = {}
     clean = []
     for ob in new_objects:
@@ -296,7 +294,7 @@ def edit_collision(ds1_path, ops):
     before = dst.read_bytes() if dst.exists() else None
     d = DS1(read_asset(ds1_path))
     if d.to_bytes() != d.raw:
-        raise ValueError("Diese DS1-Datei kann nicht verlustfrei geschrieben werden; Bearbeitung abgelehnt.")
+        raise ValueError("This DS1 file cannot be written back without loss; edit refused.")
     d.original = DS1(read_asset(ds1_path, original=True))
     def write_asset(rel, data):
         f = PROJECT / rel
@@ -305,8 +303,10 @@ def edit_collision(ds1_path, ops):
 
     subtiles = collision.SubtileTiles(read_asset, write_asset) if any(o["mode"].startswith("sub_") for o in ops) else None
     collision.apply_ops(d, ops, subtiles)
-    same = all(cells == (d.original.layers.get(key) or [0] * len(cells)) for key, cells in d.layers.items())
-    # everything reset to the original: drop the override instead of shipping an identical file
+    same = (d.tail == d.original.tail and d.floor_layers == d.original.floor_layers
+            and all(cells == (d.original.layers.get(key) or [0] * len(cells)) for key, cells in d.layers.items()))
+    # everything (tiles and game objects) back to the original: drop the override instead of
+    # shipping an identical file
     write_ds1_override(ds1_path, None if same else d.to_bytes())
     hist = collision_history.setdefault(ds1_path, [])
     hist.append(before)
@@ -341,7 +341,7 @@ def redo_collision(ds1_path):
     return collision_payload(ds1_path)
 
 
-# Links between placed objects and the collision tiles blocked for them ("Kollision unter Objekt"),
+# Links between placed objects and the collision tiles blocked for them ("Collision under object"),
 # so moving or deleting the object can move or remove its collision. Editor-only sidecar file.
 def links_file(preset_path):
     key = preset_path.replace("\\", "/").lower().lstrip("/")
@@ -371,7 +371,7 @@ test_state = {"running": False, "report": "", "started": 0.0, "mod": ""}
 
 def start_ingame_test(name):
     if test_state["running"]:
-        return {"error": "Ein Test läuft bereits."}
+        return {"error": "A test is already running."}
     export = export_mod(name)
     import time as _t
     # mark as running before the thread starts, so the first status poll cannot see a finished test
@@ -384,7 +384,7 @@ def start_ingame_test(name):
                                capture_output=True, text=True, timeout=20 * 60)
             test_state["report"] = (r.stdout or "") + (("\n" + r.stderr) if r.returncode else "")
         except Exception as e:  # report every failure to the editor
-            test_state["report"] = f"Test fehlgeschlagen: {e}"
+            test_state["report"] = f"Test failed: {e}"
         finally:
             test_state["running"] = False
 
@@ -560,6 +560,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         u = urllib.parse.urlparse(self.path)
         q = {k: v[0] for k, v in urllib.parse.parse_qs(u.query).items()}
+        if (self.headers.get("Host") or "").split(":")[0] not in ("127.0.0.1", "localhost"):
+            return self.send(403, {"error": "forbidden"})  # DNS rebinding: only local host names
         try:
             if u.path == "/" or u.path.startswith("/web/"):
                 rel = "index.html" if u.path == "/" else u.path[len("/web/"):]
@@ -615,14 +617,24 @@ class Handler(BaseHTTPRequestHandler):
             traceback.print_exc()
             self.send(500, {"error": str(e)})
 
+    def trusted(self):
+        """Changing requests must come from the editor page: other web pages could otherwise send
+        them to this local server (cross-site requests). The custom header cannot be sent cross-site
+        without a CORS preflight, which this server never allows; the Host check stops DNS rebinding."""
+        host = (self.headers.get("Host") or "").split(":")[0]
+        return self.headers.get("X-D2R-Editor") == "1" and host in ("127.0.0.1", "localhost")
+
     def do_POST(self):
         u = urllib.parse.urlparse(self.path)
         q = {k: v[0] for k, v in urllib.parse.parse_qs(u.query).items()}
+        if not self.trusted():
+            self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            return self.send(403, {"error": "forbidden"})
         try:
             if u.path == "/api/export":
                 name = q.get("name", "D2REditor")
                 if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", name):
-                    return self.send(400, {"error": "Mod-Name: nur Buchstaben, Ziffern, _ und -"})
+                    return self.send(400, {"error": "Mod name: only letters, digits, _ and -"})
                 self.send(200, export_mod(name))
             elif u.path == "/api/collision":
                 body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
@@ -651,7 +663,7 @@ class Handler(BaseHTTPRequestHandler):
             elif u.path == "/api/test":
                 name = q.get("name", "D2REditor")
                 if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", name):
-                    return self.send(400, {"error": "Mod-Name: nur Buchstaben, Ziffern, _ und -"})
+                    return self.send(400, {"error": "Mod name: only letters, digits, _ and -"})
                 r = start_ingame_test(name)
                 self.send(409 if "error" in r else 200, r)
             elif u.path == "/api/replace":

@@ -62,13 +62,13 @@ Windows, Visual Studio 2022 Build Tools (x64), Python 3.14 with numpy and Pillow
 
 ## Using it
 
-- **Karten** tab: choose an HD map preset (for example `act1/town/towne1.json`).
-- **Modelle** tab: search all ~12,000 HD models. A click shows a rotating preview with its size,
+- **Maps** tab: choose an HD map preset (for example `act1/town/towne1.json`).
+- **Models** tab: search all ~12,000 HD models. A click shows a rotating preview with its size,
   and a double-click places the model in the view centre. The area select narrows the list (act 1-5,
   global, plants, game objects, characters) or shows the 30 recently used models.
-- **Spielobjekte** (game objects from the DS1, used by the game): red cones are NPCs and monster
+- **Game objects** (game objects from the DS1, used by the game): red cones are NPCs and monster
   spawns (a line shows the walking path), turquoise boxes are objects (chests, waypoints, torches...).
-  Select, drag, change the type, delete them, or add new ones ("Spielobjekt hinzufügen", **O** at the
+  Select, drag, change the type, delete them, or add new ones ("Add game object", **O** at the
   cursor). A moved NPC takes its path along. Saved straight to the map's DS1 with undo/redo. DS1 files
   with tile groups (196 of 2264) are read-only here, because they do not round-trip exactly.
 - The browser tab title shows ● while there are unsaved changes.
@@ -77,52 +77,52 @@ Windows, Visual Studio 2022 Build Tools (x64), Python 3.14 with numpy and Pillow
   Ctrl+D: duplicate. Ctrl+Z: undo, which also covers collision edits. F: focus the selection.
   Right mouse: orbit, middle mouse: pan, wheel: zoom.
 - Grid snap values (move units, degrees, scale step) are set in the toolbar and remembered.
-- **Hilfen** shows lights (yellow), effects (purple), sounds (blue) and terrain stamps (brown) as
+- **Helpers** shows lights (yellow), effects (purple), sounds (blue) and terrain stamps (brown) as
   symbols, so they can be selected and moved too.
 - The right panel takes exact position, rotation (degrees) and scale values.
-- **Objekte** tab: every object of the open map, filterable by name or kind (model, prefab, light,
+- **Objects** tab: every object of the open map, filterable by name or kind (model, prefab, light,
   effect, sound...). Click selects and focuses, Shift+click adds to the selection.
 - **P** places the model shown in the preview at the mouse cursor. Ctrl+Y redoes.
 - Dragging with the left mouse button draws a selection rectangle (Shift adds to the selection).
 - Ctrl+C / Ctrl+V copy and paste objects at the mouse cursor, also into another map. The group
   keeps its exact layout; only the common offset snaps to the grid.
 - Arrow keys move the selection one grid step (Shift: ten), Page Up/Down change the height.
-  **G** / "Auf den Boden" puts objects onto the terrain height. "Zufällig drehen" turns them at
+  **G** / "Drop to ground" puts objects onto the terrain height. "Random rotation" turns them at
   random around the vertical axis (useful for plants and rocks). **T** toggles a top-down view.
 - The toolbar shows the cursor position in world units and as a DS1 tile. A progress bar shows
   model loading.
 - Unsaved work is autosaved as a draft every 60 s (`editor_state/drafts/`). Opening the map
   again offers to restore it, and saving removes it.
-- **Prefab auflösen** (right panel, for a prefab placement) replaces the shared prefab with copies
+- **Explode prefab** (right panel, for a prefab placement) replaces the shared prefab with copies
   of its objects in world space, so they can be edited one by one on this map only.
 - When a map opens, a banner tells how the game uses it (from `lvlprest.txt`): a map of its own
   level (with the number of variants), or a reusable piece that random areas may place several times.
 - Water materials (no albedo, only normal/foam maps) are drawn translucent blue-green.
 - The terrain shows the main ground layer of the map's biome (grass where there is one), tiled in
   world space. The game blends several layers per tile (`tile_masks.json`); the editor does not.
-- **Inhalt einer Karte gleicher Größe übernehmen** (experimental, right panel under "Karte")
+- **Take over a map of the same size** (experimental, right panel under "Map")
   replaces the open map by a copy of another map piece of the same size: DS1 (tiles, collision,
   game objects), HD preset JSON and its terrain files. Earlier project files are kept in
   `editor_state/replaced/<time>/`. In the game test (Blood Moor) one placement of the replaced
   piece showed the new layout and another one the old layout; the cause is not known yet.
-- **Im Spiel testen** exports the mod and runs the automatic in-game test (below). The result
+- **Test in game** exports the mod and runs the automatic in-game test (below). The result
   window shows each check as PASS or FAIL.
-- **Speichern** writes the preset to `project/data/hd/env/preset/...`. The originals are never touched.
-- **Als Mod exportieren** copies all saved presets into
+- **Save** writes the preset to `project/data/hd/env/preset/...`. The originals are never touched.
+- **Export** copies all saved presets into
   `<game>/mods/<Name>/<Name>.mpq/data/...` and adds `modinfo.json`, a D2RLoader
   `metadata.json` and the fixed-seed plugin (mod-scoped). Start the game with that mod.
 
 ## Collision
 
-- Turn on **Kollision** to see the gameplay collision of the open map: red = not walkable,
+- Turn on **Collision** to see the gameplay collision of the open map: red = not walkable,
   blue = blocks only line of sight, yellow border = tile changed by you.
-- Tool menu **Kollision: …** then click or drag over tiles (1 tile = 10 x 10 units). The brush
+- Tool menu **Collision: …** then click or drag over tiles (1 tile = 10 x 10 units). The brush
   select paints 1×1, 3×3 or 5×5 tiles at once:
-  - *Blockieren (Laufen)*: tile not walkable
-  - *Blockieren (Laufen + Teleport)*: also blocks jump/teleport
-  - *Freimachen*: removes the tile's walls (makes a passage)
-  - *Original*: restores the tile as shipped
-- **Kollision unter Objekt** (right panel) blocks every tile under the selected models and links
+  - *Collision: block*: tile not walkable
+  - *Collision: block + teleport*: also blocks jump/teleport
+  - *Collision: clear*: removes the tile's walls (makes a passage)
+  - *Collision: original*: restores the tile as shipped
+- **Collision under object** (right panel) blocks every tile under the selected models and links
   those tiles to the objects. Moving a linked object moves its collision along, and deleting it frees
   the tiles again. Tiles you painted by hand are never freed by a link. The links are stored in
   `editor_state/links/` (editor only, not exported).
@@ -135,7 +135,7 @@ Windows, Visual Studio 2022 Build Tools (x64), Python 3.14 with numpy and Pillow
 How it works: gameplay collision comes from the legacy `.ds1` tile grid, not from the HD models.
 Blocking writes the invisible tile `Act1\Outdoors\Blank.dt1` (orientation 0, main 30; sub 1 =
 walk, sub 0 = walk + jump) into the first floor layer (HD mode does not draw legacy floor tiles;
-"Freimachen"/"Original" bring the original floor tile back). An extra floor layer worked in the
+"clear"/"original" bring the original floor tile back). An extra floor layer worked in the
 towns but crashed the game in random outdoor levels, which merge their pieces with a fixed layer
 count (Blood Moor, bord12.ds1, 2026-11-22). DS1 files edited with that older version keep their
 extra layer. The game loads Blank.dt1 for every level; in legacy (SD) graphics mode a blocked tile
@@ -277,14 +277,14 @@ entry for bit 39 and the level name on screen.
 - **Collision** works per tile (5 x 5 subtiles). Finer shapes were tried with extra tiles in the
   mod's Blank.dt1 (`collision.SubtileTiles`, not offered in the editor): the game reads the file
   from the mod (changed flags of existing tiles work), but added tiles always come out fully
-  blocked, whatever their flags and main index. Only collision created with "Kollision unter
-  Objekt" follows its object.
+  blocked, whatever their flags and main index. Only collision created with "Collision under
+  object" follows its object.
 - **Random levels** are assembled from shared presets. Editing one changes every place it
   is used, and the editor warns about it when such a map opens. Town, boss and other fixed maps are unique.
-- Prefabs are shared JSON files: edit them on one map by exploding them ("Prefab auflösen").
+- Prefabs are shared JSON files: edit them on one map by exploding them ("Explode prefab").
   Editing the prefab file itself is not offered, because it would change every map that uses it.
 - The terrain shows one biome layer, not the game's per-tile blend.
-- **Alte Grafik** (toolbar) draws the open map with the legacy SD tiles (floors and walls from the
+- **Legacy graphics** (toolbar) draws the open map with the legacy SD tiles (floors and walls from the
   DS1 and its DT1 files, act palette; `tools/sd_render.py`, `/api/sd`). It is a view: roofs, shadows,
   animated tiles and object sprites are not drawn. Double-click jumps to the place in the HD view.
 - Character models (`data/hd/character/...`) are skinned meshes and appear in their bind pose:

@@ -58,7 +58,7 @@ class SubtileTiles:
             return self.by_flags[flags]
         free = [(m, s) for m in CUSTOM_MAINS for s in range(64) if (m, s) not in self.by_key]
         if not free:
-            raise ValueError("Alle 128 Subtile-Muster sind belegt.")
+            raise ValueError("All 128 subtile patterns are in use.")
         key = free[0]
         from dt1 import add_tiles  # noqa: PLC0415
         self.raw = add_tiles(self.raw, 0, [(0, key[0], key[1], flags)])

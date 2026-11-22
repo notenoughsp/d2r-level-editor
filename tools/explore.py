@@ -73,13 +73,27 @@ def plan_leg(dump_path, start):
     return [(int(x + ox), int(y + oy)) for x, y in points]
 
 
-def start_game(mod, pd, extra="", wait=False):
+TOWN_OF_ACT = {0: 1, 1: 40, 2: 75, 3: 103, 4: 109}
+
+
+def act_of_level(level_id):
+    rows = it.read_asset("data/global/excel/levels.txt").decode("latin1").splitlines()
+    h = rows[0].split("\t")
+    for r in rows[1:]:
+        f = r.split("\t")
+        if len(f) > h.index("Act") and f[h.index("Id")] == str(level_id):
+            return int(f[h.index("Act")])
+    return 0
+
+
+def start_game(mod, pd, extra="", wait=False, start_level=1):
     for f in list(pd.glob("run_*.txt")) + list(pd.glob("units_*.txt")) + list(pd.glob("explore*.txt")) + [
             pd / "done.txt", pd / "harness.log", pd / "moves.txt", pd / "moves.wait"]:
         f.unlink(missing_ok=True)
     shutil.copy2(it.HARNESS, pd / it.HARNESS.name)
     (pd / "test-harness.ini").write_text(
-        "runs=1\nradius=120\nsettle_ticks=100\nwindow_x=-3840\nwindow_y=0\nwindow_w=1600\nwindow_h=900\nvary_game_seed=0\n" + extra)
+        "runs=1\nradius=120\nsettle_ticks=100\nwindow_x=-3840\nwindow_y=0\nwindow_w=1600\nwindow_h=900\nvary_game_seed=0\n"
+        f"start_level={start_level}\n" + extra)
     if wait:  # the harness waits for this file to go before it moves
         (pd / "moves.wait").write_text("the route is being planned\n")
     return subprocess.Popen([str(it.GAME / "D2RLoader.exe"), "-mod", mod], cwd=str(it.GAME))
@@ -184,7 +198,9 @@ def map_levels(mod, level_ids, wanted=None):
     town needs only the first level instead of the whole act."""
     pd = it.GAME / "mods" / mod / "d2rloader" / "plugins"
     start = time.time()
-    proc = start_game(mod, pd, "levels=" + ",".join(map(str, level_ids)) + "\n", wait=True)
+    # start in the town of the levels' act: teleport hops only reach rooms near the player
+    proc = start_game(mod, pd, "levels=" + ",".join(map(str, level_ids)) + "\n", wait=True,
+                      start_level=TOWN_OF_ACT.get(act_of_level(level_ids[0]), 1))
     visited = []
     try:
         while not ((pd / "run_0.txt").exists() and (pd / "levels_0.txt").exists()):
