@@ -27,7 +27,10 @@ MAGIC = 0x2845443C
 FORMATS = {
     0x1F: ("R8G8B8A8_UNORM", 0, 4),
     0x38: ("BC1_UNORM", 8, 0),
-    0x3A: ("BC3_UNORM", 16, 0),
+    0x39: ("BC1_UNORM", 8, 0),        # flow maps (decode check 2026-11-23: 0.5 byte/pixel, BC1 smooth)
+    0x3A: ("BC1_UNORM_SRGB", 8, 0),   # albedo with alpha cut-outs; was wrongly BC3
+    0x3F: ("BC4_UNORM", 8, 0),        # single-channel masks (orm$g, glow masks)
+    0x41: ("BC5_UNORM", 16, 0),       # two-channel distortion maps
     0x3C: ("BC4_UNORM", 8, 0),
     0x3D: ("BC3_UNORM", 16, 0),       # linear (orm)
     0x3E: ("BC3_UNORM_SRGB", 16, 0),  # albedo, normal (verified visually)

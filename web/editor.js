@@ -71,7 +71,7 @@ renderer.setAnimationLoop(() => {
 // ---------- asset loading ----------
 const loader = new GLTFLoader();
 const modelCache = new Map();
-const ASSET_VERSION = 3; // bump when the server-side model conversion changes (busts browser caches)
+const ASSET_VERSION = 4; // bump when the server-side model conversion changes (busts browser caches)
 let lod = 1;
 
 let loadsPending = 0, loadsDone = 0;
@@ -99,7 +99,7 @@ function loadModel(path) {
           if (o.isMesh && o.material && o.material.map) o.material.map.colorSpace = THREE.SRGBColorSpace;
         });
         resolve(g.scene);
-      }, undefined, () => resolve(null));
+      }, undefined, () => { modelCache.delete(key); resolve(null); });
     })));
   }
   return modelCache.get(key);
@@ -131,7 +131,9 @@ function helperMarker(ent) {
 const helperMarkers = new Set();
 function keepMarkersUnscaled() {
   for (const m of helperMarkers) {
-    if (!m.parent || !m.parent.parent) { helperMarkers.delete(m); continue; }
+    let top = m;
+    while (top.parent) top = top.parent;
+    if (top !== scene) { helperMarkers.delete(m); continue; }  // its map was closed
     const s = m.parent.scale;
     m.scale.set(1 / (s.x || 1), 1 / (s.y || 1), 1 / (s.z || 1));
     m.position.y = 1.5 / (s.y || 1);
@@ -1508,7 +1510,7 @@ window.addEventListener("keydown", (e) => {
   const ev = e;
   if (ev.key.length === 1) e = { key: ev.key.toLowerCase(), ctrlKey: ev.ctrlKey, shiftKey: ev.shiftKey, preventDefault: () => ev.preventDefault() };
   if (e.ctrlKey && e.key === "s") { e.preventDefault(); save(); }
-  else if (e.ctrlKey && e.key === "z") { e.preventDefault(); undo(); }
+  else if (e.ctrlKey && e.key === "z") { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
   else if (e.ctrlKey && e.key === "y") { e.preventDefault(); redo(); }
   else if (e.key === "p" && previewPath && cursorGround) placeModel(previewPath, cursorGround.clone());
   else if (e.ctrlKey && e.key === "d") { e.preventDefault(); duplicate(); }
@@ -1562,7 +1564,9 @@ function rememberModel(m) {
   const list = [m, ...recentModels().filter((x) => x !== m)].slice(0, 30);
   localStorage.setItem("recentModels", JSON.stringify(list));
 }
+let searchToken = 0;
 async function searchModels() {
+  const token = ++searchToken;
   const q = $("#model-filter").value.trim().toLowerCase();
   const cat = $("#model-cat").value;
   let r;
@@ -1575,6 +1579,7 @@ async function searchModels() {
     const items = cat ? all.items.filter((m) => m.startsWith(`data/hd/${cat}`)) : all.items;
     r = cat ? { items: items.slice(0, 400), total: items.length } : all;
   }
+  if (token !== searchToken) return;  // a newer search is running
   $("#model-count").textContent = r.total > r.items.length ? `${r.total} models (first ${r.items.length})` : `${r.total} models`;
   const ul = $("#model-list");
   ul.innerHTML = "";

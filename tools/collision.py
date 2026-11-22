@@ -78,7 +78,9 @@ def tile_paths(ds1):
     for f in ds1.files:
         p = f.replace("\\", "/").lower()
         p = p[p.index("data/"):] if "data/" in p else p
-        if p.endswith(".dt1"):
+        if p.endswith(".tg1"):  # many DS1 files list their tile sets as .tg1; the game reads the .dt1
+            p = p[:-4] + ".dt1"
+        if p.endswith(".dt1") and p not in out:
             out.append(p)
     return out + [p for p in ALWAYS_LOADED if p not in out]
 
