@@ -52,10 +52,10 @@ Windows, Visual Studio 2022 Build Tools (x64), Python 3.14 with numpy and Pillow
 | Part | How |
 |---|---|
 | three.js | `cd web` and `npm install` (version from `web/package-lock.json`) |
-| CascLib | clone [CascLib](https://github.com/ladislav-zezula/CascLib) to `third_party/CascLib` and run `toolsuild_casclib.cmd` (CMake, shared library: `third_party/CascLib/build/CascLib.dll`) |
-| BitKnit decoder | clone [pybg3](https://github.com/eiz/pybg3) to `third_party/pybg3`, then `nativeuild.cmd` (builds `native/bitknit.dll` from `rans.h`) |
-| Plugins | the D2RLoader plugin SDK headers (`D2RLPlugin/api.h`) in `third_party/PluginSDK/include` or in the `D2RL_SDK` variable, then `pluginuild.cmd`, `build_harness.cmd`, `build_survival.cmd`, `build_world.cmd` |
-| Launcher | `launcheruild.cmd` (`D2REditor.exe`) |
+| CascLib | clone [CascLib](https://github.com/ladislav-zezula/CascLib) to `third_party/CascLib` and run `tools\build_casclib.cmd` (CMake, shared library: `third_party/CascLib/build/CascLib.dll`) |
+| BitKnit decoder | clone [pybg3](https://github.com/eiz/pybg3) to `third_party/pybg3`, then `native\build.cmd` (builds `native/bitknit.dll` from `rans.h`) |
+| Plugins | the D2RLoader plugin SDK headers (`D2RLPlugin/api.h`) in `third_party/PluginSDK/include` or in the `D2RL_SDK` variable, then `plugin\build.cmd`, `build_harness.cmd`, `build_survival.cmd`, `build_world.cmd` |
+| Launcher | `launcher\build.cmd` (`D2REditor.exe`) |
 | Packages | `python -I tools/build_app.py` (own copy) or `--release` (zip for others) |
 
 `start_editor.cmd` runs the editor from the source folder.
