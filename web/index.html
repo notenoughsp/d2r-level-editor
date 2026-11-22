@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>D2R Level Editor</title>
+<link rel="stylesheet" href="/web/editor.css?v=25">
+<script type="importmap">
+{ "imports": { "three": "/three/build/three.module.js", "three/addons/": "/three/examples/jsm/" } }
+</script>
+</head>
+<body>
+<div id="toolbar">
+  <span class="title">D2R Editor</span>
+  <button id="btn-save" title="Strg+S">Speichern</button>
+  <button id="btn-undo" title="Strg+Z">Rückgängig</button>
+  <button id="btn-redo" title="Strg+Y">Wiederholen</button>
+  <span class="sep"></span>
+  <button class="mode active" data-mode="translate" title="W">Verschieben</button>
+  <button class="mode" data-mode="rotate" title="E">Drehen</button>
+  <button class="mode" data-mode="scale" title="R">Skalieren</button>
+  <button id="btn-top" title="T: Draufsicht ein/aus">Draufsicht</button>
+  <button id="btn-sd" title="Umschalten zwischen HD-Ansicht und alter Grafik (SD-Kacheln wie im Originalspiel)">Alte Grafik</button>
+  <label title="Einrasten beim Verschieben, Drehen und Skalieren"><input type="checkbox" id="snap" checked> Raster</label>
+  <input id="snap-t" class="num" type="number" step="0.1" min="0.1" value="0.5" title="Raster Verschieben (Einheiten, 10 = 1 Kachel)">
+  <input id="snap-r" class="num" type="number" step="1" min="1" value="15" title="Raster Drehen (Grad)">
+  <input id="snap-s" class="num" type="number" step="0.01" min="0.01" value="0.05" title="Raster Skalieren">
+  <span class="sep"></span>
+  <label><input type="checkbox" id="show-coll"> Kollision</label>
+  <label title="Spielobjekte aus der DS1: NPCs, Monster-Spawns, Truhen, Wegpunkte"><input type="checkbox" id="show-objs" checked> Spielobjekte</label>
+  <label title="Lichter, Effekte, Sounds und andere unsichtbare Objekte als Symbole zeigen"><input type="checkbox" id="show-helpers" checked> Hilfen</label>
+  <select id="tool" title="Werkzeug">
+    <option value="objects">Objekte</option>
+    <option value="block">Kollision: sperren</option>
+    <option value="blockall">Kollision: sperren + Teleport</option>
+    <option value="clear">Kollision: freimachen</option>
+    <option value="reset">Kollision: Original</option>
+  </select>
+  <select id="brush" title="Pinselgröße für Kollision"><option value="1">1×1</option><option value="3">3×3</option><option value="5">5×5</option></select>
+  <label>LOD <select id="lod"><option>0</option><option selected>1</option><option>2</option></select></label>
+  <span class="sep"></span>
+  <button id="btn-export" title="Alle gespeicherten Karten als Mod in den Spielordner schreiben">Export</button>
+  <button id="btn-test" title="Exportieren und automatisch im Spiel testen (zweiter Monitor, stumm)">Im Spiel testen</button>
+  <select id="lang" title="Sprache"><option value="de">Deutsch</option><option value="en">English</option></select>
+  <span id="cursor-pos"></span>
+  <span id="status"></span>
+</div>
+<div id="main">
+  <div id="left">
+    <div class="tabs"><button class="tab active" data-tab="presets">Karten</button><button class="tab" data-tab="models">Modelle</button><button class="tab" data-tab="objects">Objekte</button></div>
+    <div class="pane" id="pane-presets">
+      <input id="preset-filter" placeholder="Karte suchen, z. B. act1/town">
+      <ul id="preset-list" class="list"></ul>
+    </div>
+    <div class="pane hidden" id="pane-objects">
+      <input id="object-filter" placeholder="Objekte der Karte suchen, z. B. palisade, light">
+      <div id="object-count"></div>
+      <ul id="object-list" class="list"></ul>
+    </div>
+    <div class="pane hidden" id="pane-models">
+      <input id="model-filter" placeholder="Modell suchen, z. B. palisade, tree, barrel">
+      <select id="model-cat" title="Bereich"><option value="">Alle Bereiche</option><option value="__recent">Zuletzt benutzt</option>
+        <option value="env/model/act1">Akt 1</option><option value="env/model/act2">Akt 2</option><option value="env/model/act3">Akt 3</option>
+        <option value="env/model/act4">Akt 4</option><option value="env/model/expansion">Akt 5</option><option value="env/model/global">Global</option>
+        <option value="env/foliage">Pflanzen</option><option value="objects/">Spielobjekte</option><option value="character/">Figuren</option></select>
+      <div id="model-count"></div>
+      <ul id="model-list" class="list"></ul>
+      <div id="preview-box">
+        <canvas id="preview"></canvas>
+        <div id="preview-info">Klick = Vorschau · Doppelklick = in der Bildmitte platzieren · P = am Mauszeiger platzieren</div>
+      </div>
+    </div>
+  </div>
+  <div id="viewport"><div id="sd-view" class="hidden"><img id="sd-img" alt=""><div id="sd-hint">Alte Grafik (SD) · Rad: zoomen · Ziehen: verschieben · Doppelklick: diese Stelle in der HD-Ansicht zeigen</div></div><div id="banner" class="hidden"></div><div id="progress" class="hidden"><div id="progress-bar"></div><span id="progress-text"></span></div><div id="marquee" class="hidden"></div></div>
+  <div id="right">
+    <h3>Auswahl</h3>
+    <div id="props" class="empty">Nichts ausgewählt</div>
+    <h3>Spielobjekt hinzufügen</h3>
+    <div id="add-obj">
+      <select id="add-obj-type"><option value="1">NPC / Monster</option><option value="2">Objekt</option></select>
+      <select id="add-obj-id"></select>
+      <button id="add-obj-btn" title="O: am Mauszeiger hinzufügen">Hinzufügen</button>
+    </div>
+    <h3>Karte</h3>
+    <div id="scene-info"></div>
+    <div id="replace-box" title="Ersetzt diese Karte durch eine Kopie einer anderen Karte gleicher Größe (Kacheln, Kollision, Spielobjekte, Modelle, Gelände). Das Spiel benutzt sie an dieser Stelle.">
+      <select id="replace-src"><option value="">Inhalt einer Karte gleicher Größe übernehmen … (experimentell)</option></select>
+      <button id="replace-btn">Übernehmen</button>
+    </div>
+    <h3>Steuerung</h3>
+    <p class="hint">Linksklick: auswählen · Shift+Klick: zur Auswahl hinzufügen/entfernen · Linke Maus ziehen: Rahmenauswahl · Esc: Auswahl aufheben<br>Strg+C/Strg+V: kopieren/einfügen (am Mauszeiger, auch in andere Karten) · Pfeiltasten: um einen Rasterschritt schieben (Shift ×10), Bild↑/Bild↓: Höhe · G: auf den Boden setzen · T: Draufsicht · O: Spielobjekt am Mauszeiger hinzufügen<br>Spielobjekte (aus der DS1, im Spiel wirksam): rote Kegel = NPCs/Monster (Linie = Laufweg), türkise Würfel = Objekte. Auswählen, ziehen, Typ ändern, löschen wie andere Objekte.<br>
+    Rechte Maus: drehen · Mittlere Maus: verschieben · Rad: zoomen<br>
+    W/E/R: Verschieben/Drehen/Skalieren · Entf: löschen · Strg+D: duplizieren · Strg+Z/Strg+Y: rückgängig/wiederholen · F: Auswahl fokussieren · P: Modell aus der Vorschau am Mauszeiger platzieren<br>
+    Kollision: Werkzeug wählen, dann mit Linksklick/Ziehen Kacheln (10×10 Einheiten) bemalen. Rot = nicht begehbar, Blau = nur Sicht blockiert, gelber Rand = von dir geändert.
+    „Kollision unter Objekt“ verknüpft die Sperrfläche mit dem Objekt: Sie wandert beim Verschieben mit und verschwindet beim Löschen.</p>
+  </div>
+</div>
+<div id="modal" class="hidden"><div class="modal-box"><div class="modal-head"><span id="modal-title"></span><button id="modal-close">Schließen</button></div><pre id="modal-body"></pre></div></div>
+<script type="module" src="/web/editor.js?v=25"></script>
+</body>
+</html>

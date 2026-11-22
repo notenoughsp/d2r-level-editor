@@ -1,0 +1,132 @@
+{
+  "comment": "Sanctuary of New Tristram: a rebuilt, peaceful Tristram as the hub town of new areas.",
+  "level": {
+    "id": 138,
+    "name": "Act 5 - Sanctuary",
+    "template_id": 136,
+    "act": 4,
+    "offset": [
+      6000,
+      1000
+    ],
+    "waypoint": 39,
+    "string_key": "NewTristram",
+    "no_monsters": true,
+    "set": {
+      "LevelGroup": "",
+      "QuestFlag": "0",
+      "QuestFlagEx": "0",
+      "ObjGrp0": "0",
+      "ObjGrp1": "0",
+      "ObjPrb0": "0",
+      "ObjPrb1": "0",
+      "ObjPrb2": "0",
+      "SaveMonsters": "0",
+      "PreventTownPortal": "0"
+    },
+    "town": true
+  },
+  "strings": {
+    "NewTristram": {
+      "enUS": "Sanctuary of New Tristram"
+    },
+    "To NewTristram": {
+      "enUS": "To the Sanctuary of New Tristram"
+    },
+    "Entering NewTristram": {
+      "enUS": "Entering the Sanctuary of New Tristram"
+    }
+  },
+  "preset": {
+    "template": "data/hd/env/preset/act1/tristram/tri_town4.json",
+    "path": "data/hd/env/preset/act1/tristram/newtristram.json",
+    "lvlprest_template": "Act 5 - Pandemonium Finale",
+    "populate": "0"
+  },
+  "design": {
+    "remove_models": "corpse|skull|gore|rubble|burnt_|burned_|grunge_ash|hanging_muck|bone|beam|woodchip|woodscattered|lanturn|shelf|guts|bloodstain|fire|flame",
+    "remove_vfx": "fire|smoke|ember|burn|ash|smolder|beam",
+    "center": "fountain01",
+    "objects": [
+      {
+        "what": "waypoint",
+        "id": 37,
+        "at": [
+          0,
+          14
+        ]
+      },
+      {
+        "what": "bonfire",
+        "id": 2,
+        "at": [
+          -14,
+          4
+        ]
+      },
+      {
+        "what": "stash",
+        "id": 102,
+        "at": [
+          12,
+          8
+        ]
+      },
+      {
+        "what": "brazier",
+        "id": 17,
+        "at": [
+          -8,
+          -12
+        ]
+      },
+      {
+        "what": "brazier",
+        "id": 17,
+        "at": [
+          8,
+          -12
+        ]
+      },
+      {
+        "what": "torch ring",
+        "id": 1,
+        "ring": {
+          "radius": 22,
+          "count": 8
+        }
+      }
+    ],
+    "models": [
+      {
+        "what": "flower ring",
+        "model": "data/hd/env/foliage/global/model/act1_daisies/act1_daisy02.model",
+        "ring": {
+          "radius": 9,
+          "count": 14
+        },
+        "scale": 1.4
+      },
+      {
+        "what": "grass ring",
+        "model": "data/hd/env/foliage/global/model/act1_grassclumps/act1_grass_clump01.model",
+        "ring": {
+          "radius": 13,
+          "count": 18
+        },
+        "scale": 1.6
+      },
+      {
+        "what": "statues",
+        "model": "data/hd/env/model/act2/palace/harem/act2_palace_harem_decors/statue01.model",
+        "ring": {
+          "radius": 30,
+          "count": 4,
+          "start": 45
+        },
+        "scale": 1.0
+      }
+    ],
+    "remove_decals": "blood|gore|guts|bloodstain"
+  }
+}

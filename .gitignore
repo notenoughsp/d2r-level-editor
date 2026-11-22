@@ -1,0 +1,27 @@
+# Game-derived data: never published (made from the user's own game files)
+assets/
+project/
+editor_state/
+settings.json
+server.log
+port.txt
+data_path.txt
+
+# Packages and build outputs (the release zip carries the binaries)
+dist/
+*.obj
+*.res
+*.exp
+*.lib
+*.dll
+*.exe
+*.pdb
+__pycache__/
+*.pyc
+
+# Third-party sources and packages: fetched when building (see README, "Building from source")
+third_party/
+web/node_modules/
+
+# Logs and test output
+*.log
