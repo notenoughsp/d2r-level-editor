@@ -35,8 +35,9 @@ def read_table(c, name):
 
 
 def main():
+    with_value = {"--savepath", "--into", "--first", "--break", "--base", "--per-wave"}
     args = [a for i, a in enumerate(sys.argv[1:], 1)
-            if not a.startswith("--") and not sys.argv[i - 1].startswith("--")]
+            if not a.startswith("--") and sys.argv[i - 1] not in with_value]
     into = arg("--into")
     name = into or (args[0] if args else "D2RSurvival")
     mod = pathlib.Path(casc.GAME) / "mods" / name

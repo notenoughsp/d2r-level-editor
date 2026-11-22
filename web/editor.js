@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { initI18n, locale } from "./i18n.js?v=1";
+import { initI18n, locale, tr } from "./i18n.js?v=1";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -514,7 +514,9 @@ gizmo.addEventListener("dragging-changed", (e) => {
   if (gameSel) {
     if (!e.value) {
       const i = gameSel.userData.gameIndex;
-      editGameObject(i, { x: Math.floor(gameSel.position.x / 2), y: Math.floor(gameSel.position.z / 2) });
+      const x = Math.floor(gameSel.position.x / 2), y = Math.floor(gameSel.position.z / 2);
+      const ob = gameObjects.objects[i];
+      if (ob.x !== x || ob.y !== y) editGameObject(i, { x, y });
     }
     return;
   }
@@ -837,8 +839,7 @@ async function blockUnderSelection() {
   const ops = [];
   // Tiles you already edited by hand stay yours: the link only owns tiles it blocks itself,
   // so moving the object later never frees a hand-painted tile.
-  const handEdited = new Set(coll.edited.map(([x, y]) => `${x},${y}`));
-  for (const id of Object.keys(links)) for (const [x, y] of links[id]) handEdited.delete(`${x},${y}`);
+  const handEdited = handEditedTiles();
   for (const o of selection) {
     const tiles = tilesUnder(o).filter(([x, y]) => !handEdited.has(`${x},${y}`));
     links[o.userData.entity.id] = tiles;
@@ -852,13 +853,21 @@ async function blockUnderSelection() {
 }
 
 // After objects moved: move the collision linked to them along.
+function handEditedTiles() {
+  // tiles changed by hand (not owned by any link): a link never takes them over
+  const hand = new Set(coll ? coll.edited.map(([x, y]) => `${x},${y}`) : []);
+  for (const id of Object.keys(links)) for (const [x, y] of links[id]) hand.delete(`${x},${y}`);
+  return hand;
+}
+
 async function followCollision(objs, entry) {
   const ops = [];
+  const hand = handEditedTiles();
   for (const o of objs) {
     const id = o.userData.entity.id;
     if (!links[id]) continue;
     const old = links[id];
-    const now = tilesUnder(o);
+    const now = tilesUnder(o).filter(([x, y]) => !hand.has(`${x},${y}`));
     const key = (t) => `${t[0]},${t[1]}`;
     if (old.map(key).sort().join() === now.map(key).sort().join()) continue;
     for (const t of unlinkTiles(id)) if (!now.some((n) => key(n) === key(t))) ops.push({ tx: t[0], ty: t[1], mode: "reset" });
@@ -993,7 +1002,7 @@ function modalShow(title, text) {
 $("#modal-close").onclick = () => $("#modal").classList.add("hidden");
 
 function askModName() {
-  const name = prompt("Name des Mods (Ordner unter mods\\):", localStorage.getItem("modName") || "D2REditor");
+  const name = prompt("Mod name (folder under mods\\):", localStorage.getItem("modName") || "D2REditor");
   if (name) localStorage.setItem("modName", name);
   return name;
 }
@@ -1066,6 +1075,10 @@ async function explodePrefab() {
   doc.entities = doc.entities.filter((e) => e !== ent);
   root.remove(o);
   entityObjects.delete(ent.id);
+  if (links[ent.id]) {  // the placement is gone: its collision link would point at nothing
+    delete links[ent.id];
+    await postJSON("links", { path: presetPath }, links);
+  }
   select(created);
   markDirty();
   setStatus(`Prefab exploded: ${created.length} objects`);
@@ -1092,8 +1105,10 @@ function renderObjectList() {
   let shown = 0;
   for (const ent of doc.entities) {
     const [icon, kind] = kindOf(ent);
-    if (f && !ent.name.toLowerCase().includes(f) && !kind.toLowerCase().includes(f)) continue;
-    if (++shown > 1500) break;
+    // the kind can be searched in the shown language too (e.g. "Licht" for lights)
+    if (f && !ent.name.toLowerCase().includes(f) && !kind.toLowerCase().includes(f) && !tr(kind).toLowerCase().includes(f)) continue;
+    if (shown >= 1500) { shown += 1; continue; }  // the list shows 1500 entries, the count stays right
+    shown += 1;
     const li = document.createElement("li");
     li.innerHTML = `<span class="kind" title="${kind}">${icon}</span>`;
     li.appendChild(document.createTextNode(ent.name));

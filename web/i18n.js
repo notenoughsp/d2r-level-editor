@@ -17,6 +17,8 @@ const DE = {
   "The game objects of this DS1 file cannot be edited.": "Die Objekte dieser DS1-Datei können nicht bearbeitet werden.",
   "This DS1 file cannot be written back without loss; edit refused.": "Diese DS1-Datei kann nicht verlustfrei geschrieben werden; Bearbeitung abgelehnt.",
   "A test is already running.": "Ein Test läuft bereits.",
+  "Game object outside the map: subtile {0}, {1} (map: {2} x {3})": "Spielobjekt außerhalb der Karte: Subtile {0}, {1} (Karte: {2} x {3})",
+  "The mod folder is in use (is the game running?); close the game and export again.": "Der Mod-Ordner ist in Benutzung (läuft das Spiel?); Spiel schließen und erneut exportieren.",
   "Mod name: only letters, digits, _ and -": "Mod-Name: nur Buchstaben, Ziffern, _ und -",
   "Test failed: {0}": "Test fehlgeschlagen: {0}",
   "Save": "Speichern",

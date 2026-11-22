@@ -18,7 +18,7 @@ import sys
 import numpy as np
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from ds1 import DS1, encode_cell  # noqa: E402
+from ds1 import encode_cell  # noqa: E402
 from dt1 import DT1  # noqa: E402
 
 ALWAYS_LOADED = ["data/global/tiles/act1/outdoors/blank.dt1",

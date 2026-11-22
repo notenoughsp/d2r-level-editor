@@ -252,6 +252,8 @@ def edit_objects(ds1_path, new_objects):
     clean = []
     for ob in new_objects:
         x, y = int(ob["x"]), int(ob["y"])
+        if not (0 <= x < d.width * 5 and 0 <= y < d.height * 5):
+            raise ValueError(f"Game object outside the map: subtile {x}, {y} (map: {d.width * 5} x {d.height * 5})")
         frm = tuple(ob.get("from") or (x, y))
         if ob.get("type") == 1:
             moved[frm] = (x, y)
@@ -499,7 +501,16 @@ def export_mod(name):
     data_root = mod / f"{name}.mpq"
     files = [p for p in PROJECT.rglob("*") if p.is_file()]
     if data_root.exists():
-        shutil.rmtree(data_root)  # only our own export folder; rebuilt from project/ each time
+        # Move the old export aside first: if the game has the files open the rename fails and
+        # nothing is lost; deleting directly could stop half way.
+        old = data_root.with_name(data_root.name + ".old")
+        if old.exists():
+            shutil.rmtree(old)
+        try:
+            data_root.rename(old)
+        except OSError:
+            raise ValueError("The mod folder is in use (is the game running?); close the game and export again.")
+        shutil.rmtree(old, ignore_errors=True)
     for p in files:
         dst = data_root / p.relative_to(PROJECT)
         dst.parent.mkdir(parents=True, exist_ok=True)
@@ -522,6 +533,7 @@ def export_mod(name):
         dst = data_root / bin_path
         dst.parent.mkdir(parents=True, exist_ok=True)
         dst.write_bytes(rebuilt)
+    data_root.mkdir(parents=True, exist_ok=True)  # also for an empty project
     (data_root / "modinfo.json").write_text(json.dumps({"name": name, "savepath": f"{name}/"}, indent=2))
     # mod-scoped fixed-seed plugin: active only while this mod runs, never for other mods
     plugin = ROOT / "plugin" / "d2r-fixed-seed.dll"
