@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { initI18n, locale, tr } from "./i18n.js?v=12";
+import { initI18n, locale, tr } from "./i18n.js?v=13";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -944,6 +944,35 @@ function tileAt(e) {
 const cellSize = () => (tool.startsWith("sub_") ? 2 : 10);
 
 let painting = null;
+// cells painted in the current stroke, shown at once (the server answers on release)
+const strokeMat = new THREE.MeshBasicMaterial({ color: 0xffd400, transparent: true, opacity: 0.35, depthWrite: false });
+const strokeGroup = new THREE.Group();
+scene.add(strokeGroup);
+function strokeCells(t) {
+  const size = +$("#brush").value || 1, half = (size - 1) / 2, unit = cellSize();
+  for (let dx = -half; dx <= half; dx++)
+    for (let dy = -half; dy <= half; dy++) {
+      const key = `${t[0] + dx},${t[1] + dy}`;
+      if (strokeGroup.getObjectByName(key)) continue;
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(unit, unit).rotateX(-Math.PI / 2), strokeMat);
+      m.name = key;
+      m.position.set((t[0] + dx) * unit + unit / 2, 0.3, (t[1] + dy) * unit + unit / 2);
+      strokeGroup.add(m);
+    }
+}
+function clearStroke() {
+  for (const m of [...strokeGroup.children]) { strokeGroup.remove(m); m.geometry.dispose(); }
+}
+function setTool(t) {
+  $("#tool").value = t;
+  $("#tool").dispatchEvent(new Event("change"));
+  setStatus(tr("Tool: {0}").replace("{0}", $("#tool").selectedOptions[0].textContent));
+}
+function setBrush(step) {
+  const sel = $("#brush"), i = Math.max(0, Math.min(sel.options.length - 1, sel.selectedIndex + step));
+  sel.selectedIndex = i;
+  setStatus(tr("Brush {0}").replace("{0}", sel.options[i].textContent));
+}
 const brush = new THREE.Mesh(new THREE.BoxGeometry(10, 0.4, 10), new THREE.MeshBasicMaterial({ color: 0xffd400, wireframe: true }));
 brush.visible = false;
 scene.add(brush);
@@ -951,7 +980,7 @@ renderer.domElement.addEventListener("pointerdown", (e) => {
   if (tool === "objects" || e.button !== 0) return;
   painting = new Map();
   const t = tileAt(e);
-  if (t) painting.set(t.join(","), t);
+  if (t) { painting.set(t.join(","), t); strokeCells(t); }
 });
 renderer.domElement.addEventListener("pointermove", (e) => {
   if (tool === "objects") { brush.visible = false; return; }
@@ -963,7 +992,7 @@ renderer.domElement.addEventListener("pointermove", (e) => {
     brush.scale.set(size * unit / 10, 1, size * unit / 10);
     brush.position.set(t[0] * unit + unit / 2, 0.2, t[1] * unit + unit / 2);
   }
-  if (painting && t) painting.set(t.join(","), t);
+  if (painting && t && !painting.has(t.join(","))) { painting.set(t.join(","), t); strokeCells(t); }
 });
 window.addEventListener("pointerup", () => {
   if (!painting) return;
@@ -977,7 +1006,8 @@ window.addEventListener("pointerup", () => {
       }
   const ops = [...cells.values()].map(([x, y]) => (tool.startsWith("sub_") ? { sx: x, sy: y, mode: tool } : { tx: x, ty: y, mode: tool }));
   painting = null;
-  if (ops.length) sendCollisionOps(ops, beginEdit());
+  if (ops.length) sendCollisionOps(ops, beginEdit()).finally(clearStroke);
+  else clearStroke();
 });
 
 $("#show-coll").addEventListener("change", (e) => { if (collMesh) collMesh.visible = e.target.checked; });
@@ -1600,6 +1630,10 @@ window.addEventListener("keydown", (e) => {
   else if (e.key === "p" && e.shiftKey && previewPath) scatter(cursorGround ? cursorGround.clone() : null);
   else if (e.key === "p" && previewPath && cursorGround) placeModel(previewPath, cursorGround.clone());
   else if (["1", "2", "3", "4"].includes(e.key)) { if (e.ctrlKey) { e.preventDefault(); storeView(e.key); } else recallView(e.key); }
+  else if (e.key === "q") setTool("objects");
+  else if (e.key === "b") setTool(e.shiftKey ? "blockall" : "block");
+  else if (e.key === "x") setTool("clear");
+  else if (e.key === "[" || e.key === "]") setBrush(e.key === "]" ? 1 : -1);
   else if (e.key === "h" && e.shiftKey) showHidden();
   else if (e.key === "h") hideSelection();
   else if (e.key === "?" || e.key === "F1") { ev.preventDefault(); showHelp(); }
@@ -2030,7 +2064,7 @@ for (const id of ["sc-count", "sc-radius", "sc-smin", "sc-smax", "sc-rot", "sc-g
 $("#sc-go").addEventListener("click", () => scatter(null));
 
 // ---------- keyboard help ----------
-const HELP_TEXT = "Mouse\n  Left click: select · Shift+click: add/remove · drag: box selection\n  Right mouse: turn the view · middle mouse: pan · wheel: zoom\n\nObjects\n  W / E / R: move / rotate / scale        Del: delete\n  Ctrl+C / Ctrl+V: copy / paste at the mouse cursor (also into other maps)\n  Ctrl+D: duplicate                        G: drop to the ground\n  Ctrl+A: select all\n  Arrow keys: move one snap step (Shift ×10), Page Up/Down: height\n  H: hide the selection                    Shift+H: show all hidden objects\n  F: focus the selection                   Esc: deselect\n\nPlacing\n  P: place the preview model at the mouse cursor\n  Shift+P: scatter the preview model around the mouse cursor (settings in the Models tab)\n  O: add a game object at the mouse cursor\n\nView and files\n  T: top view                              Ctrl+S: save\n  Ctrl+1..4: store the view, 1..4: go back to it\n  Ctrl+Z / Ctrl+Y: undo / redo             ? or F1: this help";
+const HELP_TEXT = "Mouse\n  Left click: select · Shift+click: add/remove · drag: box selection\n  Right mouse: turn the view · middle mouse: pan · wheel: zoom\n\nObjects\n  W / E / R: move / rotate / scale        Del: delete\n  Ctrl+C / Ctrl+V: copy / paste at the mouse cursor (also into other maps)\n  Ctrl+D: duplicate                        G: drop to the ground\n  Ctrl+A: select all\n  Arrow keys: move one snap step (Shift ×10), Page Up/Down: height\n  H: hide the selection                    Shift+H: show all hidden objects\n  F: focus the selection                   Esc: deselect\n\nPlacing\n  P: place the preview model at the mouse cursor\n  Shift+P: scatter the preview model around the mouse cursor (settings in the Models tab)\n  O: add a game object at the mouse cursor\n\nView and files\n  T: top view                              Ctrl+S: save\n  Ctrl+1..4: store the view, 1..4: go back to it\n  Ctrl+Z / Ctrl+Y: undo / redo             ? or F1: this help\n\nCollision\n  Q: objects tool    B: block (Shift+B: block + teleport)    X: clear    [ / ]: brush size";
 function showHelp() { modalShow(tr("Keyboard and mouse"), tr(HELP_TEXT)); }
 $("#btn-help").addEventListener("click", showHelp);
 $("#btn-help2").addEventListener("click", showHelp);
