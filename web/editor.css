@@ -77,3 +77,8 @@ input.num { width: 52px; }
 #sd-img { position: absolute; left: 0; top: 0; transform-origin: 0 0; image-rendering: pixelated; user-select: none; -webkit-user-drag: none; }
 #sd-hint { position: absolute; left: 8px; bottom: 8px; padding: 3px 8px; background: rgba(0,0,0,.6); color: #c8c0a8; font-size: 12px; border-radius: 3px; pointer-events: none; }
 #btn-sd.active { background: #6b5422; color: #fff; }
+
+#update-bar { position: absolute; right: 10px; bottom: 10px; max-width: 560px; padding: 8px 10px; z-index: 6;
+  background: rgba(30, 70, 70, 0.95); border: 1px solid #5fc7c0; color: #fff; border-radius: 3px; }
+#update-bar.hidden { display: none; }
+#update-bar button { margin-left: 8px; }

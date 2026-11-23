@@ -25,3 +25,4 @@ web/node_modules/
 
 # Logs and test output
 *.log
+update_staging/

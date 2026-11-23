@@ -32,6 +32,9 @@ The language (English or Deutsch) can be switched in the toolbar.
 
 Unsaved work is autosaved every 60 seconds and offered again when you reopen the map.
 
+**Updates:** the editor looks for a new release when it starts. Click "Update now", then
+"Restart now": the program is replaced and the window reloads. Your maps and settings stay.
+
 ## Controls
 
 | Key or mouse | Action |

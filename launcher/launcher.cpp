@@ -5,6 +5,11 @@
 //   runtime\python.exe   bundled Python (falls back to python.exe on PATH for a dev checkout)
 //   app\server.py        editor program
 //   data\                project, editor state, asset cache, settings.json, server.log
+//
+// Updates: the server downloads a new release into update_staging\new\ (app\updater.py) and
+// ends with exit code 4. The launcher then swaps D2REditor.exe, app\ and runtime\ for the new
+// ones and starts the new server on the same port; the open editor window reloads itself.
+// A staged update that was not applied yet is applied at the next start. data\ is never touched.
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <winsock2.h>
@@ -202,6 +207,60 @@ bool AskGameFolder() {
   return ok;
 }
 
+// Deletes a folder with everything in it (no error if it is missing).
+void RemoveTree(const std::wstring& dir) {
+  if (!DirExists(dir)) return;
+  std::wstring from = dir + L'\0';  // double null terminated
+  SHFILEOPSTRUCTW op{};
+  op.wFunc = FO_DELETE;
+  op.pFrom = from.c_str();
+  op.fFlags = FOF_NO_UI;
+  SHFileOperationW(&op);
+}
+
+// Puts a staged update in place. Returns true when the new parts are installed.
+bool ApplyUpdate() {
+  const std::wstring staging = g_dir + L"\\update_staging";
+  const std::wstring next = staging + L"\\new";
+  if (!FileExists(staging + L"\\ready.txt") || !DirExists(next + L"\\app") || !DirExists(next + L"\\runtime") ||
+      !FileExists(next + L"\\D2REditor.exe"))
+    return false;
+  const wchar_t* parts[] = {L"app", L"runtime"};
+  std::vector<std::wstring> moved;
+  bool ok = true;
+  for (const wchar_t* part : parts) {
+    const std::wstring cur = g_dir + L"\\" + part, old = cur + L".old";
+    RemoveTree(old);
+    if (!MoveFileExW(cur.c_str(), old.c_str(), 0)) { ok = false; break; }
+    moved.push_back(part);
+    if (!MoveFileExW((next + L"\\" + part).c_str(), cur.c_str(), 0)) { ok = false; break; }
+  }
+  if (!ok) {  // put the old parts back
+    for (const auto& part : moved) {
+      const std::wstring cur = g_dir + L"\\" + part, old = cur + L".old";
+      if (DirExists(cur)) MoveFileExW(cur.c_str(), (next + L"\\" + part).c_str(), 0);
+      MoveFileExW(old.c_str(), cur.c_str(), 0);
+    }
+    return false;
+  }
+  // The running exe can be renamed but not deleted; the old copy goes at the next start.
+  const std::wstring exe = g_dir + L"\\D2REditor.exe", oldExe = g_dir + L"\\D2REditor.old.exe";
+  DeleteFileW(oldExe.c_str());
+  if (MoveFileExW(exe.c_str(), oldExe.c_str(), 0)) MoveFileExW((next + L"\\D2REditor.exe").c_str(), exe.c_str(), 0);
+  for (const wchar_t* part : parts) RemoveTree(g_dir + L"\\" + part + L".old");
+  RemoveTree(staging);
+  return true;
+}
+
+// Leftovers of an earlier update.
+void CleanUpOldUpdate() {
+  DeleteFileW((g_dir + L"\\D2REditor.old.exe").c_str());
+  RemoveTree(g_dir + L"\\app.old");
+  RemoveTree(g_dir + L"\\runtime.old");
+  if (DirExists(g_dir + L"\\update_staging") && !FileExists(g_dir + L"\\update_staging\\ready.txt"))
+    RemoveTree(g_dir + L"\\update_staging");  // an unfinished download
+}
+
 struct Server {
   PROCESS_INFORMATION pi{};
   HANDLE job = nullptr;
@@ -269,6 +328,25 @@ int WaitReady(Server& s, int port) {
   }
 }
 
+// Called while the editor window is open: if the server ended for an update, install it and
+// start the new server on the same port.
+void HandleServerExit(Server& s, int port) {
+  if (!s.pi.hProcess || WaitForSingleObject(s.pi.hProcess, 0) != WAIT_OBJECT_0) return;
+  DWORD code = 0;
+  GetExitCodeProcess(s.pi.hProcess, &code);
+  if (code != 4) return;
+  CloseHandle(s.pi.hProcess);
+  CloseHandle(s.job);
+  s = Server{};
+  ApplyUpdate();
+  s = StartServer(port);
+  WaitReady(s, port);
+  if (g_splash) {
+    DestroyWindow(g_splash);
+    g_splash = nullptr;
+  }
+}
+
 }  // namespace
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
@@ -295,6 +373,22 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
   // One editor at a time: a second start only brings up a new window of the running one.
   HANDLE mutex = CreateMutexW(nullptr, TRUE, L"Local\\D2RLevelEditor");
   bool second = GetLastError() == ERROR_ALREADY_EXISTS;
+  if (!second && DirExists(g_dir + L"\\app")) {  // packaged program
+    if (ApplyUpdate()) {
+      // the new launcher takes over (it may handle the new program differently)
+      CloseHandle(mutex);
+      STARTUPINFOW si{sizeof(si)};
+      PROCESS_INFORMATION pi{};
+      std::wstring cmd = Quote(g_dir + L"\\D2REditor.exe");
+      if (CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, FALSE, 0, nullptr, g_dir.c_str(), &si, &pi)) {
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+        return 0;
+      }
+      mutex = CreateMutexW(nullptr, TRUE, L"Local\\D2RLevelEditor");
+    }
+    CleanUpOldUpdate();
+  }
 
   int port = 8765;
   Server server;
@@ -344,7 +438,16 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     if (CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
       CloseHandle(pi.hThread);
       if (!second) {
-        WaitForSingleObject(pi.hProcess, INFINITE);
+        for (;;) {  // until the window closes; the server may restart for an update meanwhile
+          HANDLE both[2] = {pi.hProcess, server.pi.hProcess};
+          DWORD r = WaitForMultipleObjects(server.pi.hProcess ? 2 : 1, both, FALSE, INFINITE);
+          if (r == WAIT_OBJECT_0) break;
+          HandleServerExit(server, port);
+          if (WaitForSingleObject(server.pi.hProcess, 0) == WAIT_OBJECT_0) {  // ended for good
+            WaitForSingleObject(pi.hProcess, INFINITE);
+            break;
+          }
+        }
         // The app window may hand off to a profile process that is still open: wait for the profile lock.
         std::wstring lock = profile + L"\\lockfile";
         for (int i = 0; i < 20 * 60 * 24 && FileExists(lock); i++) {
@@ -353,6 +456,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             CloseHandle(h);
             break;
           }
+          HandleServerExit(server, port);
           Sleep(3000);
         }
       }

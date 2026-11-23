@@ -1606,3 +1606,70 @@ window.editor = { THREE, scene, camera, orbit, selectGameObject, get gameRoot() 
   searchModels();
   setStatus(`${presets.length} map presets available`);
 })();
+
+// ---------- updates (packaged program only, see tools/updater.py) ----------
+const updateBar = $("#update-bar");
+function updateMessage(text, buttons = []) {
+  updateBar.textContent = "";
+  const span = document.createElement("span");
+  span.textContent = text;
+  updateBar.append(span);
+  for (const [label, fn] of buttons) {
+    const b = document.createElement("button");
+    b.textContent = label;
+    b.addEventListener("click", fn);
+    updateBar.append(b);
+  }
+  updateBar.classList.toggle("hidden", !text);
+}
+async function waitForRestart(version) {
+  for (let i = 0; i < 180; i++) {  // the launcher swaps the program and starts the new server
+    await new Promise((r) => setTimeout(r, 1000));
+    try {
+      const v = await (await fetch(api("version"))).json();
+      if (v.version === version) return location.reload();
+    } catch { /* server not back yet */ }
+  }
+  updateMessage(tr("The editor did not come back after the update. Please start it again."));
+}
+async function restartForUpdate(version) {
+  if (dirty && !confirm("Discard unsaved changes?")) return;
+  const r = await postJSON("update/apply");
+  if (!r.ok) return updateMessage(tr("Update failed: {0}").replace("{0}", "not ready"));
+  dirty = false;
+  updateMessage(tr("Restarting with version {0} …").replace("{0}", version));
+  waitForRestart(version);
+}
+async function downloadUpdate(info) {
+  const r = await postJSON("update/download");
+  if (!r.ok) return updateMessage(tr("Update failed: {0}").replace("{0}", r.data.error));
+  const poll = async () => {
+    const s = await (await fetch(api("update/state"))).json();
+    if (s.phase === "downloading") {
+      const pct = s.total ? Math.round((100 * s.done) / s.total) : 0;
+      updateMessage(tr("Downloading update … {0} %").replace("{0}", pct));
+      setTimeout(poll, 700);
+    } else if (s.phase === "unpacking") {
+      updateMessage(tr("Unpacking update …"));
+      setTimeout(poll, 700);
+    } else if (s.phase === "ready") {
+      updateMessage(tr("Version {0} is ready. Save your work, then restart.").replace("{0}", s.version),
+        [[tr("Restart now"), () => restartForUpdate(s.version)]]);
+    } else {
+      updateMessage(tr("Update failed: {0}").replace("{0}", s.error || s.phase));
+    }
+  };
+  poll();
+}
+async function checkForUpdate() {
+  let info;
+  try {
+    info = await (await fetch(api("update"))).json();
+  } catch { return; }
+  if (!info.packaged || !info.newer || localStorage.getItem("skipUpdate") === info.latest) return;
+  const buttons = [[tr("Update now"), () => downloadUpdate(info)]];
+  if (info.page) buttons.push([tr("What's new"), () => window.open(info.page, "_blank")]);
+  buttons.push([tr("Later"), () => { localStorage.setItem("skipUpdate", info.latest); updateMessage(""); }]);
+  updateMessage(tr("Version {0} is available (you have {1}).").replace("{0}", info.latest).replace("{1}", info.current), buttons);
+}
+setTimeout(checkForUpdate, 3000);

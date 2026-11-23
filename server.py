@@ -28,6 +28,7 @@ import collision  # noqa: E402
 import model_export  # noqa: E402
 from ds1 import DS1  # noqa: E402
 import texture  # noqa: E402
+import updater  # noqa: E402
 
 WEB = ROOT / "web"
 DATA = casc.DATA
@@ -561,6 +562,12 @@ class Handler(BaseHTTPRequestHandler):
                 self.static(WEB / "node_modules" / "three" / u.path[len("/three/"):])
             elif u.path == "/api/presets":
                 self.send(200, list_presets())
+            elif u.path == "/api/version":
+                self.send(200, {"version": updater.current_version()})
+            elif u.path == "/api/update":
+                self.send(200, updater.public(updater.check(force=q.get("force") == "1")))
+            elif u.path == "/api/update/state":
+                self.send(200, updater.state)
             elif u.path == "/api/preset":
                 self.send(200, read_asset(q["path"]), "application/json")
             elif u.path == "/api/collision":
@@ -623,7 +630,15 @@ class Handler(BaseHTTPRequestHandler):
             self.rfile.read(int(self.headers.get("Content-Length") or 0))
             return self.send(403, {"error": "forbidden"})
         try:
-            if u.path == "/api/export":
+            if u.path == "/api/update/download":
+                self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                r = updater.download()
+                self.send(409 if r["phase"] == "error" else 200, r)
+            elif u.path == "/api/update/apply":
+                self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                ok = updater.apply_and_exit()  # the launcher restarts the server with the new version
+                self.send(200 if ok else 409, {"restarting": ok})
+            elif u.path == "/api/export":
                 name = q.get("name", "D2REditor")
                 if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", name):
                     return self.send(400, {"error": "Mod name: only letters, digits, _ and -"})

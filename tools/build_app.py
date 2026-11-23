@@ -64,6 +64,7 @@ def copy_app(dst):
     dst.mkdir(parents=True)
     shutil.copy2(ROOT / "server.py", dst)
     shutil.copy2(ROOT / "README.md", dst)
+    shutil.copy2(ROOT / "VERSION", dst)  # the updater compares it with the latest release
     shutil.copytree(ROOT / "tools", dst / "tools", ignore=ignore_cache)
     web = dst / "web"
     web.mkdir()
@@ -142,7 +143,8 @@ def main():
     size = sum(f.stat().st_size for f in OUT.rglob("*") if f.is_file()) / 2 ** 20
     print(f"built {OUT} ({size:.0f} MB)" + ("" if OWN_DATA else f", data: {ROOT}"))
     if RELEASE:
-        zip_path = shutil.make_archive(str(OUT), "zip", OUT.parent, OUT.name)
+        version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+        zip_path = shutil.make_archive(str(OUT.parent / f"D2R-Level-Editor-{version}"), "zip", OUT.parent, OUT.name)
         print("zip:", zip_path, f"({pathlib.Path(zip_path).stat().st_size / 2 ** 20:.0f} MB)")
 
 

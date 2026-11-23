@@ -26,6 +26,20 @@ through `D2R_GAME`, `data\settings.json` (`{"game": "<folder>"}`), the Battle.ne
 or the default path. The game's file list (`assets/listing.tsv`) is built on the first start and
 again after a game update.
 
+## Updates
+
+`tools/updater.py` asks the GitHub API for the latest release (at most once an hour) and compares
+its tag with `app/VERSION` (from `VERSION` in the repository). Only the packaged program updates
+itself. "Update now" downloads the release zip (checked against the SHA-256 digest GitHub
+reports) and unpacks only `D2REditor.exe`, `app\` and `runtime\` into `update_staging\new\`.
+"Restart now" ends the server with exit code 4; the launcher renames the old parts to `*.old`,
+moves the new ones in, starts the new server on the same port, and the page reloads when
+`/api/version` reports the new version. A staged update that was not applied is installed at the
+next start. `data\` is never touched. `D2R_EDITOR_UPDATE_URL` points the check at a test feed.
+
+Releases: raise `VERSION`, run `python -I tools/build_app.py --release` (zip
+`D2R-Level-Editor-<version>.zip`) and attach the zip to a GitHub release tagged `v<version>`.
+
 ## Parts
 
 | Part | File | Notes |
