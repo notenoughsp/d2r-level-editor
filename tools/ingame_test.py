@@ -228,7 +228,7 @@ def check_collision(head, dump):
         if is_outdoor_piece(rel):
             continue  # pieces of random outdoor levels: checked by random_area_phase
         if rel not in _names():
-            continue  # a new map piece (tools/new_zone.py): no original to compare with
+            continue  # a new map piece: no original to compare with
         d = DS1(ds1_path.read_bytes())
         orig = DS1(read_asset(rel, original=True))
         table = collision.tile_table(read_asset, d)
