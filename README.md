@@ -34,6 +34,13 @@ The language (English or Deutsch) can be switched in the toolbar.
 | **Game objects** | Draw NPC walking paths, add groups of monsters, edit and add HD point lights. |
 | **Projects** | Separate projects, each with its own maps, NPCs, mod info and drafts. |
 | **Acts** | With the d2r-world-mods tools next to the editor: new dungeon areas, bosses with their loot and the quest chain with Quest Log texts, built and exported from the editor. |
+| **Ground** | Paint the ground with terrain stamps (a mask and up to three ground layers of the biome); stamps and effects (fire, fog, flies) are drawn in the view. |
+| **Collision in quarters** | Block or clear quarter tiles (5 x 5 units) with the game's own invisible tiles. |
+| **Loot** | Edit treasure classes: what the chests of an act, bosses and monsters drop. |
+| **Maps** | Tabs for open maps (unsaved work stays as a draft), new maps from a copy of a map, "Where used?" for models, pictures in the model list. |
+| **Play here** | Export and start the game right at the view centre of a map (maps of their own level); in the act editor, a test visits every area of the act. |
+| **Mods** | Check two exported mods for files both change and merge them into a new mod (data tables and texts row by row). |
+| **Options** | Camera, grid, autosave, undo steps, labels, previews, minimap, own keyboard shortcuts; a right-click menu on objects and a short tour at the first start. |
 | **Legacy graphics** | View the map in the old SD graphics. |
 | **Screenshots** | Save a picture of the view as PNG (toolbar button), without the gizmo and grid. |
 | **Export** | Writes the mod into `<game>/mods/<Name>/`. Your edits never touch the game's own files. The export dialog checks the project first (missing models, objects outside the map, unsaved drafts), takes the mod's title, version and description, and can make a zip with an install README for uploading. |
