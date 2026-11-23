@@ -1227,6 +1227,16 @@ function renderObjectList() {
       if (e.shiftKey) select(selection.includes(o) ? selection.filter((x) => x !== o) : [...selection, o]);
       else { select([o]); orbit.target.copy(o.position); }
     };
+    li.ondblclick = () => {
+      const o = entityObjects.get(ent.id);
+      if (!o || o.userData.terrain) return;
+      // move the camera close to the object, keeping the view direction
+      const dir = camera.position.clone().sub(orbit.target).normalize();
+      const r = new THREE.Box3().setFromObject(o).getSize(new THREE.Vector3()).length() || 10;
+      orbit.target.copy(o.position);
+      camera.position.copy(o.position).addScaledVector(dir, Math.max(15, r * 2));
+      orbit.update();
+    };
     ul.appendChild(li);
   }
   $("#object-count").textContent = f ? `${doc.entities.length} objects, ${shown} matching` : `${doc.entities.length} objects`;
@@ -1234,7 +1244,13 @@ function renderObjectList() {
 }
 function markListSelection() {
   const ids = new Set(selection.map((o) => String(o.userData.entity.id)));
-  document.querySelectorAll("#object-list li").forEach((li) => li.classList.toggle("sel", ids.has(li.dataset.id)));
+  let first = null;
+  document.querySelectorAll("#object-list li").forEach((li) => {
+    const on = ids.has(li.dataset.id);
+    li.classList.toggle("sel", on);
+    if (on && !first) first = li;
+  });
+  if (first && !$("#pane-objects").classList.contains("hidden")) first.scrollIntoView({ block: "nearest" });
 }
 $("#object-filter").addEventListener("input", scheduleObjectList);
 $("#object-select-all").addEventListener("click", () => {

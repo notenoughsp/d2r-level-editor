@@ -150,6 +150,7 @@ const DE = {
   "Collision brush size ([ and ])": "Pinselgröße für Kollision ([ und ])",
   "Ctrl+Z · {0} step(s)": "Strg+Z · {0} Schritt(e)",
   "Ctrl+Y · {0} step(s)": "Strg+Y · {0} Schritt(e)",
+  "Click: select · double-click: fly to the object": "Klick: auswählen · Doppelklick: zum Objekt fliegen",
   // messages from the editor server
   "Size does not match: {0} instead of {1} tiles": "Größe passt nicht: {0} statt {1} Kacheln",
   "The game objects of this DS1 file cannot be edited.": "Die Objekte dieser DS1-Datei können nicht bearbeitet werden.",
