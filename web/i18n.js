@@ -111,6 +111,7 @@ const DE = {
   "Select at least three objects": "Mindestens drei Objekte auswählen",
   "{0} from the selection": "{0} von der Auswahl",
   "H / Shift+H: hide the selection / show it again · Shift+P: scatter the preview model · Ctrl+1..4 / 1..4: store / recall a camera view · ? or F1: all keys": "H / Shift+H: Auswahl ausblenden / wieder zeigen · Shift+P: Vorschau-Modell verstreuen · Strg+1..4 / 1..4: Kamera-Ansicht speichern / abrufen · ? oder F1: alle Tasten",
+  "Search, e.g. chest, waypoint, akara": "Suchen, z. B. chest, waypoint, akara",
   // messages from the editor server
   "Size does not match: {0} instead of {1} tiles": "Größe passt nicht: {0} statt {1} Kacheln",
   "The game objects of this DS1 file cannot be edited.": "Die Objekte dieser DS1-Datei können nicht bearbeitet werden.",

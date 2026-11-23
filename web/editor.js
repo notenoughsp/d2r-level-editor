@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { initI18n, locale, tr } from "./i18n.js?v=6";
+import { initI18n, locale, tr } from "./i18n.js?v=7";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -1332,9 +1332,16 @@ async function addGameObject(at) {
 function fillAddObjectList() {
   const sel = $("#add-obj-id");
   if (!gameObjects) { sel.innerHTML = ""; return; }
-  const list = +$("#add-obj-type").value === 1 ? gameObjects.catalog.npc : gameObjects.catalog.obj;
-  sel.innerHTML = list.map((e) => `<option value="${e.id}">${e.id}: ${e.name}</option>`).join("");
+  const all = +$("#add-obj-type").value === 1 ? gameObjects.catalog.npc : gameObjects.catalog.obj;
+  const f = $("#add-obj-filter").value.trim().toLowerCase();
+  const keep = sel.value;
+  const list = f ? all.filter((e) => `${e.id}: ${e.name}`.toLowerCase().includes(f)) : all;
+  const esc = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  sel.innerHTML = list.map((e) => `<option value="${e.id}">${e.id}: ${esc(e.name)}</option>`).join("");
+  if (list.some((e) => String(e.id) === keep)) sel.value = keep;
+  $("#add-obj-btn").disabled = !list.length;
 }
+$("#add-obj-filter").addEventListener("input", fillAddObjectList);
 $("#add-obj-type").addEventListener("change", fillAddObjectList);
 $("#add-obj-btn").addEventListener("click", () => addGameObject(null));
 $("#show-objs").addEventListener("change", (e) => { gameRoot.visible = e.target.checked; if (!e.target.checked) selectGameObject(null); });
