@@ -101,3 +101,9 @@ input.num { width: 52px; }
 .npc-stage .row input { width: 60px !important; display: inline-block !important; }
 #pane-models { overflow-y: auto; }
 #pane-models .list { min-height: 120px; }
+
+.tool-box .tool-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 6px; }
+.tool-box label.check { display: flex; gap: 6px; align-items: center; }
+.tool-box label.check input { width: auto; display: inline; margin: 0; }
+.list li.list-head { color: #888; font-size: 11px; text-transform: uppercase; cursor: default; background: none; padding-top: 6px; }
+.list li.recent::before { content: "↺ "; color: #c7a35a; }

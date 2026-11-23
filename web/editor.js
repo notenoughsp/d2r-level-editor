@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { initI18n, locale, tr } from "./i18n.js?v=2";
+import { initI18n, locale, tr } from "./i18n.js?v=3";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -214,8 +214,12 @@ async function addObjectFor(ent, into = root) {
 }
 
 let loadToken = 0;  // the newest openPreset call; older ones stop when it changes
+function recentMaps() { return JSON.parse(localStorage.getItem("recentMaps") || "[]"); }
 async function openPreset(path) {
   if (dirty && !confirm("Discard unsaved changes?")) return;
+  localStorage.setItem("recentMaps", JSON.stringify([path, ...recentMaps().filter((p) => p !== path)].slice(0, 8)));
+  renderPresets();
+  hiddenIds.clear();
   const token = ++loadToken;
   const stale = () => token !== loadToken;
   setStatus(`Loading ${path} …`);
@@ -474,7 +478,7 @@ renderer.domElement.addEventListener("pointerup", (e) => {
     if (!h.object.visible) continue;
     let o = h.object;
     while (o && !o.userData.entity) o = o.parent;
-    if (o && o.parent === root && !o.userData.terrain) { hit = o; break; }
+    if (o && o.parent === root && !o.userData.terrain && o.visible) { hit = o; break; }
   }
   if (e.shiftKey) {
     if (!hit) return;
@@ -1513,7 +1517,11 @@ window.addEventListener("keydown", (e) => {
   if (e.ctrlKey && e.key === "s") { e.preventDefault(); save(); }
   else if (e.ctrlKey && e.key === "z") { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
   else if (e.ctrlKey && e.key === "y") { e.preventDefault(); redo(); }
+  else if (e.key === "p" && e.shiftKey && previewPath) scatter(cursorGround ? cursorGround.clone() : null);
   else if (e.key === "p" && previewPath && cursorGround) placeModel(previewPath, cursorGround.clone());
+  else if (e.key === "h" && e.shiftKey) showHidden();
+  else if (e.key === "h") hideSelection();
+  else if (e.key === "?" || e.key === "F1") { ev.preventDefault(); showHelp(); }
   else if (e.ctrlKey && e.key === "d") { e.preventDefault(); duplicate(); }
   else if (e.key === "w") setMode("translate");
   else if (e.key === "e") setMode("rotate");
@@ -1541,6 +1549,25 @@ function renderPresets() {
   const f = $("#preset-filter").value.toLowerCase();
   const ul = $("#preset-list");
   ul.innerHTML = "";
+  const recent = f ? [] : recentMaps().filter((p) => presets.includes(p));
+  if (recent.length) {
+    const head = document.createElement("li");
+    head.className = "list-head";
+    head.textContent = tr("Recently opened");
+    ul.appendChild(head);
+    for (const p of recent) {
+      const li = document.createElement("li");
+      li.textContent = p.replace("data/hd/env/preset/", "");
+      li.className = "recent";
+      li.title = p;
+      li.onclick = () => openPreset(p);
+      ul.appendChild(li);
+    }
+    const all = document.createElement("li");
+    all.className = "list-head";
+    all.textContent = tr("All maps");
+    ul.appendChild(all);
+  }
   for (const p of presets) {
     const short = p.replace("data/hd/env/preset/", "");
     if (f && !short.includes(f)) continue;
@@ -1848,3 +1875,71 @@ $("#im-go").addEventListener("click", async () => {
     await showOwnModel(r.data.model);
   } finally { $("#im-go").disabled = false; }
 });
+
+// ---------- hide objects (view only, not saved) ----------
+const hiddenIds = new Set();
+function hideSelection() {
+  if (!selection.length) return;
+  for (const o of selection) { o.visible = false; hiddenIds.add(o.userData.entity.id); }
+  select([]);
+  setStatus(tr("{0} object(s) hidden · Shift+H shows them again").replace("{0}", hiddenIds.size));
+}
+function showHidden() {
+  for (const id of hiddenIds) { const o = entityObjects.get(id); if (o) o.visible = true; }
+  const n = hiddenIds.size;
+  hiddenIds.clear();
+  setStatus(tr("{0} object(s) shown again").replace("{0}", n));
+}
+
+// ---------- scatter: many copies of the preview model around a point ----------
+function scatterSettings() {
+  const num = (id, d) => { const v = parseFloat($(id).value); return Number.isFinite(v) ? v : d; };
+  const smin = num("#sc-smin", 0.8), smax = num("#sc-smax", 1.2);
+  return { count: Math.max(1, Math.min(200, Math.round(num("#sc-count", 10)))), radius: Math.max(0.5, num("#sc-radius", 15)),
+           smin: Math.max(0.05, Math.min(smin, smax)), smax: Math.max(0.05, smin, smax), rotate: $("#sc-rot").checked, ground: $("#sc-ground").checked };
+}
+async function scatter(center) {
+  if (!doc) return alert("Open a map first.");
+  if (!previewPath) return setStatus(tr("Choose a model in the list first"));
+  const o = scatterSettings();
+  const c = center || orbit.target;
+  beginEdit();
+  addDependency(previewPath);
+  rememberModel(previewPath);
+  const base = previewPath.split("/").pop().replace(/\.model$/, "");
+  const made = [];
+  for (let i = 0; i < o.count; i++) {
+    const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * o.radius;
+    const x = c.x + Math.cos(a) * r, z = c.z + Math.sin(a) * r;
+    const y = o.ground ? groundHeight(x, z) : 0;
+    const s = o.smin + Math.random() * (o.smax - o.smin);
+    const q = o.rotate ? new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.random() * Math.PI * 2) : new THREE.Quaternion();
+    const name = `${base}_${Date.now() % 100000}_${i}`;
+    const ent = {
+      type: "Entity", name, id: newId(), components: [
+        { type: "TransformDefinitionComponent", name: `${name}_TransformDefinitionComponent`,
+          position: { x, y, z }, orientation: { x: q.x, y: q.y, z: q.z, w: q.w }, scale: { x: s, y: s, z: s }, inheritOnlyPosition: false },
+        { type: "ModelPlatformTierComponent", name: `${name}_ModelPlatformTierComponent`, visibilityTier: 0, shadowTier: 0 },
+        { type: "ModelDefinitionComponent", name: `${name}_ModelDefinitionComponent`, filename: previewPath,
+          visibleLayers: 1, lightMask: 19, shadowMask: 3, ghostShadows: false, floorModel: false,
+          terrainBlendEnableYUpBlend: false, terrainBlendMode: 1 },
+      ],
+    };
+    doc.entities.push(ent);
+    made.push(addObjectFor(ent));
+  }
+  select(await Promise.all(made));
+  markDirty();
+  setStatus(tr("{0} copies of {1} scattered").replace("{0}", o.count).replace("{1}", base));
+}
+for (const id of ["sc-count", "sc-radius", "sc-smin", "sc-smax", "sc-rot", "sc-ground"]) {
+  const el = $("#" + id), key = "scatter-" + id, saved = localStorage.getItem(key);
+  if (saved !== null) { if (el.type === "checkbox") el.checked = saved === "1"; else el.value = saved; }
+  el.addEventListener("change", () => localStorage.setItem(key, el.type === "checkbox" ? (el.checked ? "1" : "0") : el.value));
+}
+$("#sc-go").addEventListener("click", () => scatter(null));
+
+// ---------- keyboard help ----------
+const HELP_TEXT = "Mouse\n  Left click: select · Shift+click: add/remove · drag: box selection\n  Right mouse: turn the view · middle mouse: pan · wheel: zoom\n\nObjects\n  W / E / R: move / rotate / scale        Del: delete\n  Ctrl+C / Ctrl+V: copy / paste at the mouse cursor (also into other maps)\n  Ctrl+D: duplicate                        G: drop to the ground\n  Arrow keys: move one snap step (Shift ×10), Page Up/Down: height\n  H: hide the selection                    Shift+H: show all hidden objects\n  F: focus the selection                   Esc: deselect\n\nPlacing\n  P: place the preview model at the mouse cursor\n  Shift+P: scatter the preview model around the mouse cursor (settings in the Models tab)\n  O: add a game object at the mouse cursor\n\nView and files\n  T: top view                              Ctrl+S: save\n  Ctrl+Z / Ctrl+Y: undo / redo             ? or F1: this help";
+function showHelp() { modalShow(tr("Keyboard and mouse"), tr(HELP_TEXT)); }
+$("#btn-help").addEventListener("click", showHelp);
