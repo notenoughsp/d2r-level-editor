@@ -23,13 +23,14 @@ The language (English or Deutsch) can be switched in the toolbar.
 |---|---|
 | **Maps** | Open any HD map (towns, outdoor pieces, dungeons). A banner tells whether the game uses the map once or as a shared piece in random areas. Recently opened maps come first; maps you edited are marked and can be filtered. |
 | **Models** | Search all ~12,000 HD models with a preview, and place them with a double-click or **P**. Mark favourites with the star. **Scatter** places many copies at once (count, radius, size range, random rotation), e.g. plants and rocks. |
-| **Edit** | Select, move, rotate, scale, duplicate, copy and paste (also into other maps), snap to a grid, drop to the ground, random rotation, copies in a row (fences, torches), align and space several objects, hide objects while you work. Undo and redo. |
+| **Edit** | Select, move, rotate, scale, duplicate, copy and paste (also into other maps), snap to a grid, drop to the ground, random rotation, copies in a row (fences, torches), align and space several objects, replace models with another model, select all objects with the same model, keep moved objects on the ground, hide objects while you work. Undo and redo. |
 | **Game objects** | NPCs, monster spawns, chests, waypoints, torches: move, change, delete or add them. |
 | **Collision** | See where the player can walk and paint tiles blocked or free. "Collision under object" blocks the tiles under a model and moves along with it. |
 | **NPCs** | Make new NPCs (tab "NPCs"): a name, the look of a game NPC, and a role. A *talking* NPC says your text in the game's own speech window; a *trader* also opens the game's trade window with the goods of a town NPC you choose. Place them like other NPCs and export. For quest mods an NPC can get other texts from a quest stage on. |
 | **New textures** | "Recolour the model" (tab Models) makes a copy of a game model with a new colour, a tiling material (e.g. CC0) or a picture of your own as texture, e.g. a gold statue (see [docs](docs/technical.md#new-textures-on-game-models)). |
 | **Own 3D models** | "Import a 3D model" (tab Models) turns an OBJ or glTF mesh (e.g. a free CC0 model) into a game model with your texture (see [docs](docs/technical.md#own-3d-models)). Imported and recoloured models are listed under "Own models". |
 | **Legacy graphics** | View the map in the old SD graphics. |
+| **Screenshots** | Save a picture of the view as PNG (toolbar button), without the gizmo and grid. |
 | **Export** | Writes the mod into `<game>/mods/<Name>/`. Your edits never touch the game's own files. |
 | **Test in game** | Exports and runs an automatic test in the game: are the edits there, and do blocked tiles stop the player? |
 
@@ -45,7 +46,7 @@ Unsaved work is autosaved every 60 seconds and offered again when you reopen the
 | Left click / drag | select / selection rectangle (Shift adds) |
 | Right mouse / middle mouse / wheel | orbit / pan / zoom |
 | W / E / R | move / rotate / scale |
-| Del, Ctrl+D | delete, duplicate |
+| Del, Ctrl+D, Ctrl+A | delete, duplicate, select all |
 | Ctrl+C / Ctrl+V | copy / paste at the cursor |
 | Ctrl+Z / Ctrl+Y (or Ctrl+Shift+Z) | undo / redo |
 | Arrow keys, Page Up/Down | move one grid step (Shift: ten), change height |
