@@ -122,6 +122,11 @@ const DE = {
   "{0} object(s) selected": "{0} Objekt(e) ausgewählt",
   "Size (all axes)": "Größe (alle Achsen)",
   "Size {0}": "Größe {0}",
+  "On ground": "Am Boden",
+  "Moved objects stay on the ground (terrain height)": "Verschobene Objekte bleiben am Boden (Geländehöhe)",
+  "Screenshot": "Screenshot",
+  "Save a picture of the view as PNG (downloads folder)": "Ein Bild der Ansicht als PNG speichern (Download-Ordner)",
+  "Screenshot saved: {0} (downloads folder)": "Screenshot gespeichert: {0} (Download-Ordner)",
   // messages from the editor server
   "Size does not match: {0} instead of {1} tiles": "Größe passt nicht: {0} statt {1} Kacheln",
   "The game objects of this DS1 file cannot be edited.": "Die Objekte dieser DS1-Datei können nicht bearbeitet werden.",

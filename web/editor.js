@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { initI18n, locale, tr } from "./i18n.js?v=8";
+import { initI18n, locale, tr } from "./i18n.js?v=9";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -532,6 +532,10 @@ gizmo.addEventListener("dragging-changed", (e) => {
     dragStart = { pivotInv: pivot.matrix.clone().invert(), objs: selection.map((o) => { o.updateMatrix(); return [o, o.matrix.clone()]; }) };
   } else if (dragStart) {
     dragStart = null;
+    if ($("#follow-ground").checked && gizmo.getMode() === "translate") {
+      for (const o of selection) { o.position.y = groundHeight(o.position.x, o.position.z); writeTransform(o); }
+      showProps();
+    }
     followCollision(selection, dragUndo);
     placePivot();
   }
@@ -2112,3 +2116,25 @@ function selectAll() {
   select(all);
   setStatus(tr("{0} object(s) selected").replace("{0}", all.length));
 }
+
+// ---------- screenshot of the view (PNG download, without the gizmo and selection boxes) ----------
+function screenshot() {
+  const hide = [gizmo.getHelper ? gizmo.getHelper() : gizmo, ...selectionBoxes].filter((o) => o.visible);
+  const shown = grid.visible;
+  for (const o of hide) o.visible = false;
+  grid.visible = false;
+  renderer.render(scene, camera);
+  const url = renderer.domElement.toDataURL("image/png");
+  for (const o of hide) o.visible = true;
+  grid.visible = shown;
+  const name = (presetPath ? presetPath.replace("data/hd/env/preset/", "").replace(/[\/.]+/g, "_").replace(/_json$/, "") : "view") +
+    "_" + new Date().toISOString().slice(0, 19).replace(/[-:T]/g, "") + ".png";
+  const a = Object.assign(document.createElement("a"), { href: url, download: name });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setStatus(tr("Screenshot saved: {0} (downloads folder)").replace("{0}", name));
+}
+$("#btn-shot").addEventListener("click", screenshot);
+$("#follow-ground").checked = localStorage.getItem("followGround") === "1";
+$("#follow-ground").addEventListener("change", (e) => localStorage.setItem("followGround", e.target.checked ? "1" : "0"));
