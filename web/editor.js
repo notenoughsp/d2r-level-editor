@@ -1049,6 +1049,7 @@ function modalShow(title, text) {
   $("#modal").classList.remove("hidden");
 }
 $("#modal-close").onclick = () => $("#modal").classList.add("hidden");
+$("#modal").addEventListener("click", (e) => { if (e.target.id === "modal") $("#modal").classList.add("hidden"); });
 
 function askModName() {
   const name = prompt("Mod name (folder under mods\\):", localStorage.getItem("modName") || "D2REditor");
