@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { initI18n, locale, tr } from "./i18n.js?v=4";
+import { initI18n, locale, tr } from "./i18n.js?v=5";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -570,7 +570,9 @@ function showProps() {
   if (selection.length > 1) {
     el.innerHTML = `<div class="sel-count">${selection.length} objects selected</div>` +
       `<div class="prop-model">${selection.map((o) => o.userData.entity.name).slice(0, 12).join("<br>")}${selection.length > 12 ? "<br>…" : ""}</div>` +
-      `<div class="prop-model">${selectionExtent()}</div>` + buttons;
+      `<div class="prop-model">${selectionExtent()}</div>` +
+      `<div class="prop-buttons"><button id="b-ax" title="Same x as the last picked object (yellow box)">Align x</button><button id="b-az" title="Same z as the last picked object (yellow box)">Align z</button><button id="b-ay" title="Same height as the last picked object (yellow box)">Align height</button></div>` +
+      `<div class="prop-buttons"><button id="b-dx" title="Same distance between the objects along x (at least three objects)">Space along x</button><button id="b-dz" title="Same distance between the objects along z (at least three objects)">Space along z</button></div>` + buttons;
   } else {
     const o = primary();
     const ent = o.userData.entity;
@@ -583,7 +585,8 @@ function showProps() {
     const what = md ? md.filename : pf ? "Prefab: " + pf.prefab : `(${o.children[0]?.userData.helper || "kein Modell"})`;
     const linked = links[ent.id] ? `<div class="prop-model">Linked collision: ${links[ent.id].length} tile(s)</div>` : "";
     const explode = pf ? `<div class="prop-buttons"><button id="b-explode" title="Replace the prefab with its single objects so they can be edited one by one (on this map only)">Explode prefab</button></div>` : "";
-    el.innerHTML = `<div class="prop-name">${ent.name}</div><div class="prop-model">${what}</div>` + linked + explode +
+    const rowBtn = `<div class="prop-buttons"><button id="b-row" title="Copies of the object in a straight line, e.g. a fence or a row of torches">Copies in a row</button></div>`;
+    el.innerHTML = `<div class="prop-name">${ent.name}</div><div class="prop-model">${what}</div>` + linked + explode + rowBtn +
       row("Position", "p", [o.position.x, o.position.y, o.position.z].map((v) => v.toFixed(2))) +
       row("Drehung°", "r", [deg(e.x), deg(e.y), deg(e.z)]) +
       row("Skalierung", "s", [o.scale.x, o.scale.y, o.scale.z].map((v) => v.toFixed(3))) + buttons;
@@ -607,6 +610,14 @@ function showProps() {
   $("#b-coll").onclick = blockUnderSelection;
   $("#b-del").onclick = removeSelected;
   if ($("#b-explode")) $("#b-explode").onclick = explodePrefab;
+  if ($("#b-row")) $("#b-row").onclick = makeRow;
+  if ($("#b-ax")) {
+    $("#b-ax").onclick = () => alignTo("x");
+    $("#b-az").onclick = () => alignTo("z");
+    $("#b-ay").onclick = () => alignTo("y");
+    $("#b-dx").onclick = () => distribute("x");
+    $("#b-dz").onclick = () => distribute("z");
+  }
 }
 
 // ---------- undo / redo (objects and collision together) ----------
@@ -1458,7 +1469,9 @@ function toggleTopView() {
 renderer.domElement.addEventListener("pointermove", () => {
   if (!cursorGround) { $("#cursor-pos").textContent = ""; return; }
   const { x, z } = cursorGround;
-  $("#cursor-pos").textContent = `x ${x.toFixed(1)}  z ${z.toFixed(1)}  ·  tile ${Math.floor(x / 10)},${Math.floor(z / 10)}`;
+  const p = primary();
+  const dist = p ? `  ·  ${tr("{0} from the selection").replace("{0}", Math.hypot(x - p.position.x, z - p.position.z).toFixed(1))}` : "";
+  $("#cursor-pos").textContent = `x ${x.toFixed(1)}  z ${z.toFixed(1)}  ·  tile ${Math.floor(x / 10)},${Math.floor(z / 10)}` + dist;
 });
 
 // ---------- autosave drafts every 60 s while there are unsaved changes ----------
@@ -2003,3 +2016,43 @@ async function loadEdited() {
   renderPresets();
 }
 $("#preset-edited").addEventListener("change", renderPresets);
+
+// ---------- align, distribute, rows ----------
+function alignTo(axis) {
+  const p = primary();
+  if (!p || selection.length < 2) return;
+  const v = p.position[axis];
+  return transformSelection((o) => { o.position[axis] = v; }, tr("Aligned to {0}").replace("{0}", p.userData.entity.name));
+}
+function distribute(axis) {
+  if (selection.length < 3) return setStatus(tr("Select at least three objects"));
+  const sorted = [...selection].sort((a, b) => a.position[axis] - b.position[axis]);
+  const lo = sorted[0].position[axis], hi = sorted[sorted.length - 1].position[axis];
+  const step = (hi - lo) / (sorted.length - 1);
+  const at = new Map(sorted.map((o, i) => [o, lo + i * step]));
+  return transformSelection((o) => { o.position[axis] = at.get(o); }, tr("Spaced evenly"));
+}
+async function makeRow() {
+  const p = primary();
+  if (!p || selection.length !== 1) return;
+  const answer = prompt("Copies in a row: count, step x, step z (units, 10 = 1 tile)", localStorage.getItem("rowArgs") || "5, 10, 0");
+  if (!answer) return;
+  const [count, dx, dz] = answer.split(/[,; ]+/).map(Number);
+  if (!(count >= 1 && count <= 100) || !Number.isFinite(dx) || !Number.isFinite(dz)) return setStatus(tr("Count 1-100 and two numbers, e.g. 5, 10, 0"));
+  localStorage.setItem("rowArgs", answer);
+  beginEdit();
+  const src = p.userData.entity;
+  const made = [p];
+  for (let i = 1; i <= count; i++) {
+    const ent = JSON.parse(JSON.stringify(src));
+    ent.id = newId();
+    ent.name = `${src.name}_${i}`;
+    const t = comp(ent, "TransformDefinitionComponent");
+    if (t) { t.position.x += dx * i; t.position.z += dz * i; }
+    doc.entities.push(ent);
+    made.push(await addObjectFor(ent));
+  }
+  select(made);
+  markDirty();
+  setStatus(tr("{0} copies in a row").replace("{0}", count));
+}
