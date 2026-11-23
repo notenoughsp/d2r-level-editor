@@ -66,6 +66,117 @@ def to_dds(data, fmt_name=None):
     return header + pf + caps + dx10 + data[off:off + size]
 
 
+# ---- writing (tools/retexture.py) ----
+
+def _pack_bits(values, bits):
+    """values: (..., 16) small ints -> little-endian bit stream per row as int64 pieces."""
+    import numpy as np
+    out = np.zeros(values.shape[:-1], dtype=np.uint64)
+    for i in range(values.shape[-1]):
+        out |= values[..., i].astype(np.uint64) << np.uint64(i * bits)
+    return out
+
+
+def _blocks(img):
+    """(H, W, 4) uint8 -> (H/4 * W/4, 16, 4) float, padding small mips to whole blocks."""
+    import numpy as np
+    h, w = img.shape[:2]
+    ph, pw = (-h) % 4, (-w) % 4
+    if ph or pw:
+        img = np.pad(img, ((0, ph), (0, pw), (0, 0)), mode="edge")
+    h, w = img.shape[:2]
+    b = img.reshape(h // 4, 4, w // 4, 4, 4).transpose(0, 2, 1, 3, 4).reshape(-1, 16, 4)
+    return b.astype(np.float32)
+
+
+def _encode_color(px):
+    """BC1 colour part (4-colour mode) of blocks px (N, 16, 3) -> (N,) uint64 (8 bytes each)."""
+    import numpy as np
+    hi, lo = px.max(axis=1), px.min(axis=1)
+    inset = (hi - lo) / 16.0
+    hi, lo = hi - inset, lo + inset
+
+    def to565(c):
+        r = np.clip(np.round(c[:, 0] * 31 / 255), 0, 31).astype(np.uint32)
+        g = np.clip(np.round(c[:, 1] * 63 / 255), 0, 63).astype(np.uint32)
+        b = np.clip(np.round(c[:, 2] * 31 / 255), 0, 31).astype(np.uint32)
+        return (r << 11) | (g << 5) | b
+
+    def from565(v):
+        return np.stack([((v >> 11) & 31) * 255 / 31, ((v >> 5) & 63) * 255 / 63, (v & 31) * 255 / 31], axis=1)
+
+    c0, c1 = to565(hi), to565(lo)
+    swap = c0 < c1
+    c0, c1 = np.where(swap, c1, c0), np.where(swap, c0, c1)
+    e0, e1 = from565(c0), from565(c1)
+    d = e1 - e0
+    dd = (d * d).sum(axis=1)
+    t = ((px - e0[:, None, :]) * d[:, None, :]).sum(axis=2) / np.maximum(dd, 1e-6)[:, None]
+    idx = np.where(t < 1 / 6, 0, np.where(t < 0.5, 2, np.where(t < 5 / 6, 3, 1))).astype(np.uint32)
+    idx[c0 == c1] = 0
+    bits = _pack_bits(idx, 2)
+    return c0.astype(np.uint64) | (c1.astype(np.uint64) << np.uint64(16)) | (bits << np.uint64(32))
+
+
+def _encode_alpha(a):
+    """BC4 block of values a (N, 16) -> (N,) uint64."""
+    import numpy as np
+    a0 = np.round(a.max(axis=1)).astype(np.uint32)
+    a1 = np.round(a.min(axis=1)).astype(np.uint32)
+    span = np.maximum(a0 - a1, 1).astype(np.float32)
+    k = np.clip(np.round((a0[:, None] - a) / span[:, None] * 7), 0, 7).astype(np.uint32)
+    idx = np.where(k == 0, 0, np.where(k == 7, 1, k + 1))
+    idx[a0 == a1] = 0
+    bits = _pack_bits(idx, 3)
+    return a0.astype(np.uint64) | (a1.astype(np.uint64) << np.uint64(8)) | (bits << np.uint64(16))
+
+
+def encode_bc3(img):
+    """(H, W, 4) uint8 RGBA -> BC3 bytes (alpha block, then colour block, per 4x4 block)."""
+    import numpy as np
+    b = _blocks(img)
+    alpha = _encode_alpha(b[:, :, 3])
+    color = _encode_color(b[:, :, :3])
+    return np.stack([alpha, color], axis=1).astype("<u8").tobytes()
+
+
+def write_texture(img, fmt=0x3E):
+    """RGBA image (PIL image or array, power-of-two size) -> D2R .texture with a full mip chain.
+    0x3E = BC3 sRGB (albedo), 0x3D = BC3 linear (normal, orm)."""
+    import numpy as np
+    from PIL import Image
+    im = img if isinstance(img, Image.Image) else Image.fromarray(np.asarray(img, dtype=np.uint8))
+    im = im.convert("RGBA")
+    w, h = im.size
+    width, height = w, h
+    levels = []
+    while True:
+        levels.append(encode_bc3(np.asarray(im)))
+        if w == 1 and h == 1:
+            break
+        w, h = max(1, w // 2), max(1, h // 2)
+        im = im.resize((w, h), Image.LANCZOS)
+    n = len(levels)
+    head = bytearray(0x24 + 8 * n)
+    struct.pack_into("<IBBBB", head, 0, MAGIC, fmt, 0, 2, n)
+    struct.pack_into("<III", head, 8, width, height, 1)
+    struct.pack_into("<II", head, 0x1C, n, 4)
+    offset = len(head)
+    for i, data in enumerate(levels):
+        pos = 0x24 + 8 * i
+        struct.pack_into("<II", head, pos, len(data), offset - (pos + 4))
+        offset += len(data)
+    return bytes(head) + b"".join(levels)
+
+
+def read_rgba(data):
+    """D2R .texture -> PIL RGBA image of mip 0."""
+    import io
+    from PIL import Image
+    name = FORMATS.get(parse(data)["format"], ("BC3_UNORM",))[0].replace("_SRGB", "")  # Pillow has no sRGB BCn
+    return Image.open(io.BytesIO(to_dds(data, name))).convert("RGBA")
+
+
 def main():
     cmd, path = sys.argv[1], sys.argv[2]
     data = open(path, "rb").read()

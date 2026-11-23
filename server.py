@@ -505,7 +505,10 @@ def list_presets():
 def list_models(q, limit):
     seen = []
     ql = q.lower()
-    for k in names:
+    # models made by tools/retexture.py live only in the project
+    own = [p.relative_to(PROJECT).as_posix().lower() for p in (PROJECT / "data/hd").rglob("*.model")] \
+        if (PROJECT / "data/hd").exists() else []
+    for k in list(names) + own:
         if not k.endswith(".model") or "/hd/" not in k:
             continue
         base = re.sub(r"_lod\d\.model$", ".model", k)

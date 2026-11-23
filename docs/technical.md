@@ -101,6 +101,26 @@ python -I tools/explore.py <ModName> --replay    walk the saved route again
 `plugin/collision_probe.cpp` (`build_probe.cmd`) writes the server collision around the player
 to `collision-probe.txt`. It is a test tool; do not ship it with a mod.
 
+## New textures on game models
+
+`python -I tools/retexture.py <model> <tag> tint <r> <g> <b> [strength]` (or `image <picture.png>`)
+writes a copy of a game model with new albedo textures into the project, for example a gold
+statue next to the original stone one. `<tag>` is four letters or digits.
+
+- **Textures:** `texture.write_texture()` encodes a picture as a D2R `.texture` (BC3 with all
+  mips; the header matches the game's own files byte for byte).
+- **Model copy:** a `.model` is a Granny file whose materials name their textures by full path.
+  The copy is written with uncompressed sections, so the paths can be changed in place (the new
+  path has the same length: folder `data/hd/env/tx_<tag>/`, and the first four letters of the
+  file name become the tag; with the file name unchanged, two copies showed the same texture).
+- **Model list:** the game draws only models listed in `data/hd/model_lod_desc.bin` (FNV-1a hash
+  of the lower-case path, bounds, LOD data; sorted 44-byte entries, RVA 0xF75C60/0xF75AF0). The
+  copy gets an entry copied from the original model; the project keeps its own copy of that file.
+
+Tested 2026-11-23 in the act 1 town: a gold and a blue-green marble statue and a red pillar show
+next to the originals ([screenshot](retexture-example.png)). A copy of the act 1 barrel stack
+(13 textures) did not show; the cause is not known yet.
+
 ## NPC creator
 
 `tools/npc_creator.py` turns the NPC list (`editor_state/npcs.json`) into table rows in both table
