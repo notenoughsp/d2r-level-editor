@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>D2R Level Editor</title>
-<link rel="stylesheet" href="/web/editor.css?v=31">
+<link rel="stylesheet" href="/web/editor.css?v=32">
 <script type="importmap">
 { "imports": { "three": "/three/build/three.module.js", "three/addons/": "/three/examples/jsm/" } }
 </script>
@@ -88,7 +88,7 @@
       <div id="preview-box">
         <canvas id="preview"></canvas>
         <button id="fav-btn" title="Favourite: keep this model in the Favourites list">☆</button>
-        <div id="preview-info">Click = preview · double-click = place in the view centre · P = place at the mouse cursor</div>
+        <div id="preview-info">Click = preview · double-click = place in the view centre · P = place at the mouse cursor · drag the preview to turn it</div>
       </div>
       <details class="tool-box" id="sc-box"><summary>Scatter the model</summary>
         <div class="hint">Places many copies of the preview model around the view centre (button) or the mouse cursor (Shift+P), e.g. plants and rocks.</div>
@@ -121,7 +121,7 @@
       </details>
     </div>
   </div>
-  <div id="viewport"><div id="sd-view" class="hidden"><img id="sd-img" alt=""><div id="sd-hint">Legacy graphics (SD) · wheel: zoom · drag: pan · double-click: show this place in the HD view</div></div><div id="banner" class="hidden"></div><div id="update-bar" class="hidden"></div><div id="progress" class="hidden"><div id="progress-bar"></div><span id="progress-text"></span></div><div id="marquee" class="hidden"></div></div>
+  <div id="viewport"><div id="empty-hint"><b>D2R Level Editor</b><br>Open a map in the Maps tab on the left, e.g. act1/town/townn1.json.<br>? or F1 shows all keys.</div><div id="sd-view" class="hidden"><img id="sd-img" alt=""><div id="sd-hint">Legacy graphics (SD) · wheel: zoom · drag: pan · double-click: show this place in the HD view</div></div><div id="banner" class="hidden"></div><div id="update-bar" class="hidden"></div><div id="progress" class="hidden"><div id="progress-bar"></div><span id="progress-text"></span></div><div id="marquee" class="hidden"></div></div>
   <div id="right">
     <h3>Selection</h3>
     <div id="props" class="empty">Nothing selected</div>
@@ -148,6 +148,6 @@
 </div>
 <div id="statusbar"><span id="status"></span><span id="sel-info"></span><span id="cursor-pos"></span></div>
 <div id="modal" class="hidden"><div class="modal-box"><div class="modal-head"><span id="modal-title"></span><button id="modal-close">Close</button></div><pre id="modal-body"></pre></div></div>
-<script type="module" src="/web/editor.js?v=43"></script>
+<script type="module" src="/web/editor.js?v=44"></script>
 </body>
 </html>

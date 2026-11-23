@@ -141,6 +141,9 @@ const DE = {
   "no model": "kein Modell",
   "Ctrl+D": "Strg+D",
   "Del": "Entf",
+  "Open a map in the Maps tab on the left, e.g. act1/town/townn1.json.": "Öffne links im Tab Karten eine Karte, z. B. act1/town/townn1.json.",
+  "? or F1 shows all keys.": "? oder F1 zeigt alle Tasten.",
+  "Click = preview · double-click = place in the view centre · P = place at the mouse cursor · drag the preview to turn it": "Klick = Vorschau · Doppelklick = in der Ansichtsmitte platzieren · P = am Mauszeiger platzieren · Vorschau ziehen zum Drehen",
   // messages from the editor server
   "Size does not match: {0} instead of {1} tiles": "Größe passt nicht: {0} statt {1} Kacheln",
   "The game objects of this DS1 file cannot be edited.": "Die Objekte dieser DS1-Datei können nicht bearbeitet werden.",

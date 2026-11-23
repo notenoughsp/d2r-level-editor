@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { initI18n, locale, tr } from "./i18n.js?v=11";
+import { initI18n, locale, tr } from "./i18n.js?v=12";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -234,6 +234,7 @@ async function openPreset(path) {
   undoStack.length = 0;
   redoStack.length = 0;
   presetPath = path;
+  $("#empty-hint").classList.add("hidden");
   const loaded = await (await fetch(api("preset", { path }))).json();
   if (stale()) return;
   doc = loaded;
@@ -448,6 +449,7 @@ function updateSceneInfo() {
 function updateTitle() {
   const name = presetPath ? presetPath.replace("data/hd/env/preset/", "") : "";
   document.title = `${dirty ? "● " : ""}${name ? name + " – " : ""}D2R Level Editor`;
+  $("#btn-save").classList.toggle("dirty", dirty);
 }
 function markDirty() {
   dirty = true;
@@ -1023,10 +1025,28 @@ async function showPreview(path) {
   inner.position.sub(box.getCenter(new THREE.Vector3()));
   previewScene.add(previewObj);
   const r = Math.max(size.x, size.y, size.z) || 1;
-  previewCamera.position.set(0, r * 0.6, r * 1.9);
+  previewCamera.position.set(0, r * 0.6, r * 1.9).multiplyScalar(previewZoom);
   previewCamera.lookAt(0, 0, 0);
   $("#preview-info").textContent = `${path.replace("data/hd/", "")} · ${size.x.toFixed(1)} × ${size.y.toFixed(1)} × ${size.z.toFixed(1)}`;
 }
+// drag the preview to turn the model, wheel to zoom; it turns by itself again after 3 s
+let previewDrag = null, previewTouched = 0, previewZoom = 1;
+previewCanvas.addEventListener("pointerdown", (e) => { previewDrag = { x: e.clientX, y: e.clientY }; previewCanvas.setPointerCapture(e.pointerId); });
+previewCanvas.addEventListener("pointermove", (e) => {
+  if (!previewDrag || !previewObj) return;
+  previewObj.rotation.y += (e.clientX - previewDrag.x) * 0.01;
+  previewObj.rotation.x = Math.max(-1.2, Math.min(1.2, previewObj.rotation.x + (e.clientY - previewDrag.y) * 0.01));
+  previewDrag = { x: e.clientX, y: e.clientY };
+  previewTouched = performance.now();
+});
+previewCanvas.addEventListener("pointerup", () => { previewDrag = null; previewTouched = performance.now(); });
+previewCanvas.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  const f = e.deltaY > 0 ? 1.15 : 1 / 1.15;
+  previewZoom = Math.max(0.3, Math.min(4, previewZoom * f));
+  previewCamera.position.multiplyScalar(f);
+  previewTouched = performance.now();
+}, { passive: false });
 function renderPreview() {
   const w = previewCanvas.clientWidth, h = previewCanvas.clientHeight;
   if (w && (previewCanvas.width !== w || previewCanvas.height !== h)) {
@@ -1034,7 +1054,7 @@ function renderPreview() {
     previewCamera.aspect = w / h;
     previewCamera.updateProjectionMatrix();
   }
-  if (previewObj) previewObj.rotation.y += 0.01;
+  if (previewObj && !previewDrag && performance.now() - previewTouched > 3000) previewObj.rotation.y += 0.01;
   if (w) previewRenderer.render(previewScene, previewCamera);
   requestAnimationFrame(renderPreview);
 }
