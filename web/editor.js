@@ -450,6 +450,7 @@ function updateTitle() {
   const name = presetPath ? presetPath.replace("data/hd/env/preset/", "") : "";
   document.title = `${dirty ? "● " : ""}${name ? name + " – " : ""}D2R Level Editor`;
   $("#btn-save").classList.toggle("dirty", dirty);
+  updateUndoButtons();
 }
 function markDirty() {
   dirty = true;
@@ -691,6 +692,12 @@ async function restoreState(entry, direction) {
   markDirty();
 }
 
+function updateUndoButtons() {
+  $("#btn-undo").disabled = !undoStack.length;
+  $("#btn-redo").disabled = !redoStack.length;
+  $("#btn-undo").title = tr("Ctrl+Z · {0} step(s)").replace("{0}", undoStack.length);
+  $("#btn-redo").title = tr("Ctrl+Y · {0} step(s)").replace("{0}", redoStack.length);
+}
 async function undo() {
   const entry = undoStack.pop();
   if (!entry) return setStatus("Nothing to undo");
@@ -1622,6 +1629,7 @@ window.addEventListener("keydown", (e) => {
   const t = e.target;
   if (t && (["INPUT", "SELECT", "TEXTAREA", "BUTTON"].includes(t.tagName) || t.isContentEditable)) return;
   if (e.altKey || e.metaKey) return;
+  if (!$("#modal").classList.contains("hidden") && e.key !== "Escape") return;  // a dialog is open
   const ev = e;
   if (ev.key.length === 1) e = { key: ev.key.toLowerCase(), ctrlKey: ev.ctrlKey, shiftKey: ev.shiftKey, preventDefault: () => ev.preventDefault() };
   if (e.ctrlKey && e.key === "s") { e.preventDefault(); save(); }

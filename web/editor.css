@@ -133,3 +133,6 @@ input.num { width: 52px; }
   text-align: center; color: #888; line-height: 1.8; pointer-events: none; z-index: 1; }
 #empty-hint b { color: #c7a35a; font-size: 18px; }
 #preview { cursor: grab; }
+
+button:disabled { opacity: .45; cursor: default; }
+button:disabled:hover { background: #2a261f; }

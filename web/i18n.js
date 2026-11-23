@@ -148,6 +148,8 @@ const DE = {
   "Brush {0}": "Pinsel {0}",
   "Tool (Q objects, B block, X clear)": "Werkzeug (Q Objekte, B sperren, X freigeben)",
   "Collision brush size ([ and ])": "Pinselgröße für Kollision ([ und ])",
+  "Ctrl+Z · {0} step(s)": "Strg+Z · {0} Schritt(e)",
+  "Ctrl+Y · {0} step(s)": "Strg+Y · {0} Schritt(e)",
   // messages from the editor server
   "Size does not match: {0} instead of {1} tiles": "Größe passt nicht: {0} statt {1} Kacheln",
   "The game objects of this DS1 file cannot be edited.": "Die Objekte dieser DS1-Datei können nicht bearbeitet werden.",
