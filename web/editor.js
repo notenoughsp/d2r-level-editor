@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { initI18n, locale, tr } from "./i18n.js?v=29";
+import { initI18n, locale, tr } from "./i18n.js?v=30";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -214,6 +214,8 @@ async function buildEntity(ent, parent, depth = 0) {
     g.add(marker);
     const fx = fxFor(ent);
     if (fx) g.add(fx);
+    const st = stampPlane(ent);
+    if (st) g.add(st);
   } else {
     g.visible = false;
   }
@@ -326,6 +328,8 @@ async function loadBiomeMaterial(biome) {
   try {
     const b = await (await fetch(api("preset", { path: biome }))).json();
     const layers = (b.terrainDataUltra || b.terrainDataHigh || {}).terrainLayers || [];
+    biomeLayers = layers;
+    if ($("#st-box").open) loadStampMasks();
     const pick = layers.find((l) => /grass/i.test(l.name) && l.Albedo) || layers.find((l) => !/path|puddle|river/i.test(l.name) && l.Albedo) || layers[0];
     if (!pick || !pick.Albedo) return;
     const tex = await new THREE.TextureLoader().loadAsync(api("texture", { path: pick.Albedo }));
@@ -1782,6 +1786,7 @@ window.addEventListener("keydown", (e) => {
   else if (e.key === "o") addGameObject(cursorGround ? cursorGround.clone() : null);
   else if (e.key === "Escape" && measuring) toggleRuler();
   else if (e.key === "Escape" && brushOn) toggleScatterBrush();
+  else if (e.key === "Escape" && stampOn) toggleStampBrush();
   else if (e.key === "Escape" && !$("#export-dialog").classList.contains("hidden")) $("#export-dialog").classList.add("hidden");
   else if (e.key === "Escape" && !$("#acts-dialog").classList.contains("hidden")) $("#acts-dialog").classList.add("hidden");
   else if (e.key === "Escape" && !$("#options-dialog").classList.contains("hidden")) $("#options-dialog").classList.add("hidden");
@@ -3099,7 +3104,7 @@ const OPTION_DEFAULTS = {
   uiScale: 100, fov: 45, rotateSpeed: 1, zoomSpeed: 1, panSpeed: 1, damping: true, showGrid: true, gridStep: 5,
   autosave: 60, undoSteps: 100, labels: true, labelScale: 1, hoverInfo: true, previewSpin: true, statusFade: 8,
   confirmDelete: 20, dupOffset: 2, minimapSize: 220, renderScale: 100, selColor: "#ffd400", bg: "", checkUpdates: true,
-  maxListEntries: 1500, tooltips: true, thumbs: true, effects: true,
+  maxListEntries: 1500, tooltips: true, thumbs: true, effects: true, stamps: true,
 };
 let options = { ...OPTION_DEFAULTS, ...JSON.parse(localStorage.getItem("options") || "{}") };
 const OPTION_FORM = [
@@ -3132,6 +3137,7 @@ const OPTION_FORM = [
     ["labels", "Show names over game objects", "check"],
     ["labelScale", "Size of the names", "number", 0.3, 3, 0.1],
     ["effects", "Show effects (fire, smoke, fog, flies) as particles", "check"],
+    ["stamps", "Show ground stamps with their ground layers (needs reopening the map)", "check"],
   ]],
   ["Saving and undo", [
     ["autosave", "Autosave a draft every (s, 0 = off)", "number", 0, 3600, 10],
@@ -3647,3 +3653,104 @@ async function testAct() {
   setTimeout(poll, 3000);
 }
 $("#acts-test").addEventListener("click", testAct);
+
+// ---------- ground: terrain stamps paint the biome's ground layers through a mask ----------
+let biomeLayers = [];          // terrain layers of the open map's biome (name, Albedo)
+let stampMasks = null;
+const stampTexCache = new Map();
+function stampTexture(path) {
+  if (!stampTexCache.has(path)) {
+    const t = new THREE.TextureLoader().load(api("texture", { path }));
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    stampTexCache.set(path, t);
+  }
+  return stampTexCache.get(path);
+}
+const blankTex = new THREE.DataTexture(new Uint8Array([128, 128, 128, 255]), 1, 1);
+blankTex.needsUpdate = true;
+function stampMaterial(sc) {
+  const alb = (i) => { const l = biomeLayers[i]; return l && l.Albedo ? stampTexture(l.Albedo) : blankTex; };
+  return new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2,
+    uniforms: { mask: { value: stampTexture(sc.mask) }, aR: { value: alb(sc.layerIndexR) }, aG: { value: alb(sc.layerIndexG) },
+      aB: { value: alb(sc.layerIndexB) }, rep: { value: 4.0 } },
+    vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
+    fragmentShader: `uniform sampler2D mask, aR, aG, aB; uniform float rep; varying vec2 vUv;
+      void main(){ vec4 m = texture2D(mask, vUv); vec2 t = vUv * rep;
+        vec3 c = texture2D(aR, t).rgb * m.r + texture2D(aG, t).rgb * m.g + texture2D(aB, t).rgb * m.b;
+        float a = clamp(m.r + m.g + m.b, 0.0, 1.0);
+        gl_FragColor = vec4(c / max(a, 0.001), a * 0.95); }`,
+  });
+}
+function stampPlane(ent) {
+  const sc = comp(ent, "TerrainStampDefinitionComponent");
+  if (!sc || !sc.mask || !options.stamps) return null;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), stampMaterial(sc));
+  m.position.y = 0.15;
+  m.renderOrder = 2;
+  m.userData.stamp = true;
+  m.raycast = () => {};
+  return m;
+}
+async function loadStampMasks() {
+  if (!stampMasks) stampMasks = await (await fetch(api("stamps"))).json();
+  const sel = $("#st-mask");
+  sel.textContent = "";
+  for (const m of stampMasks) sel.append(new Option(m.split("/").pop().replace(/_STAMP\.texture$/i, "").replace(/\.texture$/, ""), m));
+  const layers = biomeLayers.map((l, i) => new Option(`${i}: ${(l.name || "").replace(/.*terrainLayers_/, "layer ")} – ${(l.Albedo || "").split("/").pop().replace(/_ALB\.texture$/i, "")}`, i));
+  for (const id of ["#st-r", "#st-g", "#st-b"]) {
+    const s = $(id), keep = s.value;
+    s.textContent = "";
+    layers.forEach((o) => s.append(new Option(o.text, o.value)));
+    if (keep !== "") s.value = keep;
+  }
+}
+let stampOn = false, stampStroke = null;
+function toggleStampBrush() {
+  stampOn = !stampOn;
+  $("#st-brush").classList.toggle("active", stampOn);
+  setStatus(stampOn ? tr("Ground brush: click or drag to stamp (Esc ends it)") : tr("Ground brush off"));
+}
+async function placeStamp(at) {
+  const size = Math.max(2, +$("#st-size").value || 20), strength = Math.max(0, Math.min(1, +$("#st-strength").value || 0.6));
+  const biomeName = (doc.biomeFilename || "").split("/").pop().replace(/\.json$/, "");
+  const name = `stamp_${Date.now() % 100000}_${Math.floor(Math.random() * 1000)}`;
+  const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), $("#st-rot").checked ? Math.random() * Math.PI * 2 : 0);
+  const ent = { type: "Entity", name, id: newId(), components: [
+    { type: "TransformDefinitionComponent", name: `${name}_TransformDefinitionComponent`, position: { x: at.x, y: 0, z: at.z },
+      orientation: { x: q.x, y: q.y, z: q.z, w: q.w }, scale: { x: size, y: 80, z: size }, inheritOnlyPosition: false },
+    { type: "TerrainStampDefinitionComponent", name: `${name}_TerrainStampDefinition`, mask: $("#st-mask").value,
+      stomp: strength, stompG: strength, stompB: strength, snapOptions: 7, biomeName,
+      layerIndexR: +$("#st-r").value || 0, layerIndexG: +$("#st-g").value || 0, layerIndexB: +$("#st-b").value || 0 },
+  ] };
+  doc.entities.push(ent);
+  return addObjectFor(ent);
+}
+renderer.domElement.addEventListener("pointerdown", (e) => {
+  if (!stampOn || e.button !== 0 || tool !== "objects") return;
+  e.stopImmediatePropagation();
+  if (!doc || !cursorGround || !$("#st-mask").value) return setStatus(tr("Open a map and choose a mask first"));
+  beginEdit();
+  stampStroke = { last: null, made: [] };
+  orbit.enabled = false;
+}, true);
+renderer.domElement.addEventListener("pointermove", async () => {
+  if (!stampStroke || !cursorGround) return;
+  const spacing = Math.max(2, (+$("#st-size").value || 20) * 0.6);
+  if (stampStroke.last && stampStroke.last.distanceTo(cursorGround) < spacing) return;
+  stampStroke.last = cursorGround.clone();
+  stampStroke.made.push(await placeStamp(cursorGround.clone()));
+});
+renderer.domElement.addEventListener("pointerup", (e) => { if (stampOn) e.stopImmediatePropagation(); }, true);
+window.addEventListener("pointerup", async () => {
+  if (!stampStroke) return;
+  const s = stampStroke;
+  stampStroke = null;
+  orbit.enabled = true;
+  if (!s.last && cursorGround) s.made.push(await placeStamp(cursorGround.clone()));
+  if (!s.made.length) { undoStack.pop(); return; }
+  markDirty();
+  setStatus(tr("{0} ground stamp(s) placed").replace("{0}", s.made.length));
+});
+$("#st-brush").addEventListener("click", toggleStampBrush);
+$("#st-box").addEventListener("toggle", () => { if ($("#st-box").open) loadStampMasks(); });

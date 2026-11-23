@@ -1234,6 +1234,8 @@ class Handler(BaseHTTPRequestHandler):
                 info = preset_info(q["path"])
                 w, h = preset_size(q["path"])
                 self.send(200, {**info, "size": [w, h]})
+            elif u.path == "/api/stamps":  # ground stamp masks of the game
+                self.send(200, sorted(k for k in names if k.startswith("data/hd/env/texture/terrain/stamp/") and k.endswith(".texture")))
             elif u.path == "/api/play":
                 self.send(200, {**play_state, "test": act_test_state})
             elif u.path == "/api/world":
