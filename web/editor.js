@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { initI18n, locale, tr } from "./i18n.js?v=7";
+import { initI18n, locale, tr } from "./i18n.js?v=8";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -565,6 +565,7 @@ function showProps() {
   }
   el.className = "";
   const buttons = `<div class="prop-buttons"><button id="b-dup">Duplizieren</button><button id="b-del">Delete</button></div>` +
+    `<div class="prop-buttons"><button id="b-swap" title="Put the model in the preview (tab Models) in place of the selected models; position, rotation and size stay">Replace with the preview model</button><button id="b-same" title="Select every object of this map with the same model">Select same model</button></div>` +
     `<div class="prop-buttons"><button id="b-ground" title="G: put onto the terrain height">Drop to ground</button><button id="b-rand" title="Turn at random around the vertical axis (looks natural for plants and rocks)">Random rotation</button></div>` +
     `<div class="prop-buttons"><button id="b-coll" title="Block the tiles under the object; the blocked area moves with the object">Collision under object</button></div>`;
   if (selection.length > 1) {
@@ -589,10 +590,17 @@ function showProps() {
     el.innerHTML = `<div class="prop-name">${ent.name}</div><div class="prop-model">${what}</div>` + linked + explode + rowBtn +
       row("Position", "p", [o.position.x, o.position.y, o.position.z].map((v) => v.toFixed(2))) +
       row("Drehung°", "r", [deg(e.x), deg(e.y), deg(e.z)]) +
-      row("Skalierung", "s", [o.scale.x, o.scale.y, o.scale.z].map((v) => v.toFixed(3))) + buttons;
-    el.querySelectorAll("input").forEach((inp) => inp.addEventListener("change", () => {
+      row("Skalierung", "s", [o.scale.x, o.scale.y, o.scale.z].map((v) => v.toFixed(3))) +
+      `<div class="prop-row"><span>${tr("Size (all axes)")}</span><input type="number" step="0.05" min="0.01" id="p-uniform" value="${o.scale.x.toFixed(3)}"></div>` + buttons;
+    $("#p-uniform").addEventListener("change", (ev) => {
+      ev.stopImmediatePropagation();
+      const v = parseFloat(ev.target.value);
+      if (!(v > 0)) return;
+      transformSelection((x) => x.scale.setScalar(v), tr("Size {0}").replace("{0}", v));
+    });
+    el.querySelectorAll("input[data-key]").forEach((inp) => inp.addEventListener("change", () => {
       const entry = beginEdit();
-      const v = [...el.querySelectorAll("input")];
+      const v = [...el.querySelectorAll("input[data-key]")];
       const num = (k, i) => parseFloat(v.find((x) => x.dataset.key === k && x.dataset.i == i).value) || 0;
       o.position.set(num("p", 0), num("p", 1), num("p", 2));
       o.quaternion.setFromEuler(new THREE.Euler(
@@ -605,6 +613,8 @@ function showProps() {
     }));
   }
   $("#b-dup").onclick = duplicate;
+  $("#b-swap").onclick = replaceWithPreview;
+  $("#b-same").onclick = selectSameModel;
   $("#b-ground").onclick = dropToGround;
   $("#b-rand").onclick = randomRotate;
   $("#b-coll").onclick = blockUnderSelection;
@@ -1553,6 +1563,7 @@ window.addEventListener("keydown", (e) => {
   else if (e.key === "h") hideSelection();
   else if (e.key === "?" || e.key === "F1") { ev.preventDefault(); showHelp(); }
   else if (e.ctrlKey && e.key === "d") { e.preventDefault(); duplicate(); }
+  else if (e.ctrlKey && e.key === "a") { e.preventDefault(); selectAll(); }
   else if (e.key === "w") setMode("translate");
   else if (e.key === "e") setMode("rotate");
   else if (e.key === "r") setMode("scale");
@@ -1976,7 +1987,7 @@ for (const id of ["sc-count", "sc-radius", "sc-smin", "sc-smax", "sc-rot", "sc-g
 $("#sc-go").addEventListener("click", () => scatter(null));
 
 // ---------- keyboard help ----------
-const HELP_TEXT = "Mouse\n  Left click: select · Shift+click: add/remove · drag: box selection\n  Right mouse: turn the view · middle mouse: pan · wheel: zoom\n\nObjects\n  W / E / R: move / rotate / scale        Del: delete\n  Ctrl+C / Ctrl+V: copy / paste at the mouse cursor (also into other maps)\n  Ctrl+D: duplicate                        G: drop to the ground\n  Arrow keys: move one snap step (Shift ×10), Page Up/Down: height\n  H: hide the selection                    Shift+H: show all hidden objects\n  F: focus the selection                   Esc: deselect\n\nPlacing\n  P: place the preview model at the mouse cursor\n  Shift+P: scatter the preview model around the mouse cursor (settings in the Models tab)\n  O: add a game object at the mouse cursor\n\nView and files\n  T: top view                              Ctrl+S: save\n  Ctrl+1..4: store the view, 1..4: go back to it\n  Ctrl+Z / Ctrl+Y: undo / redo             ? or F1: this help";
+const HELP_TEXT = "Mouse\n  Left click: select · Shift+click: add/remove · drag: box selection\n  Right mouse: turn the view · middle mouse: pan · wheel: zoom\n\nObjects\n  W / E / R: move / rotate / scale        Del: delete\n  Ctrl+C / Ctrl+V: copy / paste at the mouse cursor (also into other maps)\n  Ctrl+D: duplicate                        G: drop to the ground\n  Ctrl+A: select all\n  Arrow keys: move one snap step (Shift ×10), Page Up/Down: height\n  H: hide the selection                    Shift+H: show all hidden objects\n  F: focus the selection                   Esc: deselect\n\nPlacing\n  P: place the preview model at the mouse cursor\n  Shift+P: scatter the preview model around the mouse cursor (settings in the Models tab)\n  O: add a game object at the mouse cursor\n\nView and files\n  T: top view                              Ctrl+S: save\n  Ctrl+1..4: store the view, 1..4: go back to it\n  Ctrl+Z / Ctrl+Y: undo / redo             ? or F1: this help";
 function showHelp() { modalShow(tr("Keyboard and mouse"), tr(HELP_TEXT)); }
 $("#btn-help").addEventListener("click", showHelp);
 
@@ -2062,4 +2073,42 @@ async function makeRow() {
   select(made);
   markDirty();
   setStatus(tr("{0} copies in a row").replace("{0}", count));
+}
+
+// ---------- replace models, select by model, select all ----------
+async function replaceWithPreview() {
+  if (!previewPath) return setStatus(tr("Choose a model in the list first"));
+  const targets = selection.filter((o) => comp(o.userData.entity, "ModelDefinitionComponent"));
+  if (!targets.length) return setStatus(tr("The selection has no models"));
+  beginEdit();
+  addDependency(previewPath);
+  rememberModel(previewPath);
+  const next = [];
+  for (const o of selection) {
+    const ent = o.userData.entity;
+    const md = comp(ent, "ModelDefinitionComponent");
+    if (!md) { next.push(o); continue; }
+    md.filename = previewPath;
+    root.remove(o);
+    entityObjects.delete(ent.id);
+    next.push(await addObjectFor(ent));
+  }
+  select(next);
+  markDirty();
+  setStatus(tr("{0} model(s) replaced by {1}").replace("{0}", targets.length).replace("{1}", previewPath.split("/").pop()));
+}
+function selectSameModel() {
+  const md = primary() && comp(primary().userData.entity, "ModelDefinitionComponent");
+  if (!md) return setStatus(tr("The selection has no models"));
+  const same = [...entityObjects.values()].filter((o) => o.visible && !o.userData.terrain &&
+    comp(o.userData.entity, "ModelDefinitionComponent")?.filename === md.filename);
+  select([...same.filter((o) => o !== primary()), primary()]);
+  setStatus(tr("{0} object(s) with the model {1}").replace("{0}", same.length).replace("{1}", md.filename.split("/").pop()));
+}
+function selectAll() {
+  if (!doc) return;
+  const all = [...entityObjects.values()].filter((o) => o.visible && !o.userData.terrain &&
+    (showHelpers || !(o.children[0] && o.children[0].userData.helper)));
+  select(all);
+  setStatus(tr("{0} object(s) selected").replace("{0}", all.length));
 }
