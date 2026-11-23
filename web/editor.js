@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { initI18n, locale, tr } from "./i18n.js?v=10";
+import { initI18n, locale, tr } from "./i18n.js?v=11";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -147,6 +147,7 @@ let root = null;           // THREE.Group with all entities
 const entityObjects = new Map(); // entity id -> THREE.Group
 let selection = [];        // selected entity groups (last = primary)
 const selectionBoxes = [];
+const hiddenIds = new Set(); // objects hidden in the view (H), by entity id
 let dirty = false;
 let links = {};            // entity id -> [[tx, ty], ...] collision tiles blocked for that object
 let restoredDraft = false;
@@ -344,7 +345,7 @@ function sdApply() {
 async function sdLoad() {
   if (!presetPath || sd.path === presetPath) return;
   sd.path = presetPath;
-  setStatus("Alte Grafik wird gezeichnet …");
+  setStatus("Drawing the legacy graphics …");
   sd.meta = await (await fetch(api("sd", { path: presetPath, meta: 1 }))).json();
   const img = $("#sd-img");
   await new Promise((ok) => { img.onload = ok; img.onerror = ok; img.src = api("sd", { path: presetPath, v: Date.now() }); });
@@ -353,7 +354,7 @@ async function sdLoad() {
   sd.x = (box.width - img.naturalWidth * sd.scale) / 2;
   sd.y = (box.height - img.naturalHeight * sd.scale) / 2;
   sdApply();
-  setStatus("Alte Grafik");
+  setStatus("Legacy graphics");
 }
 async function sdToggle(on = !sd.on) {
   sd.on = on;
@@ -439,7 +440,8 @@ function updateSceneInfo() {
   const models = doc.entities.filter((e) => comp(e, "ModelDefinitionComponent")).length;
   const helpers = doc.entities.filter((e) => !comp(e, "ModelDefinitionComponent") && !comp(e, "PrefabPlacementDefinitionComponent")).length;
   updateTitle();
-  $("#scene-info").innerHTML = `<b>${doc.name}</b><br>${doc.entities.length} objects: ${models} models, ${helpers} helper objects<br>` +
+  const shortName = presetPath ? presetPath.replace("data/hd/env/preset/", "") : doc.name;
+  $("#scene-info").innerHTML = `<b>${shortName}</b><br>${doc.entities.length} objects: ${models} models, ${helpers} helper objects<br>` +
     `Biome: ${doc.biomeFilename || "-"}<br>${dirty ? "<span style='color:#c7a35a'>unsaved</span>" : "saved"}`;
 }
 
@@ -486,6 +488,11 @@ renderer.domElement.addEventListener("pointerup", (e) => {
   } else select(hit ? [hit] : []);
 });
 
+function updateSelInfo() {
+  const n = selection.length;
+  $("#sel-info").textContent = n ? tr("{0} selected").replace("{0}", n) + (hiddenIds.size ? " · " + tr("{0} hidden").replace("{0}", hiddenIds.size) : "")
+    : hiddenIds.size ? tr("{0} hidden").replace("{0}", hiddenIds.size) : "";
+}
 function select(objs) {
   if (objs.length && gameSel) { gameSel.userData.mesh.material = gameObjects.objects[gameSel.userData.gameIndex].type === 1 ? npcMaterial : objMaterial; gameSel = null; gizmo.showY = true; applySnap(); }
   selection = objs.filter(Boolean);
@@ -498,6 +505,7 @@ function select(objs) {
   placePivot();
   showProps();
   markListSelection();
+  updateSelInfo();
 }
 
 function placePivot() {
@@ -568,7 +576,7 @@ function showProps() {
     return;
   }
   el.className = "";
-  const buttons = `<div class="prop-buttons"><button id="b-dup">Duplizieren</button><button id="b-del">Delete</button></div>` +
+  const buttons = `<div class="prop-buttons"><button id="b-dup" title="Ctrl+D">Duplicate</button><button id="b-del" title="Del">Delete</button></div>` +
     `<div class="prop-buttons"><button id="b-swap" title="Put the model in the preview (tab Models) in place of the selected models; position, rotation and size stay">Replace with the preview model</button><button id="b-same" title="Select every object of this map with the same model">Select same model</button></div>` +
     `<div class="prop-buttons"><button id="b-ground" title="G: put onto the terrain height">Drop to ground</button><button id="b-rand" title="Turn at random around the vertical axis (looks natural for plants and rocks)">Random rotation</button></div>` +
     `<div class="prop-buttons"><button id="b-coll" title="Block the tiles under the object; the blocked area moves with the object">Collision under object</button></div>`;
@@ -587,14 +595,14 @@ function showProps() {
     const deg = (v) => THREE.MathUtils.radToDeg(v).toFixed(1);
     const row = (label, key, vals) => `<div class="prop-row"><span>${label}</span>` +
       vals.map((v, i) => `<input type="number" step="any" data-key="${key}" data-i="${i}" value="${v}">`).join("") + "</div>";
-    const what = md ? md.filename : pf ? "Prefab: " + pf.prefab : `(${o.children[0]?.userData.helper || "kein Modell"})`;
+    const what = md ? md.filename : pf ? "Prefab: " + pf.prefab : `(${o.children[0]?.userData.helper || "no model"})`;
     const linked = links[ent.id] ? `<div class="prop-model">Linked collision: ${links[ent.id].length} tile(s)</div>` : "";
     const explode = pf ? `<div class="prop-buttons"><button id="b-explode" title="Replace the prefab with its single objects so they can be edited one by one (on this map only)">Explode prefab</button></div>` : "";
     const rowBtn = `<div class="prop-buttons"><button id="b-row" title="Copies of the object in a straight line, e.g. a fence or a row of torches">Copies in a row</button></div>`;
     el.innerHTML = `<div class="prop-name">${ent.name}</div><div class="prop-model">${what}</div>` + linked + explode + rowBtn +
       row("Position", "p", [o.position.x, o.position.y, o.position.z].map((v) => v.toFixed(2))) +
-      row("Drehung°", "r", [deg(e.x), deg(e.y), deg(e.z)]) +
-      row("Skalierung", "s", [o.scale.x, o.scale.y, o.scale.z].map((v) => v.toFixed(3))) +
+      row("Rotation°", "r", [deg(e.x), deg(e.y), deg(e.z)]) +
+      row("Scaling", "s", [o.scale.x, o.scale.y, o.scale.z].map((v) => v.toFixed(3))) +
       `<div class="prop-row"><span>${tr("Size (all axes)")}</span><input type="number" step="0.05" min="0.01" id="p-uniform" value="${o.scale.x.toFixed(3)}"></div>` + buttons;
     $("#p-uniform").addEventListener("change", (ev) => {
       ev.stopImmediatePropagation();
@@ -694,7 +702,7 @@ async function redo() {
   if (!entry) return setStatus("Nothing to redo");
   undoStack.push(snapshotState(entry.collisionSteps));
   await restoreState(entry, "redo");
-  setStatus("Wiederholt");
+  setStatus("Redone");
 }
 
 // ---------- editing ----------
@@ -782,7 +790,7 @@ async function save() {
   if (r.ok) {
     dirty = false;
     updateSceneInfo();
-    setStatus("Gespeichert: " + r.data.saved);
+    setStatus("Saved: " + r.data.saved);
     const li = document.querySelector(`#preset-list li[data-path="${presetPath}"]`);
     if (li) li.classList.add("edited");
     editedMaps.add(presetPath);
@@ -973,6 +981,7 @@ window.addEventListener("pointerup", () => {
 $("#show-coll").addEventListener("change", (e) => { if (collMesh) collMesh.visible = e.target.checked; });
 $("#tool").addEventListener("change", (e) => {
   tool = e.target.value;
+  $("#brush").classList.toggle("hidden", tool === "objects");
   if (tool !== "objects") {
     select([]);
     $("#show-coll").checked = true;
@@ -1605,7 +1614,7 @@ function renderPresets() {
   if (recent.length) {
     const head = document.createElement("li");
     head.className = "list-head";
-    head.textContent = tr("Recently opened");
+    head.textContent = "Recently opened";
     ul.appendChild(head);
     for (const p of recent) {
       const li = document.createElement("li");
@@ -1617,7 +1626,7 @@ function renderPresets() {
     }
     const all = document.createElement("li");
     all.className = "list-head";
-    all.textContent = tr("All maps");
+    all.textContent = "All maps";
     ul.appendChild(all);
   }
   const onlyEdited = $("#preset-edited").checked;
@@ -1810,7 +1819,7 @@ function renderStages() {
     const row = document.createElement("div");
     row.className = "row";
     const label = document.createElement("span");
-    label.textContent = tr("From quest stage");
+    label.textContent = "From quest stage";
     const num = Object.assign(document.createElement("input"), { type: "number", min: 0, max: 99, value: st.stage });
     num.addEventListener("input", () => { st.stage = +num.value || 0; });
     const del = Object.assign(document.createElement("button"), { textContent: tr("Remove") });
@@ -1934,8 +1943,7 @@ $("#im-go").addEventListener("click", async () => {
   } finally { $("#im-go").disabled = false; }
 });
 
-// ---------- hide objects (view only, not saved) ----------
-const hiddenIds = new Set();
+// ---------- hide objects (view only, not saved; hiddenIds is declared at the top) ----------
 function hideSelection() {
   if (!selection.length) return;
   for (const o of selection) { o.visible = false; hiddenIds.add(o.userData.entity.id); }
@@ -1947,6 +1955,7 @@ function showHidden() {
   for (const id of hiddenIds) { const o = entityObjects.get(id); if (o) o.visible = true; }
   const n = hiddenIds.size;
   hiddenIds.clear();
+  updateSelInfo();
   setStatus(tr("{0} object(s) shown again").replace("{0}", n));
   scheduleObjectList();
 }
@@ -2003,6 +2012,8 @@ $("#sc-go").addEventListener("click", () => scatter(null));
 const HELP_TEXT = "Mouse\n  Left click: select · Shift+click: add/remove · drag: box selection\n  Right mouse: turn the view · middle mouse: pan · wheel: zoom\n\nObjects\n  W / E / R: move / rotate / scale        Del: delete\n  Ctrl+C / Ctrl+V: copy / paste at the mouse cursor (also into other maps)\n  Ctrl+D: duplicate                        G: drop to the ground\n  Ctrl+A: select all\n  Arrow keys: move one snap step (Shift ×10), Page Up/Down: height\n  H: hide the selection                    Shift+H: show all hidden objects\n  F: focus the selection                   Esc: deselect\n\nPlacing\n  P: place the preview model at the mouse cursor\n  Shift+P: scatter the preview model around the mouse cursor (settings in the Models tab)\n  O: add a game object at the mouse cursor\n\nView and files\n  T: top view                              Ctrl+S: save\n  Ctrl+1..4: store the view, 1..4: go back to it\n  Ctrl+Z / Ctrl+Y: undo / redo             ? or F1: this help";
 function showHelp() { modalShow(tr("Keyboard and mouse"), tr(HELP_TEXT)); }
 $("#btn-help").addEventListener("click", showHelp);
+$("#btn-help2").addEventListener("click", showHelp);
+$("#brush").classList.add("hidden");
 
 // ---------- favourite models ----------
 function favModels() { return JSON.parse(localStorage.getItem("favModels") || "[]"); }

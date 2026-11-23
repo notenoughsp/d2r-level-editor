@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>D2R Level Editor</title>
-<link rel="stylesheet" href="/web/editor.css?v=29">
+<link rel="stylesheet" href="/web/editor.css?v=31">
 <script type="importmap">
 { "imports": { "three": "/three/build/three.module.js", "three/addons/": "/three/examples/jsm/" } }
 </script>
@@ -11,22 +11,22 @@
 <body>
 <div id="toolbar">
   <span class="title">D2R Editor</span>
-  <button id="btn-save" title="Strg+S">Save</button>
-  <button id="btn-undo" title="Strg+Z">Undo</button>
-  <button id="btn-redo" title="Strg+Y">Redo</button>
+  <button id="btn-save" title="Ctrl+S">Save</button>
+  <button id="btn-undo" title="Ctrl+Z">Undo</button>
+  <button id="btn-redo" title="Ctrl+Y">Redo</button>
   <span class="sep"></span>
   <button class="mode active" data-mode="translate" title="W">Move</button>
   <button class="mode" data-mode="rotate" title="E">Rotate</button>
   <button class="mode" data-mode="scale" title="R">Scale</button>
   <button id="btn-top" title="T: top view on/off">Top view</button>
-  <button id="btn-sd" title="Switch between the HD view and the legacy graphics (SD tiles as in the original game)">Alte Grafik</button>
+  <button id="btn-sd" title="Switch between the HD view and the legacy graphics (SD tiles as in the original game)">Legacy graphics</button>
   <label title="Snap when moving, rotating and scaling"><input type="checkbox" id="snap" checked> Snap</label>
-  <input id="snap-t" class="num" type="number" step="0.1" min="0.1" value="0.5" title="Move snap (units, 10 = 1 tile)">
-  <input id="snap-r" class="num" type="number" step="1" min="1" value="15" title="Rotation snap (degrees)">
-  <input id="snap-s" class="num" type="number" step="0.01" min="0.01" value="0.05" title="Scale snap">
+  <span class="snap-field" title="Move snap (units, 10 = 1 tile)">↔<input id="snap-t" class="num" type="number" step="0.1" min="0.1" value="0.5" title="Move snap (units, 10 = 1 tile)"></span>
+  <span class="snap-field" title="Rotation snap (degrees)">⟳<input id="snap-r" class="num" type="number" step="1" min="1" value="15" title="Rotation snap (degrees)"></span>
+  <span class="snap-field" title="Scale snap">⤢<input id="snap-s" class="num" type="number" step="0.01" min="0.01" value="0.05" title="Scale snap"></span>
   <span class="sep"></span>
   <label><input type="checkbox" id="show-coll"> Collision</label>
-  <label title="Game objects from the DS1: NPCs, monster spawns, chests, waypoints"><input type="checkbox" id="show-objs" checked> Spielobjekte</label>
+  <label title="Game objects from the DS1: NPCs, monster spawns, chests, waypoints"><input type="checkbox" id="show-objs" checked> Game objects</label>
   <label title="Show lights, effects, sounds and other invisible objects as symbols"><input type="checkbox" id="show-helpers" checked> Helpers</label>
   <label title="Moved objects stay on the ground (terrain height)"><input type="checkbox" id="follow-ground"> On ground</label>
   <select id="tool" title="Tool">
@@ -42,10 +42,9 @@
   <button id="btn-export" title="Write all saved maps into the game folder as a mod">Export</button>
   <button id="btn-test" title="Export and test automatically in the game (second monitor, muted)">Test in game</button>
   <button id="btn-shot" title="Save a picture of the view as PNG (downloads folder)">Screenshot</button>
+  <span class="spacer"></span>
   <button id="btn-help" title="? or F1: keyboard and mouse">?</button>
   <select id="lang" title="Language"><option value="de">Deutsch</option><option value="en">English</option></select>
-  <span id="cursor-pos"></span>
-  <span id="status"></span>
 </div>
 <div id="main">
   <div id="left">
@@ -80,10 +79,10 @@
     </div>
     <div class="pane hidden" id="pane-models">
       <input id="model-filter" placeholder="Search models, e.g. palisade, tree, barrel">
-      <select id="model-cat" title="Area"><option value="">Alle Bereiche</option><option value="__recent">Zuletzt benutzt</option><option value="__fav">Favourites</option>
-        <option value="env/model/act1">Akt 1</option><option value="env/model/act2">Akt 2</option><option value="env/model/act3">Akt 3</option>
-        <option value="env/model/act4">Akt 4</option><option value="env/model/expansion">Akt 5</option><option value="env/model/global">Global</option>
-        <option value="env/foliage">Pflanzen</option><option value="objects/">Spielobjekte</option><option value="character/">Figuren</option><option value="__own">Own models (imported, recoloured)</option></select>
+      <select id="model-cat" title="Area"><option value="">All areas</option><option value="__recent">Recently used</option><option value="__fav">Favourites</option>
+        <option value="env/model/act1">Act 1</option><option value="env/model/act2">Act 2</option><option value="env/model/act3">Act 3</option>
+        <option value="env/model/act4">Act 4</option><option value="env/model/expansion">Act 5</option><option value="env/model/global">Global</option>
+        <option value="env/foliage">Plants</option><option value="objects/">Game objects</option><option value="character/">Characters</option><option value="__own">Own models (imported, recoloured)</option></select>
       <div id="model-count"></div>
       <ul id="model-list" class="list"></ul>
       <div id="preview-box">
@@ -140,14 +139,15 @@
       <button id="replace-btn">Apply</button>
     </div>
     <h3>Controls</h3>
-    <p class="hint">Left click: select · Shift+click: add to/remove from the selection · drag with the left mouse button: box selection · Esc: deselect<br>Ctrl+C/Ctrl+V: copy/paste (at the mouse cursor, also into other maps) · arrow keys: move one snap step (Shift ×10), Page Up/Down: height · G: drop to ground · T: top view · O: add a game object at the mouse cursor<br>Game objects (from the DS1, used by the game): red cones = NPCs/monsters (line = walking path), turquoise cubes = objects. Select, drag, change the type and delete them like other objects.<br>
-    Rechte Maus: drehen · Mittlere Maus: verschieben · Rad: zoomen<br>
-    W/E/R: move/rotate/scale · Del: delete · Ctrl+D: duplicate · Ctrl+Z/Ctrl+Y: undo/redo · F: focus the selection · P: place the preview model at the mouse cursor<br>
-    H / Shift+H: hide the selection / show it again · Shift+P: scatter the preview model · Ctrl+1..4 / 1..4: store / recall a camera view · ? or F1: all keys<br>
+    <p class="hint">Left click: select · Shift+click: add to/remove from the selection · drag with the left mouse button: box selection · Esc: deselect<br>
+    Right mouse: orbit · middle mouse: pan · wheel: zoom<br>
+    Game objects (from the DS1, used by the game): red cones = NPCs/monsters (line = walking path), turquoise cubes = objects. Select, drag, change the type and delete them like other objects.<br>
     Collision: choose a tool, then paint tiles (10×10 units) with left click/drag. Red = not walkable, blue = blocks only line of sight, yellow border = changed by you. "Collision under object" links the blocked area to the object: it moves along and disappears when the object is deleted.</p>
+    <button id="btn-help2">All keys (? or F1)</button>
   </div>
 </div>
+<div id="statusbar"><span id="status"></span><span id="sel-info"></span><span id="cursor-pos"></span></div>
 <div id="modal" class="hidden"><div class="modal-box"><div class="modal-head"><span id="modal-title"></span><button id="modal-close">Close</button></div><pre id="modal-body"></pre></div></div>
-<script type="module" src="/web/editor.js?v=41"></script>
+<script type="module" src="/web/editor.js?v=42"></script>
 </body>
 </html>

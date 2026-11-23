@@ -4,7 +4,15 @@ body { display: flex; flex-direction: column; }
 #toolbar { min-height: 40px; flex-wrap: wrap; row-gap: 4px; padding-top: 4px; padding-bottom: 4px; display: flex; align-items: center; gap: 6px; padding: 0 8px; background: #1c1a17; border-bottom: 1px solid #3a3326; }
 #toolbar .title { color: #c7a35a; font-weight: 600; margin-right: 12px; }
 #toolbar .sep { width: 1px; height: 22px; background: #3a3326; }
-#status { margin-left: auto; color: #999; }
+#statusbar { height: 24px; flex: none; display: flex; align-items: center; gap: 16px; padding: 0 10px; background: #1c1a17;
+  border-top: 1px solid #3a3326; color: #999; font-size: 12px; white-space: nowrap; overflow: hidden; }
+#status { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+#sel-info { color: #c7a35a; }
+#cursor-pos { font-variant-numeric: tabular-nums; color: #888; }
+#toolbar .spacer { flex: 1; }
+#toolbar .snap-field { display: inline-flex; align-items: center; gap: 2px; color: #888; }
+#toolbar .snap-field input { width: 50px; }
+#btn-help2 { margin-top: 6px; }
 button { background: #2a261f; color: #ddd; border: 1px solid #4a4130; padding: 5px 8px; white-space: nowrap; cursor: pointer; border-radius: 3px; }
 button:hover { background: #3a3326; }
 button.active { background: #6b5527; border-color: #c7a35a; color: #fff; }
@@ -30,7 +38,8 @@ h3 { color: #c7a35a; margin: 10px 0 6px; font-size: 13px; }
 .prop-row input { width: 100%; }
 .prop-name { word-break: break-all; margin-bottom: 6px; color: #fff; }
 .prop-model { word-break: break-all; color: #999; font-size: 11px; margin-bottom: 8px; }
-.prop-buttons { display: flex; gap: 6px; margin-top: 8px; }
+.prop-buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.prop-buttons button { flex: 1 1 auto; }
 #scene-info { color: #aaa; font-size: 12px; line-height: 1.6; }
 
 #toolbar label { white-space: nowrap; }
