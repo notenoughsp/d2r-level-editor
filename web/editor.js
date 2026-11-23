@@ -1599,6 +1599,12 @@ document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () 
   if (b.dataset.tab === "npcs") loadNpcs();
 }));
 
+function setSpace(local) {
+  gizmo.setSpace(local ? "local" : "world");
+  $("#btn-space").textContent = local ? "Local" : "World";
+  $("#btn-space").classList.toggle("active", local);
+  localStorage.setItem("gizmoSpace", local ? "local" : "world");
+}
 function setMode(m) {
   gizmo.setMode(m);
   document.querySelectorAll(".mode").forEach((b) => b.classList.toggle("active", b.dataset.mode === m));
@@ -1617,6 +1623,8 @@ for (const id of ["snap-t", "snap-r", "snap-s"]) {
   $("#" + id).addEventListener("change", applySnap);
 }
 $("#snap").addEventListener("change", applySnap);
+$("#btn-space").addEventListener("click", () => setSpace(gizmo.space !== "local"));
+setSpace(localStorage.getItem("gizmoSpace") === "local");
 applySnap();
 
 // Changing the LOD reloads the map from disk, so unsaved edits would be lost: ask first.
@@ -1654,6 +1662,7 @@ window.addEventListener("keydown", (e) => {
   else if (e.key === "p" && e.shiftKey && previewPath) scatter(cursorGround ? cursorGround.clone() : null);
   else if (e.key === "p" && previewPath && cursorGround) placeModel(previewPath, cursorGround.clone());
   else if (["1", "2", "3", "4"].includes(e.key)) { if (e.ctrlKey) { e.preventDefault(); storeView(e.key); } else recallView(e.key); }
+  else if (e.key === "l") { setSpace(gizmo.space !== "local"); setStatus(tr(gizmo.space === "local" ? "Gizmo: object axes" : "Gizmo: world axes")); }
   else if (e.key === "q") setTool("objects");
   else if (e.key === "b") setTool(e.shiftKey ? "blockall" : "block");
   else if (e.key === "x") setTool("clear");
@@ -2088,7 +2097,7 @@ for (const id of ["sc-count", "sc-radius", "sc-smin", "sc-smax", "sc-rot", "sc-g
 $("#sc-go").addEventListener("click", () => scatter(null));
 
 // ---------- keyboard help ----------
-const HELP_TEXT = "Mouse\n  Left click: select · Shift+click: add/remove · drag: box selection\n  Right mouse: turn the view · middle mouse: pan · wheel: zoom\n\nObjects\n  W / E / R: move / rotate / scale        Del: delete\n  Ctrl+C / Ctrl+V: copy / paste at the mouse cursor (also into other maps)\n  Ctrl+D: duplicate                        G: drop to the ground\n  Ctrl+A: select all\n  Arrow keys: move one snap step (Shift ×10), Page Up/Down: height\n  H: hide the selection                    Shift+H: show all hidden objects\n  F: focus the selection                   Esc: deselect\n\nPlacing\n  P: place the preview model at the mouse cursor\n  Shift+P: scatter the preview model around the mouse cursor (settings in the Models tab)\n  O: add a game object at the mouse cursor\n\nView and files\n  T: top view                              Ctrl+S: save\n  Ctrl+1..4: store the view, 1..4: go back to it\n  Ctrl+Z / Ctrl+Y: undo / redo             ? or F1: this help\n\nCollision\n  Q: objects tool    B: block (Shift+B: block + teleport)    X: clear    [ / ]: brush size";
+const HELP_TEXT = "Mouse\n  Left click: select · Shift+click: add/remove · drag: box selection\n  Right mouse: turn the view · middle mouse: pan · wheel: zoom\n\nObjects\n  W / E / R: move / rotate / scale        Del: delete\n  Ctrl+C / Ctrl+V: copy / paste at the mouse cursor (also into other maps)\n  Ctrl+D: duplicate                        G: drop to the ground\n  Ctrl+A: select all\n  Arrow keys: move one snap step (Shift ×10), Page Up/Down: height\n  H: hide the selection                    Shift+H: show all hidden objects\n  F: focus the selection                   Esc: deselect\n\nPlacing\n  P: place the preview model at the mouse cursor\n  Shift+P: scatter the preview model around the mouse cursor (settings in the Models tab)\n  O: add a game object at the mouse cursor\n\nView and files\n  T: top view                              Ctrl+S: save\n  Ctrl+1..4: store the view, 1..4: go back to it\n  Ctrl+Z / Ctrl+Y: undo / redo             ? or F1: this help\n\nCollision\n  Q: objects tool    B: block (Shift+B: block + teleport)    X: clear    [ / ]: brush size\n\nGizmo\n  L: axes of the world or of the selected object";
 function showHelp() { modalShow(tr("Keyboard and mouse"), tr(HELP_TEXT)); }
 $("#btn-help").addEventListener("click", showHelp);
 $("#btn-help2").addEventListener("click", showHelp);
