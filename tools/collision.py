@@ -40,8 +40,10 @@ SUBTILE_FLAG = {"sub_block": 0x01, "sub_blockall": 0x05}
 # Quarter-tile collision: the game's own invisible tiles in Act1\Barracks\InvisWal.dt1 (loaded
 # for every level) block parts of a tile: orientation 0, main 49, sub 0..13. Their blocked 2x2
 # subtile corners ("quarters") give every combination of 1 to 3 quarters of a tile; 4 quarters is
-# the full blocking tile. Nothing new is added to any tile set, so this works without the limits
-# of the subtile patterns above (not verified in the game yet).
+# the full blocking tile. In-game test of 2026-11-23 (act 1 town): the game blocks the whole tile
+# for every one of them, also with InvisWal.dt1 added to the town's level type in lvltypes.txt;
+# like the subtile patterns above, the game only honours partial flags of tiles the area loads by
+# itself. Not offered in the editor.
 INVIS_DT1 = "data/global/tiles/act1/barracks/inviswal.dt1"
 QUARTER_MAIN = 49
 
