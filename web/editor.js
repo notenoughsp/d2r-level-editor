@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { initI18n, locale, tr } from "./i18n.js?v=21";
+import { initI18n, locale, tr } from "./i18n.js?v=22";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -1735,7 +1735,7 @@ window.addEventListener("keydown", (e) => {
   const t = e.target;
   if (t && (["INPUT", "SELECT", "TEXTAREA", "BUTTON"].includes(t.tagName) || t.isContentEditable)) return;
   if (e.altKey || e.metaKey) return;
-  if ((!$("#modal").classList.contains("hidden") || !$("#export-dialog").classList.contains("hidden")) && e.key !== "Escape") return;  // a dialog is open
+  if ((!$("#modal").classList.contains("hidden") || !$("#export-dialog").classList.contains("hidden") || !$("#acts-dialog").classList.contains("hidden")) && e.key !== "Escape") return;  // a dialog is open
   const ev = e;
   if (ev.key.length === 1) e = { key: ev.key.toLowerCase(), ctrlKey: ev.ctrlKey, shiftKey: ev.shiftKey, preventDefault: () => ev.preventDefault() };
   if (e.ctrlKey && e.key === "s") { e.preventDefault(); save(); }
@@ -1766,6 +1766,7 @@ window.addEventListener("keydown", (e) => {
   else if (e.key === "Escape" && measuring) toggleRuler();
   else if (e.key === "Escape" && brushOn) toggleScatterBrush();
   else if (e.key === "Escape" && !$("#export-dialog").classList.contains("hidden")) $("#export-dialog").classList.add("hidden");
+  else if (e.key === "Escape" && !$("#acts-dialog").classList.contains("hidden")) $("#acts-dialog").classList.add("hidden");
   else if (e.key === "Escape") { selectGameObject(null); select([]); $("#modal").classList.add("hidden"); }
   else if (e.ctrlKey && e.key === "c") { e.preventDefault(); copySelection(); }
   else if (e.ctrlKey && e.key === "v") { e.preventDefault(); paste(); }
@@ -2878,3 +2879,187 @@ $("#kit-del").addEventListener("click", async () => {
   kitSel = null;
   loadKits();
 });
+
+// ---------- act editor: new areas, bosses with their loot, quest chain (d2r-world-mods) ----------
+let act = null, actCat = null;
+const esc = (t) => String(t ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+async function openActs() {
+  const r = await (await fetch(api("world"))).json();
+  $("#acts-dialog").classList.remove("hidden");
+  if (!r.available) {
+    $("#acts-body").innerHTML = `<p>${esc(tr("The act editor needs the d2r-world-mods tools (World Waypoints and the quest plugin) next to the editor: {0}").replace("{0}", r.path))}</p>`;
+    $("#acts-save").disabled = $("#acts-build").disabled = $("#acts-export").disabled = true;
+    return;
+  }
+  act = r.spec;
+  actCat = r.catalog;
+  $("#acts-save").disabled = $("#acts-build").disabled = $("#acts-export").disabled = false;
+  $("#mon-list").innerHTML = actCat.monsters.map((m) => `<option value="${esc(m)}">`).join("");
+  renderAct();
+}
+function bossNames() { return act.bosses.map((b) => b.name); }
+function npcNames() { return act.npcs.map((n) => n.name); }
+function renderAct() {
+  const zoneRows = act.zones.map((z, i) => `<tr>
+    <td>${z.id}</td>
+    <td><input data-z="${i}" data-f="name" value="${esc(z.name)}"></td>
+    <td>${z.town ? tr("town") : "maze_template" in z ? tr("dungeon") : tr("map")}</td>
+    <td>${z.town ? "" : `<input type="number" min="0" data-z="${i}" data-f="open" value="${z.open ?? 0}" title="${esc(tr("Quest stage from which the area is open in World Waypoints"))}">`}</td>
+    <td>${z.town ? "" : `<input data-z="${i}" data-f="monsters" list="mon-list" value="${esc((z.monsters || []).join(", "))}" title="${esc(tr("Monster ids, comma-separated"))}">`}</td>
+    <td>${z.town ? "" : `<input data-z="${i}" data-f="mlvl" value="${esc((z.mlvl || []).join(", "))}" title="${esc(tr("Monster level: normal, nightmare, hell"))}">`}</td>
+    <td>${z.town ? "" : `<select data-z="${i}" data-f="boss"><option value="">-</option>${bossNames().map((b) => `<option${b === z.boss ? " selected" : ""}>${esc(b)}</option>`).join("")}</select>`}</td>
+    <td>${z.town ? "" : `<button data-zdel="${i}" title="${esc(tr("Remove the area"))}">✕</button>`}</td></tr>`).join("");
+  const bossRows = act.bosses.map((b, i) => `<tr>
+    <td><input data-b="${i}" data-f="name" value="${esc(b.name)}"></td>
+    <td><input data-b="${i}" data-f="look" list="mon-list" value="${esc(b.look)}" title="${esc(tr("The game monster it looks like"))}"></td>
+    <td><input data-b="${i}" data-f="level" value="${esc((b.level || []).join(", "))}"></td>
+    <td><input type="number" step="0.5" min="0.5" data-b="${i}" data-f="hp" value="${b.hp ?? 1}" title="${esc(tr("Life, times that of Izual"))}"></td>
+    <td><select data-b="${i}" data-f="tc" title="${esc(tr("Loot: the drops of this game monster"))}">${actCat.monsters.filter((m) => m === b.tc || /^(izual|diablo|baal|mephisto|andariel|duriel|radament|bloodraven|griswold|summoner|nihlathakboss|putriddefiler1|smith|council1|hephasto|cowking|uberizual|uberdiablo|uberbaal|ubermephisto|uberandariel|uberduriel)/.test(m)).map((m) => `<option${m === b.tc ? " selected" : ""}>${esc(m)}</option>`).join("")}</select></td>
+    <td><button data-bdel="${i}">✕</button></td></tr>`).join("");
+  const targets = (st) => {
+    if ("enter" in st) return `<select data-s="${st._i}" data-f="enter">${act.zones.map((z) => `<option value="${z.id}"${z.id === st.enter ? " selected" : ""}>${esc(z.name)}</option>`).join("")}</select>`;
+    if ("kill" in st) return `<select data-s="${st._i}" data-f="kill">${bossNames().map((b) => `<option${b === st.kill ? " selected" : ""}>${esc(b)}</option>`).join("")}</select>`;
+    return `<select data-s="${st._i}" data-f="talk">${npcNames().map((n) => `<option${n === st.talk ? " selected" : ""}>${esc(n)}</option>`).join("")}</select>`;
+  };
+  const goals = act.questlog.goals || {};
+  const stepRows = act.quest.map((st, i) => { st._i = i; const kind = "enter" in st ? "enter" : "kill" in st ? "kill" : "talk"; return `<tr>
+    <td>${i}</td>
+    <td><select data-s="${i}" data-f="kind">${["enter", "kill", "talk"].map((k) => `<option value="${k}"${k === kind ? " selected" : ""}>${tr({ enter: "enter area", kill: "kill boss", talk: "talk to" }[k])}</option>`).join("")}</select></td>
+    <td>${targets(st)}</td>
+    <td><input data-s="${i}" data-f="quest" value="${esc(st.quest || "")}" placeholder="${esc(tr("(same quest)"))}" title="${esc(tr("A name here starts a new quest in the Quest Log"))}"></td>
+    <td><input data-s="${i}" data-f="goal" value="${esc(goals[i] || "")}" title="${esc(tr("Text in the Quest Log while this step is open; | starts a new line"))}"></td>
+    <td><button data-sdel="${i}">✕</button></td></tr>`; }).join("");
+  const quests = act.questlog.quests.map((q, i) => `<tr><td>${esc(q.name)}</td><td><input data-q="${i}" data-f="done" value="${esc(q.done || "")}"></td></tr>`).join("");
+  $("#acts-body").innerHTML = `
+    <div class="ex-grid"><label>${tr("Act tab")} <input id="act-tab" value="${esc(act.questlog.tab)}" maxlength="6"></label><label>${tr("Act title")} <input id="act-title" value="${esc(act.questlog.title)}"></label></div>
+    <h4>${tr("Areas")}</h4><table class="act-table"><tr><th>ID</th><th>${tr("Name")}</th><th>${tr("Kind")}</th><th>${tr("Open from stage")}</th><th>${tr("Monsters")}</th><th>${tr("Monster level")}</th><th>${tr("Boss")}</th><th></th></tr>${zoneRows}</table>
+    <div class="prop-buttons"><select id="act-maze">${actCat.mazes.map((m) => `<option value="${m.id}">${esc(m.name)} (${m.id})</option>`).join("")}</select><button id="act-zone-add">${tr("Add a dungeon area")}</button></div>
+    <h4>${tr("Bosses and their loot")}</h4><table class="act-table"><tr><th>${tr("Name")}</th><th>${tr("Look")}</th><th>${tr("Level")}</th><th>${tr("Life")}</th><th>${tr("Loot like")}</th><th></th></tr>${bossRows}</table>
+    <div class="prop-buttons"><button id="act-boss-add">${tr("Add a boss")}</button></div>
+    <h4>${tr("Quest chain")}</h4><table class="act-table"><tr><th>${tr("Stage")}</th><th>${tr("Step")}</th><th>${tr("Target")}</th><th>${tr("New quest")}</th><th>${tr("Quest Log text")}</th><th></th></tr>${stepRows}</table>
+    <div class="prop-buttons"><button id="act-step-add">${tr("Add a step")}</button></div>
+    <h4>${tr("Quest Log: text when a quest is done")}</h4><table class="act-table">${quests}</table>
+    <p class="hint">${tr("NPC texts by quest stage are set in the NPCs tab; maps of the areas in the act file ({0}).").replace("{0}", "act6/act6.json")}</p>`;
+  wireAct();
+}
+function questlogFromSteps() {
+  // quests start at steps with a name and run until the next one; done texts and icons stay by name
+  const old = new Map(act.questlog.quests.map((q) => [q.name, q]));
+  const icons = ["a1q1", "a1q6", "a1q2", "a2q1", "a4q1", "a4q2", "a1q3", "a1q4", "a1q5", "a2q2", "a2q3", "a3q1"];
+  const qs = [];
+  act.quest.forEach((st, i) => { if (st.quest) qs.push({ name: st.quest, first: i }); });
+  act.questlog.quests = qs.map((q, k) => ({ first: q.first, last: (qs[k + 1] ? qs[k + 1].first : act.quest.length) - 1,
+    icon: old.get(q.name)?.icon || icons[k % icons.length], name: q.name, done: old.get(q.name)?.done || "" }));
+}
+function wireAct() {
+  const body = $("#acts-body");
+  const num = (v) => v.split(/[,; ]+/).filter(Boolean).map(Number);
+  body.querySelectorAll("[data-z]").forEach((el) => el.addEventListener("change", () => {
+    const z = act.zones[+el.dataset.z], f = el.dataset.f;
+    if (f === "monsters") z.monsters = el.value.split(/[,; ]+/).filter(Boolean);
+    else if (f === "mlvl") z.mlvl = num(el.value);
+    else if (f === "open") z.open = +el.value;
+    else if (f === "boss") { if (el.value) z.boss = el.value; else delete z.boss; }
+    else z[f] = el.value;
+  }));
+  body.querySelectorAll("[data-b]").forEach((el) => el.addEventListener("change", () => {
+    const b = act.bosses[+el.dataset.b], f = el.dataset.f, oldName = b.name;
+    if (f === "level") b.level = num(el.value);
+    else if (f === "hp") b.hp = +el.value;
+    else b[f] = el.value;
+    if (f === "name") {  // keep the references
+      for (const z of act.zones) if (z.boss === oldName) z.boss = b.name;
+      for (const st of act.quest) if (st.kill === oldName) st.kill = b.name;
+      renderAct();
+    }
+  }));
+  body.querySelectorAll("[data-s]").forEach((el) => el.addEventListener("change", () => {
+    const i = +el.dataset.s, st = act.quest[i], f = el.dataset.f;
+    if (f === "kind") {
+      for (const k of ["enter", "kill", "talk"]) delete st[k];
+      if (el.value === "enter") st.enter = act.zones[0].id;
+      else if (el.value === "kill") st.kill = bossNames()[0];
+      else st.talk = npcNames()[0];
+      return renderAct();
+    }
+    if (f === "enter") st.enter = +el.value;
+    else if (f === "goal") { act.questlog.goals = act.questlog.goals || {}; if (el.value) act.questlog.goals[i] = el.value; else delete act.questlog.goals[i]; }
+    else if (f === "quest") { if (el.value) st.quest = el.value; else delete st.quest; questlogFromSteps(); renderAct(); }
+    else st[f] = el.value;
+  }));
+  body.querySelectorAll("[data-q]").forEach((el) => el.addEventListener("change", () => { act.questlog.quests[+el.dataset.q].done = el.value; }));
+  body.querySelectorAll("[data-zdel]").forEach((el) => el.addEventListener("click", () => {
+    const z = act.zones[+el.dataset.zdel];
+    if (act.quest.some((st) => st.enter === z.id)) return setStatus(tr("A quest step still uses this area"));
+    act.zones.splice(+el.dataset.zdel, 1); renderAct();
+  }));
+  body.querySelectorAll("[data-bdel]").forEach((el) => el.addEventListener("click", () => {
+    const b = act.bosses[+el.dataset.bdel];
+    if (act.quest.some((st) => st.kill === b.name) || act.zones.some((z) => z.boss === b.name)) return setStatus(tr("An area or quest step still uses this boss"));
+    act.bosses.splice(+el.dataset.bdel, 1); renderAct();
+  }));
+  body.querySelectorAll("[data-sdel]").forEach((el) => el.addEventListener("click", () => {
+    const i = +el.dataset.sdel;
+    act.quest.splice(i, 1);
+    const g = {};
+    for (const [k, v] of Object.entries(act.questlog.goals || {})) { const n = +k; if (n < i) g[n] = v; else if (n > i) g[n - 1] = v; }
+    act.questlog.goals = g;
+    act.quest.forEach((st, k) => { st.stage = k; });
+    questlogFromSteps(); renderAct();
+  }));
+  $("#act-tab").addEventListener("change", (e) => { act.questlog.tab = e.target.value; });
+  $("#act-title").addEventListener("change", (e) => { act.questlog.title = e.target.value; });
+  $("#act-zone-add").addEventListener("click", () => {
+    const id = Math.max(...act.zones.map((z) => z.id)) + 1;
+    // generated levels sit side by side in a free part of the world (see levels.comment in the act file)
+    const used = new Set(act.zones.filter((z) => z.offset).map((z) => z.offset.join(",")));
+    let offset = null;
+    for (let k = 0; k < 10 && !offset; k++) for (const y of [3300, 3550]) if (!used.has(`${4400 + 250 * k},${y}`)) { offset = [4400 + 250 * k, y]; break; }
+    if (!offset) return setStatus(tr("No free place for another generated area"));
+    const name = prompt("Name of the new area:", "New Depths");
+    if (!name) return;
+    const key = (act.prefix || "a6").toUpperCase().replace(/^A/, "A") + name.replace(/[^A-Za-z0-9]/g, "").slice(0, 20);
+    act.zones.push({ id, key, name, open: act.quest.length, maze_template: +$("#act-maze").value, offset,
+      monsters: ["fallen1", "skeleton1"], mlvl: [45, 69, 85], maze: { "Rooms": 12, "Rooms(N)": 12, "Rooms(H)": 12 } });
+    renderAct();
+  });
+  $("#act-boss-add").addEventListener("click", () => {
+    const name = prompt("Name of the new boss:", "");
+    if (!name) return;
+    act.bosses.push({ name, id: `${act.prefix || "a6"}${name.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 10)}`, look: "griswold", level: [46, 70, 87], hp: 3, tc: "izual" });
+    renderAct();
+  });
+  $("#act-step-add").addEventListener("click", () => {
+    act.quest.push({ stage: act.quest.length, talk: npcNames()[0] });
+    questlogFromSteps(); renderAct();
+  });
+}
+function cleanAct() {
+  const a = JSON.parse(JSON.stringify(act));
+  a.quest.forEach((st, i) => { delete st._i; st.stage = i; });
+  return a;
+}
+async function saveAct() {
+  questlogFromSteps();
+  const r = await postJSON("world/spec", {}, cleanAct());
+  $("#acts-log").textContent = r.ok ? tr("Saved: {0}").replace("{0}", r.data.saved) : tr("Not saved: {0}").replace("{0}", r.data.error);
+  return r.ok;
+}
+async function buildAct(exportToo) {
+  if (!(await saveAct())) return;
+  const name = exportToo ? (await (await fetch(api("modinfo"))).json()).name : null;
+  if (exportToo && !confirm(tr("Build the act, export the mod {0} and install World Waypoints and the quests into it?").replace("{0}", name))) return;
+  $("#acts-log").textContent = tr("Building the act … (about a minute)");
+  for (const b of ["#acts-build", "#acts-export"]) $(b).disabled = true;
+  try {
+    const r = await postJSON("world/build", {}, { export: name });
+    $("#acts-log").textContent = r.ok ? (r.data.export ? tr("Exported: {0} file(s) to {1}").replace("{0}", r.data.export.files).replace("{1}", r.data.export.mod) + "\n" : "") + r.data.log
+      : tr("Build failed: {0}").replace("{0}", r.data.error);
+    if (r.ok) { presets = await (await fetch(api("presets"))).json(); loadEdited(); }
+  } finally { for (const b of ["#acts-build", "#acts-export"]) $(b).disabled = false; }
+}
+$("#btn-acts").addEventListener("click", openActs);
+$("#acts-close").addEventListener("click", () => $("#acts-dialog").classList.add("hidden"));
+$("#acts-save").addEventListener("click", saveAct);
+$("#acts-build").addEventListener("click", () => buildAct(false));
+$("#acts-export").addEventListener("click", () => buildAct(true));

@@ -172,3 +172,11 @@ button.primary { background: #6b5527; border-color: #c7a35a; color: #fff; }
 .light-box { border: 1px solid #3a3326; padding: 4px 6px; margin: 6px 0; }
 .light-row { grid-template-columns: 90px 1fr; }
 .light-row input[type=color] { height: 26px; padding: 0; }
+
+.wide-box { width: min(1200px, 97vw); }
+.act-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 4px; }
+.act-table th { text-align: left; color: #888; font-weight: normal; padding: 2px 4px; }
+.act-table td { padding: 2px 3px; border-top: 1px solid #221f19; }
+.act-table input, .act-table select { width: 100%; box-sizing: border-box; }
+#acts-body h4 { color: #c7a35a; margin: 12px 0 4px; }
+#acts-log { white-space: pre-wrap; max-height: 140px; overflow-y: auto; margin: 0 12px; color: #aaa; font-size: 11px; }

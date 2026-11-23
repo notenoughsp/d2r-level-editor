@@ -9,6 +9,7 @@ import hashlib
 import io
 import json
 import mimetypes
+import os
 import pathlib
 import re
 import shutil
@@ -657,6 +658,87 @@ def list_kits():
     return out
 
 
+# ---------------------------------------------------------------- act editor (d2r-world-mods)
+# New areas, bosses and quest chains are built by the separate d2r-world-mods tools (World
+# Waypoints, quest plugin). The editor edits their act description and runs them when they are
+# found next to the editor (or in D2R_WORLD_MODS).
+WORLD = pathlib.Path(os.environ.get("D2R_WORLD_MODS") or ROOT.parent / "d2r-world-mods")
+_world_catalog = None
+
+
+def world_available():
+    return (WORLD / "tools" / "build_act6.py").exists()
+
+
+def act_spec_file():
+    return WORLD / "act6" / "act6.json"
+
+
+def world_catalog():
+    """Monster ids (for monsters, bosses' looks), treasure classes and dungeon level templates."""
+    global _world_catalog
+    if _world_catalog is None:
+        def rows(name):
+            raw = read_asset(f"data/global/excel/{name}.txt", original=True).decode("latin1").replace("\r\n", "\n").split("\n")
+            head = raw[0].split("\t")
+            return head, [r.split("\t") for r in raw[1:] if r]
+        h, r = rows("monstats")
+        c = {k: i for i, k in enumerate(h)}
+        monsters = [x[c["Id"]] for x in r if len(x) > c["Id"] and x[c["Id"]] and x[c["Id"]] != "Expansion"]
+        h, r = rows("treasureclassex")
+        tcs = [x[0] for x in r if x and x[0]]
+        h, r = rows("levels")
+        c = {k: i for i, k in enumerate(h)}
+        mazes = [{"id": int(x[c["Id"]]), "name": x[c["Name"]]} for x in r
+                 if len(x) > c["DrlgType"] and x[c["DrlgType"]] == "1" and x[c["Id"]].isdigit()]
+        _world_catalog = {"monsters": monsters, "tcs": tcs, "mazes": mazes}
+    return _world_catalog
+
+
+def world_state():
+    if not world_available():
+        return {"available": False, "path": str(WORLD)}
+    return {"available": True, "path": str(WORLD), "spec": json.loads(act_spec_file().read_text(encoding="utf-8")),
+            "catalog": world_catalog()}
+
+
+def save_act_spec(spec):
+    for key in ("levels", "zones", "bosses", "quest", "npcs", "questlog"):
+        if key not in spec:
+            raise ValueError(f"The act description needs '{key}'.")
+    ids = [z["id"] for z in spec["zones"]]
+    if len(ids) != len(set(ids)):
+        raise ValueError("Two areas have the same level id.")
+    f = act_spec_file()
+    backup = f.with_suffix(".json.bak")
+    if f.exists():
+        shutil.copy2(f, backup)
+    f.write_text(json.dumps(spec, indent=2, ensure_ascii=False), encoding="utf-8")
+    return {"saved": str(f)}
+
+
+def build_act(export_name=None):
+    """Run the act build into this editor's project; optionally export the mod and install d2r-world."""
+    import subprocess
+    env = dict(os.environ, D2R_EDITOR_DATA=str(PROJECT.parent), D2R_GAME=str(casc.GAME),
+               D2R_EDITOR_TOOLS=str(ROOT / "tools"), ACT_SPEC=str(act_spec_file()))
+    out = []
+
+    def run(args):
+        r = subprocess.run([sys.executable, "-I", *args], env=env, capture_output=True, text=True, timeout=1200)
+        out.append((r.stdout or "") + (r.stderr or ""))
+        if r.returncode:
+            raise ValueError("\n".join(out)[-3000:])
+    run([str(WORLD / "tools" / "build_act6.py")])
+    result = {"log": "\n".join(out)[-6000:]}
+    if export_name:
+        result["export"] = export_mod(export_name, read_modinfo())
+        prefix = json.loads(act_spec_file().read_text(encoding="utf-8")).get("prefix", "a6")
+        run([str(WORLD / "tools" / "install_world.py"), export_name, "--zones", f"{prefix}_*"])
+        result["log"] = "\n".join(out)[-6000:]
+    return result
+
+
 def current_project():
     return CURRENT_PROJECT.read_text(encoding="utf-8").strip() if CURRENT_PROJECT.exists() else "Default"
 
@@ -905,6 +987,8 @@ class Handler(BaseHTTPRequestHandler):
                     self.send(200, json.loads(kit_file(q.get("name", "")).read_text(encoding="utf-8")))
                 except ValueError as e:
                     self.send(400, {"error": str(e)})
+            elif u.path == "/api/world":
+                self.send(200, world_state())
             elif u.path == "/api/projects":
                 self.send(200, list_projects())
             elif u.path == "/api/modinfo":
@@ -1034,6 +1118,21 @@ class Handler(BaseHTTPRequestHandler):
                     KITS.mkdir(parents=True, exist_ok=True)
                     f.write_text(json.dumps(kit, ensure_ascii=False), encoding="utf-8")
                 self.send(200, list_kits())
+            elif u.path in ("/api/world/spec", "/api/world/build"):
+                length = int(self.headers.get("Content-Length") or 0)
+                body = json.loads(self.rfile.read(length)) if length else {}
+                if not world_available():
+                    return self.send(409, {"error": f"d2r-world-mods not found ({WORLD})"})
+                try:
+                    if u.path.endswith("spec"):
+                        self.send(200, save_act_spec(body))
+                    else:
+                        name = body.get("export")
+                        if name and not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", name):
+                            return self.send(400, {"error": "Mod name: only letters, digits, _ and -"})
+                        self.send(200, build_act(name))
+                except ValueError as e:
+                    self.send(400, {"error": str(e)})
             elif u.path == "/api/project":
                 self.rfile.read(int(self.headers.get("Content-Length") or 0))
                 try:
