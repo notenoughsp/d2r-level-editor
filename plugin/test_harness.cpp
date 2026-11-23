@@ -74,6 +74,7 @@ struct Config {
     int wx = -3840, wy = 0, ww = 1600, wh = 900;
     int varySeed = 1;
     int play = 0;             // play=1: go there (moves.txt), then hand the game over to the player
+    int testWindow = 0;       // test_window=1: in play mode still use the test monitor and mute (tests of play mode)
 } Cfg;
 
 // Movement test (moves.txt next to the DLL: one "x y" world subtile per line, run 0 only).
@@ -112,6 +113,10 @@ std::atomic<long long> MoveTarget{-1};   // packed x << 32 | y, executed on the 
 std::atomic<int> ServerX{-1}, ServerY{-1};
 std::atomic<std::uint32_t> ServerFlags{0};
 std::atomic<int> ServerLevel{-1};
+// The player's level origin (world subtiles): the smallest tile corner of its rooms (Room2 +0x60/+0x64).
+// "T dx dy" teleports to origin + (dx, dy): the level editor's "Play here" knows only the place in
+// the map, and the game places most levels anew in every game (levels.txt offsets of -1).
+std::atomic<int> LevelOriginX{-1}, LevelOriginY{-1};
 using LevelIdFn = int(__fastcall*)(void* room);  // DUNGEON_GetLevelIdFromRoom, RVA 0x2EFC10
 LevelIdFn LevelIdOf = nullptr;
 
@@ -161,6 +166,7 @@ void ReadConfig() {
         if (std::sscanf(line, "vary_game_seed=%d", &v) == 1) Cfg.varySeed = v;
         if (std::sscanf(line, "start_level=%d", &v) == 1) Cfg.startLevel = v;
         if (std::sscanf(line, "play=%d", &v) == 1) Cfg.play = v;
+        if (std::sscanf(line, "test_window=%d", &v) == 1) Cfg.testWindow = v;
         if (std::strncmp(line, "levels=", 7) == 0) {
             Cfg.levels.clear();
             for (char* t = std::strtok(line + 7, ", \r\n"); t; t = std::strtok(nullptr, ", \r\n")) Cfg.levels.push_back(std::atoi(t));
@@ -353,6 +359,16 @@ void TrackServerPlayer(void* game) {
             if (void* room = GetRoom(player)) {
                 ServerFlags = CheckMask(room, px, py, 0xFFFF);
                 ServerLevel = LevelIdOf(room);
+                auto* room2 = *reinterpret_cast<std::uint8_t**>(static_cast<std::uint8_t*>(room) + 0x18);
+                auto* level = room2 ? *reinterpret_cast<std::uint8_t**>(room2 + 0x90) : nullptr;
+                if (level) {
+                    int mx = INT32_MAX, my = INT32_MAX, n = 0;
+                    for (auto* r = *reinterpret_cast<std::uint8_t**>(level + 0x10); r && n < 4000; r = *reinterpret_cast<std::uint8_t**>(r + 0x48), ++n) {
+                        mx = (std::min)(mx, *reinterpret_cast<int*>(r + 0x60));
+                        my = (std::min)(my, *reinterpret_cast<int*>(r + 0x64));
+                    }
+                    if (n) { LevelOriginX = mx * 5; LevelOriginY = my * 5; }
+                }
             }
             return;
         }
@@ -446,6 +462,7 @@ void ReadMoves() {
         int a, b;
         if (std::sscanf(line, " r %d %d", &a, &b) == 2) Moves.push_back({'r', a, b});
         else if (std::sscanf(line, " t %d %d", &a, &b) == 2) Moves.push_back({'t', a, b});
+        else if (std::sscanf(line, " T %d %d", &a, &b) == 2) Moves.push_back({'T', a, b});
         else if (std::sscanf(line, " w %d", &a) == 1) Moves.push_back({'w', a, 0});
         else if (std::sscanf(line, " L %d %d", &a, &b) == 2) Moves.push_back({'L', a, b});
         else if (std::strncmp(line, "dump", 4) == 0) Moves.push_back({'d', 0, 0});
@@ -468,7 +485,7 @@ DWORD WINAPI Driver(LPVOID) {
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     while (true) {
         const DWORD now = GetTickCount();
-        if (!Cfg.play && now - lastPlace > 2000) {  // keep the window on the test monitor (the game may resize it at start)
+        if ((!Cfg.play || Cfg.testWindow) && now - lastPlace > 2000) {  // keep the window on the test monitor (the game may resize it at start)
             RECT rc;
             GetWindowRect(h, &rc);
             if (rc.left != Cfg.wx || rc.top != Cfg.wy || rc.right - rc.left != Cfg.ww || rc.bottom - rc.top != Cfg.wh)
@@ -513,6 +530,12 @@ DWORD WINAPI Driver(LPVOID) {
                     }
                     if (m.kind == 'w') {  // "w ms": wait
                         Sleep(static_cast<DWORD>(m.x));
+                        continue;
+                    }
+                    if (m.kind == 'T') {  // relative to the level origin: becomes a 't' move
+                        Log("level %d origin (%d,%d)", ServerLevel.load(), LevelOriginX.load(), LevelOriginY.load());
+                        Moves[i] = {'t', LevelOriginX.load() + m.x, LevelOriginY.load() + m.y};
+                        --i;
                         continue;
                     }
                     if (m.kind == 't') {
@@ -579,7 +602,7 @@ DWORD WINAPI Driver(LPVOID) {
             }
         }
         wasInGame = inGame;
-        if (!Cfg.play && now - lastMute > 3000) {  // the game creates its audio session late: keep it muted
+        if ((!Cfg.play || Cfg.testWindow) && now - lastMute > 3000) {  // the game creates its audio session late: keep it muted
             MuteOwnAudio();
             lastMute = now;
         }

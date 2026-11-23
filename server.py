@@ -926,9 +926,9 @@ def play_here(path, x, z):
     info_mod = read_modinfo()
     name = info_mod["name"]
     export_mod(name, info_mod)
-    tx, ty = row["x"] * 5 + int(x // 2), row["y"] * 5 + int(z // 2)
+    tx, ty = int(x // 2), int(z // 2)  # subtiles in the map; the harness adds the level origin of this game
     play_state.update(running=True, message=f"{row['name']} at {tx},{ty}")
-    harness_run(name, f"runs=1\nplay=1\nvary_game_seed=0\nstart_level={lv}\nradius=8\nsettle_ticks=60\n", f"t {tx} {ty}\n")
+    harness_run(name, f"runs=1\nplay=1\nvary_game_seed=0\nstart_level={lv}\nradius=8\nsettle_ticks=60\n", f"T {tx} {ty}\n")
     return {"mod": name, "level": lv, "levelName": row["name"], "target": [tx, ty]}
 
 
