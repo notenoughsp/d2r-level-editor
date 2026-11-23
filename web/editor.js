@@ -5,12 +5,18 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { initI18n, locale, tr } from "./i18n.js?v=14";
+import { initI18n, locale, tr } from "./i18n.js?v=15";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
 const statusEl = $("#status");
-const setStatus = (t) => (statusEl.textContent = t);
+let statusTimer = null;
+const setStatus = (t) => {
+  statusEl.textContent = t;
+  statusEl.classList.remove("old");
+  clearTimeout(statusTimer);
+  statusTimer = setTimeout(() => statusEl.classList.add("old"), 8000);
+};
 const api = (path, params = {}) => `/api/${path}?` + new URLSearchParams(params).toString();
 async function postJSON(path, params, body) {
   const res = await fetch(api(path, params), {
@@ -2256,3 +2262,44 @@ function screenshot() {
 $("#btn-shot").addEventListener("click", screenshot);
 $("#follow-ground").checked = localStorage.getItem("followGround") === "1";
 $("#follow-ground").addEventListener("change", (e) => localStorage.setItem("followGround", e.target.checked ? "1" : "0"));
+
+// ---------- keyboard in the search fields: arrows walk the list, Enter uses the entry ----------
+function listKeys(input, list, onPick, onEnter) {
+  input.addEventListener("keydown", (e) => {
+    if (!["ArrowDown", "ArrowUp", "Enter"].includes(e.key)) return;
+    const items = [...list.querySelectorAll("li:not(.list-head)")];
+    if (!items.length) return;
+    e.preventDefault();
+    let i = items.findIndex((li) => li.classList.contains("active"));
+    if (e.key === "Enter") return onEnter(items[Math.max(0, i)]);
+    i = e.key === "ArrowDown" ? Math.min(items.length - 1, i + 1) : Math.max(0, i - 1);
+    items.forEach((li) => li.classList.remove("active"));
+    items[i].classList.add("active");
+    items[i].scrollIntoView({ block: "nearest" });
+    onPick(items[i]);
+  });
+}
+listKeys($("#model-filter"), $("#model-list"), (li) => li.click(), (li) => { li.click(); placeModel(li.title); });
+listKeys($("#preset-filter"), $("#preset-list"), () => {}, (li) => li.click());
+
+// ---------- the object under the mouse, named in the status bar ----------
+let hoverTimer = 0;
+renderer.domElement.addEventListener("pointermove", (e) => {
+  if (e.buttons || tool !== "objects" || !root) return;
+  const now = performance.now();
+  if (now - hoverTimer < 120) return;
+  hoverTimer = now;
+  const r = renderer.domElement.getBoundingClientRect();
+  raycaster.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
+  let name = "";
+  for (const h of raycaster.intersectObject(root, true)) {
+    let o = h.object;
+    while (o && !o.userData.entity) o = o.parent;
+    if (!o || o.parent !== root || o.userData.terrain || !o.visible) continue;
+    const md = comp(o.userData.entity, "ModelDefinitionComponent");
+    name = md ? md.filename.split("/").pop().replace(/\.model$/, "") : o.userData.entity.name;
+    break;
+  }
+  $("#hover-info").textContent = name;
+});
+renderer.domElement.addEventListener("pointerleave", () => { $("#hover-info").textContent = ""; });

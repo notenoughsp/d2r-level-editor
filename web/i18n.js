@@ -156,6 +156,9 @@ const DE = {
   "L: gizmo axes of the world or of the object (local)": "L: Gizmo-Achsen der Welt oder des Objekts (lokal)",
   "Gizmo: object axes": "Gizmo: Objektachsen",
   "Gizmo: world axes": "Gizmo: Weltachsen",
+  "Object under the mouse": "Objekt unter der Maus",
+  "↑/↓: walk the list with preview · Enter: place in the view centre": "↑/↓: durch die Liste mit Vorschau · Enter: in der Ansichtsmitte platzieren",
+  "↑/↓: walk the list · Enter: open the map": "↑/↓: durch die Liste · Enter: Karte öffnen",
   // messages from the editor server
   "Size does not match: {0} instead of {1} tiles": "Größe passt nicht: {0} statt {1} Kacheln",
   "The game objects of this DS1 file cannot be edited.": "Die Objekte dieser DS1-Datei können nicht bearbeitet werden.",

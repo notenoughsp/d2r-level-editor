@@ -136,3 +136,8 @@ input.num { width: 52px; }
 
 button:disabled { opacity: .45; cursor: default; }
 button:disabled:hover { background: #2a261f; }
+
+#status { transition: color 1.5s; color: #e0d6bf; }
+#status.old { color: #888; }
+#hover-info { color: #9fc7e8; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+#preset-list li.active { background: #6b5527; }
