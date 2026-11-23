@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { initI18n, locale, tr } from "./i18n.js?v=28";
+import { initI18n, locale, tr } from "./i18n.js?v=29";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -3620,3 +3620,30 @@ function updateFx() {
     p.geometry.attributes.position.needsUpdate = true;
   }
 }
+
+// ---------- into the game: start right at the view centre of this map ----------
+async function playHere() {
+  if (!presetPath) return alert("Open a map first.");
+  if (dirty) await save();
+  const at = orbit.target;
+  if (!confirm(tr("Export the mod and start the game at the view centre of this map? (The game must be closed.)"))) return;
+  setStatus(tr("Exporting and starting the game …"));
+  const r = await postJSON("play", {}, { path: presetPath, x: at.x, z: at.z });
+  if (!r.ok) return setStatus(tr("Not started: {0}").replace("{0}", r.data.error));
+  setStatus(tr("The game starts with mod {0} and goes to {1}; after that it is yours.").replace("{0}", r.data.mod).replace("{1}", r.data.levelName));
+}
+$("#btn-play").addEventListener("click", playHere);
+
+async function testAct() {
+  if (!confirm(tr("Test the act in the game: export first with \"Build and export\". The game starts on the second monitor, muted, visits every area and closes. Start?"))) return;
+  const r = await postJSON("world/test");
+  if (!r.ok) return ($("#acts-log").textContent = tr("Test not started: {0}").replace("{0}", r.data.error));
+  $("#acts-log").textContent = tr("Act test running: {0} areas …").replace("{0}", r.data.areas);
+  const poll = async () => {
+    const s = await (await fetch(api("play"))).json();
+    if (s.test.running) return setTimeout(poll, 2000);
+    $("#acts-log").textContent = s.test.report;
+  };
+  setTimeout(poll, 3000);
+}
+$("#acts-test").addEventListener("click", testAct);

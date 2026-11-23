@@ -73,6 +73,7 @@ struct Config {
     int runs = 3, radius = 150, settleTicks = 100;
     int wx = -3840, wy = 0, ww = 1600, wh = 900;
     int varySeed = 1;
+    int play = 0;             // play=1: go there (moves.txt), then hand the game over to the player
 } Cfg;
 
 // Movement test (moves.txt next to the DLL: one "x y" world subtile per line, run 0 only).
@@ -159,6 +160,7 @@ void ReadConfig() {
         if (std::sscanf(line, "window_h=%d", &v) == 1) Cfg.wh = v;
         if (std::sscanf(line, "vary_game_seed=%d", &v) == 1) Cfg.varySeed = v;
         if (std::sscanf(line, "start_level=%d", &v) == 1) Cfg.startLevel = v;
+        if (std::sscanf(line, "play=%d", &v) == 1) Cfg.play = v;
         if (std::strncmp(line, "levels=", 7) == 0) {
             Cfg.levels.clear();
             for (char* t = std::strtok(line + 7, ", \r\n"); t; t = std::strtok(nullptr, ", \r\n")) Cfg.levels.push_back(std::atoi(t));
@@ -466,7 +468,7 @@ DWORD WINAPI Driver(LPVOID) {
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     while (true) {
         const DWORD now = GetTickCount();
-        if (now - lastPlace > 2000) {  // keep the window on the test monitor (the game may resize it at start)
+        if (!Cfg.play && now - lastPlace > 2000) {  // keep the window on the test monitor (the game may resize it at start)
             RECT rc;
             GetWindowRect(h, &rc);
             if (rc.left != Cfg.wx || rc.top != Cfg.wy || rc.right - rc.left != Cfg.ww || rc.bottom - rc.top != Cfg.wh)
@@ -551,6 +553,11 @@ DWORD WINAPI Driver(LPVOID) {
                         i, sx, sy, mx, my, ServerX.load(), ServerY.load(), ServerFlags.load());
                 }
             }
+            if (Cfg.play) {  // the player takes over: no more input, no leaving, no exit
+                Log("play mode: arrived at (%d,%d) in level %d, handing over", ServerX.load(), ServerY.load(), ServerLevel.load());
+                if (FILE* f = std::fopen((Dir + "\\arrived.txt").c_str(), "w")) std::fclose(f);
+                return 0;
+            }
             leaving = true;
             ExitRequested = true;
         }
@@ -572,7 +579,7 @@ DWORD WINAPI Driver(LPVOID) {
             }
         }
         wasInGame = inGame;
-        if (now - lastMute > 3000) {  // the game creates its audio session late: keep it muted
+        if (!Cfg.play && now - lastMute > 3000) {  // the game creates its audio session late: keep it muted
             MuteOwnAudio();
             lastMute = now;
         }

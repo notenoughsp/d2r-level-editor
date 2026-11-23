@@ -489,6 +489,8 @@ test_state = {"running": False, "report": "", "started": 0.0, "mod": ""}
 def start_ingame_test(name):
     if test_state["running"]:
         return {"error": "A test is already running."}
+    if game_running():
+        return {"error": "The game is running; close it first."}
     export = export_mod(name)
     import time as _t
     # mark as running before the thread starts, so the first status poll cannot see a finished test
@@ -861,6 +863,101 @@ def build_act(export_name=None):
     return result
 
 
+# ---------------------------------------------------------------- into the game
+def game_running():
+    """D2RLoader runs its own copy of the game, so both process names count."""
+    import subprocess
+    r = subprocess.run(["tasklist", "/NH", "/FO", "CSV"], capture_output=True, text=True)
+    names = {line.split(",")[0].strip('"').lower() for line in r.stdout.splitlines() if line}
+    return bool(names & {"d2r.exe", "d2rloader.exe"})
+
+
+def level_rows():
+    raw = read_asset("data/global/excel/levels.txt").decode("latin1").replace("\r\n", "\n").split("\n")
+    head = raw[0].split("\t")
+    c = {k: i for i, k in enumerate(head)}
+    out = {}
+    for line in raw[1:]:
+        r = line.split("\t")
+        if len(r) > c["OffsetY"] and r[c["Id"]].isdigit():
+            out[int(r[c["Id"]])] = {"name": r[c["Name"]], "x": int(r[c["OffsetX"]] or 0), "y": int(r[c["OffsetY"]] or 0)}
+    return out
+
+
+play_state = {"running": False, "message": ""}
+
+
+def harness_run(name, ini, moves, on_exit=None):
+    """Start the game with the test harness in mod <name> (exported before). The harness files are
+    removed again when the game ends."""
+    import subprocess
+    pdir = pathlib.Path(casc.GAME) / "mods" / name / "d2rloader" / "plugins"
+    pdir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(ROOT / "plugin" / "d2r-test-harness.dll", pdir / "d2r-test-harness.dll")
+    (pdir / "test-harness.ini").write_text(ini)
+    (pdir / "moves.txt").write_text(moves)
+    for f in ("harness.log", "done.txt", "arrived.txt"):
+        (pdir / f).unlink(missing_ok=True)
+    proc = subprocess.Popen([str(pathlib.Path(casc.GAME) / "D2RLoader.exe"), "-mod", name], cwd=str(casc.GAME))
+
+    def wait():
+        proc.wait()
+        log = (pdir / "harness.log").read_text(errors="replace") if (pdir / "harness.log").exists() else ""
+        for f in ("d2r-test-harness.dll", "test-harness.ini", "moves.txt", "done.txt", "arrived.txt"):
+            (pdir / f).unlink(missing_ok=True)
+        play_state["running"] = False
+        if on_exit:
+            on_exit(log)
+    threading.Thread(target=wait, daemon=True).start()
+
+
+def play_here(path, x, z):
+    """Export the mod and start the game right at this place of the map (its own level only)."""
+    if play_state["running"] or game_running():
+        raise ValueError("The game is running; close it first.")
+    info = preset_info(path)
+    levels = sorted({r["levelId"] for r in info["rows"] if r["levelId"] > 0})
+    if not levels or info["shared"]:
+        raise ValueError("This map is a piece of random areas: the game places it differently every time, so there is no fixed place to go to.")
+    lv = levels[0]
+    row = level_rows().get(lv)
+    if not row:
+        raise ValueError(f"Level {lv} not found.")
+    info_mod = read_modinfo()
+    name = info_mod["name"]
+    export_mod(name, info_mod)
+    tx, ty = row["x"] * 5 + int(x // 2), row["y"] * 5 + int(z // 2)
+    play_state.update(running=True, message=f"{row['name']} at {tx},{ty}")
+    harness_run(name, f"runs=1\nplay=1\nvary_game_seed=0\nstart_level={lv}\nradius=8\nsettle_ticks=60\n", f"t {tx} {ty}\n")
+    return {"mod": name, "level": lv, "levelName": row["name"], "target": [tx, ty]}
+
+
+act_test_state = {"running": False, "report": ""}
+
+
+def act_test():
+    """Warp into every area of the act once (second monitor, muted) and check that it is reached."""
+    if play_state["running"] or act_test_state["running"] or game_running():
+        raise ValueError("The game is running; close it first.")
+    spec = json.loads(act_spec_file().read_text(encoding="utf-8"))
+    name = read_modinfo()["name"]
+    ids = [z["id"] for z in spec["zones"]]
+    moves = "".join(f"L {i} 0\nw 2500\n" for i in ids)
+    act_test_state.update(running=True, report="")
+    play_state["running"] = True
+
+    def done(log):
+        got = [int(m) for m in re.findall(r"after warp: player \(-?\d+,-?\d+\) in level (-?\d+)", log)]
+        lines = []
+        for k, i in enumerate(ids):
+            ok = k < len(got) and got[k] == i
+            z = spec["zones"][k]
+            lines.append(f"{'PASS' if ok else 'FAIL'} {z['name']} (level {i})" + ("" if ok else f": arrived in {got[k] if k < len(got) else 'nothing'}"))
+        act_test_state.update(running=False, report="\n".join(lines) or "FAIL no log")
+    harness_run(name, "runs=1\nvary_game_seed=0\nradius=8\nsettle_ticks=60\n", moves, done)
+    return {"started": True, "areas": len(ids), "mod": name}
+
+
 def current_project():
     return CURRENT_PROJECT.read_text(encoding="utf-8").strip() if CURRENT_PROJECT.exists() else "Default"
 
@@ -1137,6 +1234,8 @@ class Handler(BaseHTTPRequestHandler):
                 info = preset_info(q["path"])
                 w, h = preset_size(q["path"])
                 self.send(200, {**info, "size": [w, h]})
+            elif u.path == "/api/play":
+                self.send(200, {**play_state, "test": act_test_state})
             elif u.path == "/api/world":
                 self.send(200, world_state())
             elif u.path == "/api/projects":
@@ -1288,6 +1387,17 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(400, {"error": "Mod name: only letters, digits, _ and -"})
                 try:
                     self.send(200, modmerge.merge(mods / a, mods / b, mods / out, lambda p: read_asset(p, original=True), q.get("bwins") == "1"))
+                except ValueError as e:
+                    self.send(400, {"error": str(e)})
+            elif u.path in ("/api/play", "/api/world/test"):
+                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+                try:
+                    if u.path.endswith("test"):
+                        if not world_available():
+                            return self.send(409, {"error": f"d2r-world-mods not found ({WORLD})"})
+                        self.send(200, act_test())
+                    else:
+                        self.send(200, play_here(body.get("path", ""), float(body.get("x", 0)), float(body.get("z", 0))))
                 except ValueError as e:
                     self.send(400, {"error": str(e)})
             elif u.path == "/api/newmap":
