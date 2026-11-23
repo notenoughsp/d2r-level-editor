@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { initI18n, locale, tr } from "./i18n.js?v=15";
+import { initI18n, locale, tr } from "./i18n.js?v=16";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -13,6 +13,7 @@ const statusEl = $("#status");
 let statusTimer = null;
 const setStatus = (t) => {
   statusEl.textContent = t;
+  try { const top = undoStack[undoStack.length - 1]; if (top && !top.label) top.label = t; } catch { /* during start-up */ }
   statusEl.classList.remove("old");
   clearTimeout(statusTimer);
   statusTimer = setTimeout(() => statusEl.classList.add("old"), 8000);
@@ -597,6 +598,7 @@ function showProps() {
   el.className = "";
   const buttons = `<div class="prop-buttons"><button id="b-dup" title="Ctrl+D">Duplicate</button><button id="b-del" title="Del">Delete</button></div>` +
     `<div class="prop-buttons"><button id="b-swap" title="Put the model in the preview (tab Models) in place of the selected models; position, rotation and size stay">Replace with the preview model</button><button id="b-same" title="Select every object of this map with the same model">Select same model</button></div>` +
+    `<div class="prop-buttons"><button id="b-mx" title="Mirror the selection along x (positions and rotations)">Mirror x</button><button id="b-mz" title="Mirror the selection along z (positions and rotations)">Mirror z</button></div>` +
     `<div class="prop-buttons"><button id="b-ground" title="G: put onto the terrain height">Drop to ground</button><button id="b-rand" title="Turn at random around the vertical axis (looks natural for plants and rocks)">Random rotation</button></div>` +
     `<div class="prop-buttons"><button id="b-coll" title="Block the tiles under the object; the blocked area moves with the object">Collision under object</button></div>`;
   if (selection.length > 1) {
@@ -617,7 +619,7 @@ function showProps() {
     const what = md ? md.filename : pf ? "Prefab: " + pf.prefab : `(${o.children[0]?.userData.helper || "no model"})`;
     const linked = links[ent.id] ? `<div class="prop-model">Linked collision: ${links[ent.id].length} tile(s)</div>` : "";
     const explode = pf ? `<div class="prop-buttons"><button id="b-explode" title="Replace the prefab with its single objects so they can be edited one by one (on this map only)">Explode prefab</button></div>` : "";
-    const rowBtn = `<div class="prop-buttons"><button id="b-row" title="Copies of the object in a straight line, e.g. a fence or a row of torches">Copies in a row</button></div>`;
+    const rowBtn = `<div class="prop-buttons"><button id="b-row" title="Copies of the object in a straight line, e.g. a fence or a row of torches">Copies in a row</button><button id="b-circle" title="Copies around the object in a circle or an arc, e.g. a stone circle">Copies in a circle</button></div>`;
     el.innerHTML = `<div class="prop-name">${ent.name}</div><div class="prop-model">${what}</div>` + linked + explode + rowBtn +
       row("Position", "p", [o.position.x, o.position.y, o.position.z].map((v) => v.toFixed(2))) +
       row("Rotation°", "r", [deg(e.x), deg(e.y), deg(e.z)]) +
@@ -652,6 +654,9 @@ function showProps() {
   $("#b-del").onclick = removeSelected;
   if ($("#b-explode")) $("#b-explode").onclick = explodePrefab;
   if ($("#b-row")) $("#b-row").onclick = makeRow;
+  if ($("#b-circle")) $("#b-circle").onclick = makeCircle;
+  $("#b-mx").onclick = () => mirror("x");
+  $("#b-mz").onclick = () => mirror("z");
   if ($("#b-ax")) {
     $("#b-ax").onclick = () => alignTo("x");
     $("#b-az").onclick = () => alignTo("z");
@@ -672,6 +677,7 @@ function snapshotState(collisionSteps = 0) {
 function beginEdit() {
   if (!doc) return null;
   const entry = snapshotState();
+  entry.time = Date.now();
   undoStack.push(entry);
   if (undoStack.length > 100) undoStack.shift();
   redoStack.length = 0;
@@ -1679,6 +1685,7 @@ window.addEventListener("keydown", (e) => {
   else if (e.key === "p" && previewPath && cursorGround) placeModel(previewPath, cursorGround.clone());
   else if (["1", "2", "3", "4"].includes(e.key)) { if (e.ctrlKey) { e.preventDefault(); storeView(e.key); } else recallView(e.key); }
   else if (e.key === "l") { setSpace(gizmo.space !== "local"); setStatus(tr(gizmo.space === "local" ? "Gizmo: object axes" : "Gizmo: world axes")); }
+  else if (e.key === "m") toggleRuler();
   else if (e.key === "q") setTool("objects");
   else if (e.key === "b") setTool(e.shiftKey ? "blockall" : "block");
   else if (e.key === "x") setTool("clear");
@@ -1693,6 +1700,7 @@ window.addEventListener("keydown", (e) => {
   else if (e.key === "r") setMode("scale");
   else if (e.key === "Delete") { if (gameSel) deleteGameObject(gameSel.userData.gameIndex); else removeSelected(); }
   else if (e.key === "o") addGameObject(cursorGround ? cursorGround.clone() : null);
+  else if (e.key === "Escape" && measuring) toggleRuler();
   else if (e.key === "Escape") { selectGameObject(null); select([]); $("#modal").classList.add("hidden"); }
   else if (e.ctrlKey && e.key === "c") { e.preventDefault(); copySelection(); }
   else if (e.ctrlKey && e.key === "v") { e.preventDefault(); paste(); }
@@ -2113,7 +2121,7 @@ for (const id of ["sc-count", "sc-radius", "sc-smin", "sc-smax", "sc-rot", "sc-g
 $("#sc-go").addEventListener("click", () => scatter(null));
 
 // ---------- keyboard help ----------
-const HELP_TEXT = "Mouse\n  Left click: select · Shift+click: add/remove · drag: box selection\n  Right mouse: turn the view · middle mouse: pan · wheel: zoom\n\nObjects\n  W / E / R: move / rotate / scale        Del: delete\n  Ctrl+C / Ctrl+V: copy / paste at the mouse cursor (also into other maps)\n  Ctrl+D: duplicate                        G: drop to the ground\n  Ctrl+A: select all\n  Arrow keys: move one snap step (Shift ×10), Page Up/Down: height\n  H: hide the selection                    Shift+H: show all hidden objects\n  F: focus the selection                   Esc: deselect\n\nPlacing\n  P: place the preview model at the mouse cursor\n  Shift+P: scatter the preview model around the mouse cursor (settings in the Models tab)\n  O: add a game object at the mouse cursor\n\nView and files\n  T: top view                              Ctrl+S: save\n  Ctrl+1..4: store the view, 1..4: go back to it\n  Ctrl+Z / Ctrl+Y: undo / redo             ? or F1: this help\n\nCollision\n  Q: objects tool    B: block (Shift+B: block + teleport)    X: clear    [ / ]: brush size\n\nGizmo\n  L: axes of the world or of the selected object\n  (every map opens again with the view you left it with)";
+const HELP_TEXT = "Mouse\n  Left click: select · Shift+click: add/remove · drag: box selection\n  Right mouse: turn the view · middle mouse: pan · wheel: zoom\n\nObjects\n  W / E / R: move / rotate / scale        Del: delete\n  Ctrl+C / Ctrl+V: copy / paste at the mouse cursor (also into other maps)\n  Ctrl+D: duplicate                        G: drop to the ground\n  Ctrl+A: select all\n  Arrow keys: move one snap step (Shift ×10), Page Up/Down: height\n  H: hide the selection                    Shift+H: show all hidden objects\n  F: focus the selection                   Esc: deselect\n\nPlacing\n  P: place the preview model at the mouse cursor\n  Shift+P: scatter the preview model around the mouse cursor (settings in the Models tab)\n  O: add a game object at the mouse cursor\n\nView and files\n  T: top view                              Ctrl+S: save\n  Ctrl+1..4: store the view, 1..4: go back to it\n  Ctrl+Z / Ctrl+Y: undo / redo             ? or F1: this help\n\nCollision\n  Q: objects tool    B: block (Shift+B: block + teleport)    X: clear    [ / ]: brush size\n\nGizmo\n  L: axes of the world or of the selected object\n  (every map opens again with the view you left it with)\n\nTools\n  M: ruler (click two points)    Mirror, circle and row copies: buttons under Selection";
 function showHelp() { modalShow(tr("Keyboard and mouse"), tr(HELP_TEXT)); }
 $("#btn-help").addEventListener("click", showHelp);
 $("#btn-help2").addEventListener("click", showHelp);
@@ -2303,3 +2311,127 @@ renderer.domElement.addEventListener("pointermove", (e) => {
   $("#hover-info").textContent = name;
 });
 renderer.domElement.addEventListener("pointerleave", () => { $("#hover-info").textContent = ""; });
+
+// ---------- mirror the selection (layout and rotation; models themselves are not flipped) ----------
+function mirror(axis) {
+  if (!selection.length) return;
+  const c = new THREE.Box3();
+  for (const o of selection) c.expandByPoint(o.position);
+  const mid = c.getCenter(new THREE.Vector3())[axis];
+  return transformSelection((o) => {
+    o.position[axis] = 2 * mid - o.position[axis];
+    const q = o.quaternion;
+    if (axis === "x") o.quaternion.set(q.x, -q.y, -q.z, q.w);
+    else o.quaternion.set(-q.x, -q.y, q.z, q.w);
+  }, tr("Mirrored along {0}").replace("{0}", axis));
+}
+
+// ---------- copies in a circle or an arc around the object ----------
+async function makeCircle() {
+  const p = primary();
+  if (!p || selection.length !== 1) return;
+  const answer = prompt("Copies in a circle: count, radius, arc in degrees (360 = full circle), face the centre (1 = yes)",
+    localStorage.getItem("circleArgs") || "8, 15, 360, 1");
+  if (!answer) return;
+  const [count, radius, arc = 360, face = 1] = answer.split(/[,; ]+/).map(Number);
+  if (!(count >= 2 && count <= 100) || !(radius > 0) || !(arc > 0 && arc <= 360)) return setStatus(tr("Count 2-100, radius and arc, e.g. 8, 15, 360, 1"));
+  localStorage.setItem("circleArgs", answer);
+  beginEdit();
+  const src = p.userData.entity, centre = p.position.clone();
+  const step = THREE.MathUtils.degToRad(arc) / (arc >= 360 ? count : count - 1);
+  const made = [];
+  for (let i = 0; i < count; i++) {
+    const a = i * step;
+    const ent = JSON.parse(JSON.stringify(src));
+    ent.id = newId();
+    ent.name = `${src.name}_c${i}`;
+    const t = comp(ent, "TransformDefinitionComponent");
+    if (t) {
+      t.position.x = centre.x + Math.cos(a) * radius;
+      t.position.z = centre.z + Math.sin(a) * radius;
+      if (face) {
+        const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -a - Math.PI / 2).multiply(p.quaternion);
+        t.orientation = { x: q.x, y: q.y, z: q.z, w: q.w };
+      }
+    }
+    doc.entities.push(ent);
+    made.push(await addObjectFor(ent));
+  }
+  select(made);
+  markDirty();
+  setStatus(tr("{0} copies in a circle").replace("{0}", count));
+}
+
+// ---------- ruler: M, then click two points ----------
+let measuring = null;  // null: off, []: waiting for points
+const rulerGroup = new THREE.Group();
+scene.add(rulerGroup);
+function clearRuler() {
+  for (const o of [...rulerGroup.children]) { rulerGroup.remove(o); o.geometry?.dispose(); o.material?.map?.dispose(); }
+}
+function toggleRuler() {
+  measuring = measuring ? null : [];
+  clearRuler();
+  $("#btn-ruler").classList.toggle("active", !!measuring);
+  setStatus(measuring ? tr("Ruler: click two points (M or Esc ends it)") : tr("Ruler off"));
+}
+renderer.domElement.addEventListener("pointerdown", (e) => { if (measuring && e.button === 0) e.stopImmediatePropagation(); }, true);
+renderer.domElement.addEventListener("pointerup", (e) => {
+  if (!measuring || e.button !== 0 || !cursorGround) return;
+  e.stopImmediatePropagation();
+  const p = cursorGround.clone();
+  p.y = groundHeight(p.x, p.z) + 0.3;
+  if (measuring.length >= 2) { measuring = []; clearRuler(); }
+  measuring.push(p);
+  const dot = new THREE.Mesh(new THREE.SphereGeometry(0.6, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffd400, depthTest: false }));
+  dot.position.copy(p);
+  dot.renderOrder = 21;
+  rulerGroup.add(dot);
+  if (measuring.length === 2) {
+    const [a, b] = measuring;
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([a, b]), new THREE.LineBasicMaterial({ color: 0xffd400, depthTest: false }));
+    line.renderOrder = 21;
+    rulerGroup.add(line);
+    const d = a.distanceTo(b), flat = Math.hypot(a.x - b.x, a.z - b.z);
+    const label = textSprite(`${d.toFixed(1)} (${(flat / 10).toFixed(1)} ${tr("tiles")})`, "#ffd400");
+    label.position.copy(a).add(b).multiplyScalar(0.5).add(new THREE.Vector3(0, 3, 0));
+    rulerGroup.add(label);
+    setStatus(tr("Distance {0} units = {1} tiles (height difference {2})").replace("{0}", d.toFixed(2))
+      .replace("{1}", (flat / 10).toFixed(2)).replace("{2}", Math.abs(a.y - b.y).toFixed(2)));
+  }
+}, true);
+$("#btn-ruler").addEventListener("click", toggleRuler);
+
+// ---------- collision only: models hidden, collision shown from above ----------
+function setCollisionOnly(on) {
+  for (const [id, o] of entityObjects) if (!o.userData.terrain) o.visible = !on && !hiddenIds.has(id);
+  if (on) { $("#show-coll").checked = true; if (collMesh) collMesh.visible = true; if (!savedView) toggleTopView(); }
+  $("#coll-only").checked = on;
+  setStatus(on ? tr("Collision only: models hidden") : tr("Models shown again"));
+}
+$("#coll-only").addEventListener("change", (e) => setCollisionOnly(e.target.checked));
+
+// ---------- undo list: jump back several steps at once ----------
+function undoMenu() {
+  const menu = $("#undo-menu");
+  if (!menu.classList.contains("hidden")) return menu.classList.add("hidden");
+  menu.textContent = "";
+  const steps = undoStack.slice().reverse();
+  if (!steps.length) { menu.textContent = tr("Nothing to undo"); }
+  steps.slice(0, 30).forEach((entry, k) => {
+    const b = document.createElement("button");
+    b.textContent = `${k + 1}. ${entry.label || tr("Edit")}`;
+    b.title = entry.time ? new Date(entry.time).toLocaleTimeString(locale()) : "";
+    b.addEventListener("click", async () => {
+      menu.classList.add("hidden");
+      for (let i = 0; i <= k; i++) await undo();
+      setStatus(tr("{0} step(s) undone").replace("{0}", k + 1));
+    });
+    menu.append(b);
+  });
+  const r = $("#btn-undo-list").getBoundingClientRect();
+  Object.assign(menu.style, { left: `${r.left}px`, top: `${r.bottom + 2}px` });
+  menu.classList.remove("hidden");
+}
+$("#btn-undo-list").addEventListener("click", (e) => { e.stopPropagation(); undoMenu(); });
+window.addEventListener("click", (e) => { if (!e.target.closest("#undo-menu")) $("#undo-menu").classList.add("hidden"); });

@@ -141,3 +141,8 @@ button:disabled:hover { background: #2a261f; }
 #status.old { color: #888; }
 #hover-info { color: #9fc7e8; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
 #preset-list li.active { background: #6b5527; }
+
+#undo-menu { position: fixed; z-index: 30; display: flex; flex-direction: column; max-height: 60vh; overflow-y: auto; min-width: 260px;
+  background: #16140f; border: 1px solid #c7a35a; padding: 4px; gap: 2px; }
+#undo-menu button { text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 420px; }
+#btn-undo-list { padding: 5px 5px; }
