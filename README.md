@@ -54,6 +54,8 @@ Unsaved work is autosaved every 60 seconds and offered again when you reopen the
 | P, Shift+P, O | place the previewed model, scatter it, add a game object at the cursor |
 | H, Shift+H | hide the selection, show hidden objects |
 | Ctrl+1..4, 1..4 | store a camera view of the map, go back to it |
+| Q, B, X, [ ] | objects tool, block, clear collision, brush size |
+| L | gizmo in world or object axes |
 | ? or F1 | keyboard and mouse help |
 | Esc | deselect |
 
