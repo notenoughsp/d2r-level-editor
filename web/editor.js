@@ -1458,7 +1458,8 @@ setInterval(async () => {
 // ---------- UI wiring ----------
 document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => {
   document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("active", x === b));
-  for (const t of ["presets", "models", "objects"]) $("#pane-" + t).classList.toggle("hidden", b.dataset.tab !== t);
+  for (const t of ["presets", "models", "objects", "npcs"]) $("#pane-" + t).classList.toggle("hidden", b.dataset.tab !== t);
+  if (b.dataset.tab === "npcs") loadNpcs();
 }));
 
 function setMode(m) {
@@ -1673,3 +1674,71 @@ async function checkForUpdate() {
   updateMessage(tr("Version {0} is available (you have {1}).").replace("{0}", info.latest).replace("{1}", info.current), buttons);
 }
 setTimeout(checkForUpdate, 3000);
+
+// ---------- NPC creator (tools/npc_creator.py, plugin/npc.cpp) ----------
+let npcData = null;
+let npcSel = -1;
+async function loadNpcs() {
+  npcData = await (await fetch(api("npcs"))).json();
+  const look = $("#npc-look"), trade = $("#npc-trade");
+  look.textContent = "";
+  for (const [id, name] of Object.entries(npcData.looks)) look.append(new Option(`${id} (${name})`, id));
+  trade.textContent = "";
+  for (const [id, label] of Object.entries(npcData.traders)) trade.append(new Option(label, id));
+  renderNpcs();
+}
+function renderNpcs() {
+  const list = $("#npc-list");
+  list.textContent = "";
+  npcData.npcs.forEach((n, i) => {
+    if (n.removed) return;
+    const li = document.createElement("li");
+    li.textContent = `${n.name} · ${n.role === "trade" ? tr("trades") : tr("talks")}`;
+    li.classList.toggle("sel", i === npcSel);
+    li.addEventListener("click", () => selectNpc(i));
+    list.append(li);
+  });
+  $("#npc-form").classList.toggle("hidden", npcSel < 0);
+}
+function selectNpc(i) {
+  npcSel = i;
+  const n = npcData.npcs[i];
+  $("#npc-name").value = n.name;
+  $("#npc-look").value = n.look;
+  $("#npc-role").value = n.role;
+  $("#npc-trade").value = n.trade_like || "charsi";
+  $("#npc-text").value = n.text || "";
+  $("#npc-trade-row").classList.toggle("hidden", n.role !== "trade");
+  renderNpcs();
+}
+function formToNpc() {
+  if (npcSel < 0) return;
+  const n = npcData.npcs[npcSel];
+  n.name = $("#npc-name").value;
+  n.look = $("#npc-look").value;
+  n.role = $("#npc-role").value;
+  n.trade_like = $("#npc-trade").value;
+  n.text = $("#npc-text").value;
+  $("#npc-trade-row").classList.toggle("hidden", n.role !== "trade");
+}
+for (const id of ["#npc-name", "#npc-look", "#npc-role", "#npc-trade", "#npc-text"])
+  $(id).addEventListener("input", () => { formToNpc(); renderNpcs(); });
+$("#npc-new").addEventListener("click", () => {
+  if (!npcData) return;
+  npcData.npcs.push({ name: tr("New NPC"), look: "charsi", role: "talk", trade_like: "charsi", text: "" });
+  selectNpc(npcData.npcs.length - 1);
+});
+$("#npc-remove").addEventListener("click", () => {
+  if (npcSel < 0) return;
+  npcData.npcs[npcSel].removed = true;
+  npcSel = -1;
+  renderNpcs();
+});
+$("#npc-save").addEventListener("click", async () => {
+  formToNpc();
+  const r = await postJSON("npcs", {}, { npcs: npcData.npcs });
+  if (!r.ok) return setStatus(tr("NPCs not saved: {0}").replace("{0}", r.data.error));
+  npcData.npcs = r.data.npcs;
+  renderNpcs();
+  setStatus(tr("NPCs saved; place them with Add game object, then export"));
+});

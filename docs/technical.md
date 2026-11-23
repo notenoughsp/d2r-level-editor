@@ -101,6 +101,32 @@ python -I tools/explore.py <ModName> --replay    walk the saved route again
 `plugin/collision_probe.cpp` (`build_probe.cmd`) writes the server collision around the player
 to `collision-probe.txt`. It is a test tool; do not ship it with a mod.
 
+## NPC creator
+
+`tools/npc_creator.py` turns the NPC list (`editor_state/npcs.json`) into table rows in both table
+sets the game keeps (`data/global/excel/` and `data/global/excel/base/` for classic and LoD
+characters): a `monstats.txt` row per NPC (a copy of the look's row with AI `Npc`; its class id
+is its row number without the "Expansion" marker rows), an `npc.txt` row for traders (prices),
+and a `monpreset.txt` row per act, inserted at the end of the act's block (the game reads each
+act's rows as one block). The HD look needs `data/hd/character/npc/<id>.json`, a copy of the
+look's file. Names and speech texts are new strings in `npcs.json` (both string folders) with
+free ids below 65536. The export adds `plugin/d2r-npc.dll` and its config `d2r-npc.ini`.
+
+What an NPC does is in the game code, per class. The plugin hooks:
+
+| RVA | Function | Hook |
+|---|---|---|
+| 0x3971A0 | NPC_GetRecord(version, class): 43 town NPC records at 0x237EA60 (0x1C bytes, first a short class) | a new NPC gets a copy of the record of its base NPC (trader: the chosen town NPC, talker: cain1) |
+| 0x396800 | vendor stock per class and difficulty | a trader gets the stock of its base NPC |
+| 0x1980B0 | NPCMENU_Speak(unit, string id, done): the scrolling speech window | the NPC's own string id (the talking NPC's class is at 0x2A48764) |
+
+Menu entries (client): Talk 0x1161E0, Gossip 0x113340, Trade 0x112C80 (packet 0x38 mode 2).
+
+`python -I tools/npc_ingame_test.py <ModName>` tests the NPCs in the act 1 town without
+screenshots: the plugin (with `test_cursor=1`) logs NPC positions, the UI panels that open and
+every speech it replaces; the script clicks the NPCs through the plugin's fake mouse, runs the
+menu entries through `d2r-npc-action.txt` and checks the log (menu, trade window, own speech).
+
 ## Game functions (D2RLoader 1.3.1-beta)
 
 | RVA | Function |

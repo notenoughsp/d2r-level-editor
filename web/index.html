@@ -46,7 +46,7 @@
 </div>
 <div id="main">
   <div id="left">
-    <div class="tabs"><button class="tab active" data-tab="presets">Maps</button><button class="tab" data-tab="models">Models</button><button class="tab" data-tab="objects">Objects</button></div>
+    <div class="tabs"><button class="tab active" data-tab="presets">Maps</button><button class="tab" data-tab="models">Models</button><button class="tab" data-tab="objects">Objects</button><button class="tab" data-tab="npcs">NPCs</button></div>
     <div class="pane" id="pane-presets">
       <input id="preset-filter" placeholder="Search maps, e.g. act1/town">
       <ul id="preset-list" class="list"></ul>
@@ -55,6 +55,19 @@
       <input id="object-filter" placeholder="Search objects of the map, e.g. palisade, light">
       <div id="object-count"></div>
       <ul id="object-list" class="list"></ul>
+    </div>
+    <div class="pane hidden" id="pane-npcs">
+      <div class="npc-help">New NPCs for the mod. Save, then place them in a map with "Add game object" (NPC list) and export.</div>
+      <ul id="npc-list" class="list"></ul>
+      <button id="npc-new">New NPC</button>
+      <div id="npc-form" class="hidden">
+        <label>Name <input id="npc-name" maxlength="40"></label>
+        <label>Look <select id="npc-look"></select></label>
+        <label>Role <select id="npc-role"><option value="talk">Talks</option><option value="trade">Trades</option></select></label>
+        <label id="npc-trade-row">Goods of <select id="npc-trade"></select></label>
+        <label>Text (up to 6 lines, shown when the player talks to the NPC)<textarea id="npc-text" rows="6"></textarea></label>
+        <div><button id="npc-save">Save NPCs</button> <button id="npc-remove">Remove</button></div>
+      </div>
     </div>
     <div class="pane hidden" id="pane-models">
       <input id="model-filter" placeholder="Search models, e.g. palisade, tree, barrel">
@@ -94,6 +107,6 @@
   </div>
 </div>
 <div id="modal" class="hidden"><div class="modal-box"><div class="modal-head"><span id="modal-title"></span><button id="modal-close">Close</button></div><pre id="modal-body"></pre></div></div>
-<script type="module" src="/web/editor.js?v=32"></script>
+<script type="module" src="/web/editor.js?v=33"></script>
 </body>
 </html>

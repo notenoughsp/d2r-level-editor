@@ -82,3 +82,8 @@ input.num { width: 52px; }
   background: rgba(30, 70, 70, 0.95); border: 1px solid #5fc7c0; color: #fff; border-radius: 3px; }
 #update-bar.hidden { display: none; }
 #update-bar button { margin-left: 8px; }
+
+#pane-npcs label { display: block; margin: 6px 0; color: #bbb; }
+#pane-npcs input, #pane-npcs select, #pane-npcs textarea { display: block; width: 100%; box-sizing: border-box; margin-top: 2px; }
+.npc-help { color: #999; font-size: 11px; margin: 4px 0 8px; }
+#npc-list { max-height: 30vh; }

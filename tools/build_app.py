@@ -82,7 +82,7 @@ def copy_app(dst):
     shutil.copy2(ROOT / "third_party" / "CascLib" / "build" / "CascLib.dll", casc)
     plugin = dst / "plugin"
     plugin.mkdir()
-    for f in ("d2r-fixed-seed.dll", "d2r-test-harness.dll"):
+    for f in ("d2r-fixed-seed.dll", "d2r-test-harness.dll", "d2r-npc.dll"):
         shutil.copy2(ROOT / "plugin" / f, plugin)
     copy_licenses(dst)
 

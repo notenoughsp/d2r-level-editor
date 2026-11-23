@@ -26,6 +26,7 @@ The language (English or Deutsch) can be switched in the toolbar.
 | **Edit** | Select, move, rotate, scale, duplicate, copy and paste (also into other maps), snap to a grid, drop to the ground, random rotation. Undo and redo. |
 | **Game objects** | NPCs, monster spawns, chests, waypoints, torches: move, change, delete or add them. |
 | **Collision** | See where the player can walk and paint tiles blocked or free. "Collision under object" blocks the tiles under a model and moves along with it. |
+| **NPCs** | Make new NPCs (tab "NPCs"): a name, the look of a game NPC, and a role. A *talking* NPC says your text in the game's own speech window; a *trader* also opens the game's trade window with the goods of a town NPC you choose. Place them like other NPCs and export. |
 | **Legacy graphics** | View the map in the old SD graphics. |
 | **Export** | Writes the mod into `<game>/mods/<Name>/`. Your edits never touch the game's own files. |
 | **Test in game** | Exports and runs an automatic test in the game: are the edits there, and do blocked tiles stop the player? |
@@ -58,6 +59,7 @@ Unsaved work is autosaved every 60 seconds and offered again when you reopen the
 - **Prefabs** are shared too. Use "Explode prefab" to edit one on a single map.
 - The ground shows one main layer per map, not the game's full blend of several layers.
 - Character models are shown without animation.
+- New NPCs show the game's default menu (Talk, Trade, Cancel), also when they only talk.
 
 ## Building from source
 
@@ -68,7 +70,7 @@ Windows, Visual Studio 2022 Build Tools (x64), Python 3.14 with numpy and Pillow
 | three.js | `cd web` and `npm install` |
 | CascLib | clone [CascLib](https://github.com/ladislav-zezula/CascLib) to `third_party/CascLib`, run `tools\build_casclib.cmd` |
 | BitKnit decoder | clone [pybg3](https://github.com/eiz/pybg3) to `third_party/pybg3`, run `native\build.cmd` |
-| Plugins | D2RLoader plugin SDK headers in `third_party/PluginSDK/include` (or `D2RL_SDK`), run `plugin\build.cmd` and `plugin\build_harness.cmd` |
+| Plugins | D2RLoader plugin SDK headers in `third_party/PluginSDK/include` (or `D2RL_SDK`), run `plugin\build.cmd`, `plugin\build_harness.cmd` and `plugin\build_npc.cmd` |
 | Launcher | `launcher\build.cmd` |
 | Package | `python -I tools/build_app.py` (own copy) or `--release` (zip) |
 

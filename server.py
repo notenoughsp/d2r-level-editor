@@ -29,6 +29,7 @@ import model_export  # noqa: E402
 from ds1 import DS1  # noqa: E402
 import texture  # noqa: E402
 import updater  # noqa: E402
+import npc_creator  # noqa: E402
 
 WEB = ROOT / "web"
 DATA = casc.DATA
@@ -90,6 +91,52 @@ def ds1_for_preset(preset_path):
 
 
 _size_cache = {}
+
+
+NPC_FILE = PROJECT.parent / "editor_state" / "npcs.json"
+NPC_INI = PROJECT.parent / "editor_state" / "d2r-npc.ini"
+
+
+def npcs_payload():
+    data = json.loads(NPC_FILE.read_text(encoding="utf-8")) if NPC_FILE.exists() else []
+    return {"npcs": data, "looks": npc_creator.looks(read_asset), "traders": npc_creator.TRADERS}
+
+
+def save_npcs(npcs):
+    """Check and store the NPC list, then write the NPC rows into the project's tables.
+    NPCs keep their place in the list: a new NPC's class id and its place in the "Add game
+    object" list follow from it, so removed NPCs are kept (hidden) instead of shifting the rest."""
+    old = {n["id"]: n for n in (json.loads(NPC_FILE.read_text(encoding="utf-8")) if NPC_FILE.exists() else [])}
+    looks = npc_creator.looks(read_asset)
+    clean, used = [], set()
+    for n in npcs:
+        name = str(n.get("name", "")).strip()[:40]
+        if not name:
+            raise ValueError("Every NPC needs a name.")
+        nid = n.get("id") if n.get("id") in old else npc_creator.safe_id(name)
+        base = nid
+        k = 2
+        while nid in used or (nid in old and nid != n.get("id")) or nid in looks:
+            nid = f"{base}{k}"
+            k += 1
+        used.add(nid)
+        role = "trade" if n.get("role") == "trade" else "talk"
+        look = n.get("look") if n.get("look") in looks else "charsi"
+        trade_like = n.get("trade_like") if n.get("trade_like") in npc_creator.TRADERS else "charsi"
+        text = "\n".join(str(n.get("text", "")).replace("\r", "").split("\n")[:6])[:600]
+        clean.append({"id": nid, "name": name, "look": look, "role": role, "trade_like": trade_like,
+                      "text": text, "removed": bool(n.get("removed"))})
+    for nid, n in old.items():  # NPCs that vanished from the list stay as removed placeholders
+        if nid not in used:
+            clean.append({**n, "removed": True})
+    NPC_FILE.parent.mkdir(parents=True, exist_ok=True)
+    NPC_FILE.write_text(json.dumps(clean, indent=2, ensure_ascii=False), encoding="utf-8")
+    ini, classes = npc_creator.build(clean, read_asset, PROJECT)
+    if clean:
+        NPC_INI.write_text("; written by the editor's NPC creator\n" + "\n".join(ini) + "\n", encoding="utf-8")
+    else:
+        NPC_INI.unlink(missing_ok=True)
+    return {"npcs": clean, "classes": classes}
 
 
 def preset_size(preset_path):
@@ -517,6 +564,15 @@ def export_mod(name):
     data_root.mkdir(parents=True, exist_ok=True)  # also for an empty project
     (data_root / "modinfo.json").write_text(json.dumps({"name": name, "savepath": f"{name}/"}, indent=2))
     # mod-scoped fixed-seed plugin: active only while this mod runs, never for other mods
+    # NPCs from the NPC creator: the d2r-npc plugin gives them their behaviour and speech
+    pdir = mod / "d2rloader" / "plugins"
+    if NPC_INI.exists() and (ROOT / "plugin" / "d2r-npc.dll").exists():
+        pdir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / "plugin" / "d2r-npc.dll", pdir / "d2r-npc.dll")
+        shutil.copy2(NPC_INI, pdir / "d2r-npc.ini")
+    else:
+        (pdir / "d2r-npc.dll").unlink(missing_ok=True)
+        (pdir / "d2r-npc.ini").unlink(missing_ok=True)
     plugin = ROOT / "plugin" / "d2r-fixed-seed.dll"
     if plugin.exists():
         pdir = mod / "d2rloader" / "plugins"
@@ -562,6 +618,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.static(WEB / "node_modules" / "three" / u.path[len("/three/"):])
             elif u.path == "/api/presets":
                 self.send(200, list_presets())
+            elif u.path == "/api/npcs":
+                self.send(200, npcs_payload())
             elif u.path == "/api/version":
                 self.send(200, {"version": updater.current_version()})
             elif u.path == "/api/update":
@@ -638,6 +696,12 @@ class Handler(BaseHTTPRequestHandler):
                 self.rfile.read(int(self.headers.get("Content-Length") or 0))
                 ok = updater.apply_and_exit()  # the launcher restarts the server with the new version
                 self.send(200 if ok else 409, {"restarting": ok})
+            elif u.path == "/api/npcs":
+                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                try:
+                    self.send(200, save_npcs(body.get("npcs", [])))
+                except ValueError as e:
+                    self.send(400, {"error": str(e)})
             elif u.path == "/api/export":
                 name = q.get("name", "D2REditor")
                 if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", name):
