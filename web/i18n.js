@@ -447,6 +447,9 @@ const DE = {
   "Choose a map as template.": "Eine Karte als Vorlage wählen.",
   "Map name: 2-40 small letters, digits or _": "Kartenname: 2-40 kleine Buchstaben, Ziffern oder _",
   "Show effects (fire, smoke, fog, flies) as particles": "Effekte (Feuer, Rauch, Nebel, Fliegen) als Partikel zeigen",
+  "Collision: block quarter tile": "Kollision: Viertelkachel sperren",
+  "Collision: clear quarter tile": "Kollision: Viertelkachel freigeben",
+  "Quarter tiles (5 x 5 units) with the game's own invisible tiles": "Viertelkacheln (5 x 5 Einheiten) mit den unsichtbaren Kacheln des Spiels",
   // messages from the editor server
   "Size does not match: {0} instead of {1} tiles": "Größe passt nicht: {0} statt {1} Kacheln",
   "The game objects of this DS1 file cannot be edited.": "Die Objekte dieser DS1-Datei können nicht bearbeitet werden.",

@@ -37,6 +37,33 @@ CUSTOM_MAINS = (44, 43)
 SUBTILE_FLAG = {"sub_block": 0x01, "sub_blockall": 0x05}
 
 
+# Quarter-tile collision: the game's own invisible tiles in Act1\Barracks\InvisWal.dt1 (loaded
+# for every level) block parts of a tile: orientation 0, main 49, sub 0..13. Their blocked 2x2
+# subtile corners ("quarters") give every combination of 1 to 3 quarters of a tile; 4 quarters is
+# the full blocking tile. Nothing new is added to any tile set, so this works without the limits
+# of the subtile patterns above (not verified in the game yet).
+INVIS_DT1 = "data/global/tiles/act1/barracks/inviswal.dt1"
+QUARTER_MAIN = 49
+
+
+def quarter_tiles(read_asset):
+    """{frozenset of quarters (qx, qy) in 0..1: sub} from InvisWal's floor tiles."""
+    out = {}
+    for t in DT1(read_asset(INVIS_DT1)).tiles:
+        if t["orientation"] != 0 or t["main"] != QUARTER_MAIN:
+            continue
+        flags = bytes(t["flags"])
+        q = set()
+        for qx in (0, 1):
+            for qy in (0, 1):
+                xs, ys = ((0, 1) if qx == 0 else (3, 4)), ((0, 1) if qy == 0 else (3, 4))
+                if all(flags[flag_index(x, y)] & 1 for x in xs for y in ys):
+                    q.add((qx, qy))
+        if q and frozenset(q) not in out:
+            out[frozenset(q)] = t["sub"]
+    return out
+
+
 def flag_index(x, y):
     """Index in the 25 subtile flags of subtile (x, y) inside a tile (ORDER flipy)."""
     return (4 - y) * 5 + x
@@ -139,6 +166,45 @@ def blocking_floor_layer(ds1):
     if ds1.floor_layers >= 2 and any(((v >> 20) & 0x3F) == BLOCK_MAIN for v in ds1.layers[("floor", ds1.floor_layers - 1)]):
         return ds1.floor_layers - 1
     return 0
+
+
+def apply_quarters(ds1, ops, quarters):
+    """ops: {"qx", "qy", "mode": q_block|q_clear}, quarter coordinates (2 per tile and axis)."""
+    by_q = {v: k for k, v in quarters.items()}
+    floor = ds1.layers[("floor", 0)]
+    orig = getattr(ds1, "original", None)
+    by_tile = {}
+    for op in ops:
+        qx, qy = int(op["qx"]), int(op["qy"])
+        if 0 <= qx < ds1.width * 2 and 0 <= qy < ds1.height * 2:
+            by_tile.setdefault((qx // 2, qy // 2), []).append(((qx % 2, qy % 2), op["mode"]))
+    for (tx, ty), changes in by_tile.items():
+        n = ty * ds1.width + tx
+        v = floor[n]
+        main, sub = (v >> 20) & 0x3F, (v >> 8) & 0x3F
+        if v and main == QUARTER_MAIN and sub in by_q:
+            have = set(by_q[sub])
+        elif v and main == BLOCK_MAIN:
+            have = {(0, 0), (0, 1), (1, 0), (1, 1)}
+        else:
+            have = set()
+        for q, mode in changes:
+            # quarters are in DS1 subtile directions (flag_index maps them to the flag rows)
+            if mode == "q_clear":
+                have.discard(q)
+            else:
+                have.add(q)
+        if len(have) == 4:
+            floor[n] = encode_cell(BLOCK_MAIN, BLOCK_SUB["block"])
+        elif have and frozenset(have) in quarters:
+            floor[n] = encode_cell(QUARTER_MAIN, quarters[frozenset(have)])
+        elif have:  # two opposite corners: no tile has them alone, block three quarters instead
+            best = next(k for k in quarters if have < k)
+            floor[n] = encode_cell(QUARTER_MAIN, quarters[best])
+        elif not have:
+            src = orig.layers.get(("floor", 0)) if orig else None
+            keep = src[n] if src else 0
+            floor[n] = keep if ((keep >> 20) & 0x3F) not in (BLOCK_MAIN,) else 0
 
 
 def apply_ops(ds1, ops, subtiles=None):

@@ -416,7 +416,10 @@ def edit_collision(ds1_path, ops):
         f.write_bytes(data)
 
     subtiles = collision.SubtileTiles(read_asset, write_asset) if any(o["mode"].startswith("sub_") for o in ops) else None
-    collision.apply_ops(d, ops, subtiles)
+    quarter_ops = [o for o in ops if o["mode"].startswith("q_")]
+    if quarter_ops:
+        collision.apply_quarters(d, quarter_ops, collision.quarter_tiles(read_asset))
+    collision.apply_ops(d, [o for o in ops if not o["mode"].startswith("q_")], subtiles)
     same = (d.tail == d.original.tail and d.floor_layers == d.original.floor_layers
             and all(cells == (d.original.layers.get(key) or [0] * len(cells)) for key, cells in d.layers.items()))
     # everything (tiles and game objects) back to the original: drop the override instead of

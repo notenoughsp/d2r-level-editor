@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { initI18n, locale, tr } from "./i18n.js?v=27";
+import { initI18n, locale, tr } from "./i18n.js?v=28";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -988,7 +988,7 @@ function tileAt(e) {
   const tx = Math.floor(hit.x / unit), ty = Math.floor(hit.z / unit);
   return tx >= 0 && ty >= 0 && tx < coll.width * per && ty < coll.height * per ? [tx, ty] : null;
 }
-const cellSize = () => (tool.startsWith("sub_") ? 2 : 10);
+const cellSize = () => (tool.startsWith("sub_") ? 2 : tool.startsWith("q_") ? 5 : 10);
 
 let painting = null;
 // cells painted in the current stroke, shown at once (the server answers on release)
@@ -1051,7 +1051,8 @@ window.addEventListener("pointerup", () => {
         const x = tx + dx, y = ty + dy, per = 10 / cellSize();
         if (coll && x >= 0 && y >= 0 && x < coll.width * per && y < coll.height * per) cells.set(`${x},${y}`, [x, y]);
       }
-  const ops = [...cells.values()].map(([x, y]) => (tool.startsWith("sub_") ? { sx: x, sy: y, mode: tool } : { tx: x, ty: y, mode: tool }));
+  const ops = [...cells.values()].map(([x, y]) => (tool.startsWith("sub_") ? { sx: x, sy: y, mode: tool }
+    : tool.startsWith("q_") ? { qx: x, qy: y, mode: tool } : { tx: x, ty: y, mode: tool }));
   painting = null;
   if (ops.length) sendCollisionOps(ops, beginEdit()).finally(clearStroke);
   else clearStroke();
