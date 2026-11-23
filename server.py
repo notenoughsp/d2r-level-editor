@@ -617,6 +617,52 @@ def list_models(q, limit, own_only=False):
 
 
 MODINFO = PROJECT.parent / "editor_state" / "modinfo.json"
+PROJECTS = PROJECT.parent / "projects"          # stored projects that are not open
+CURRENT_PROJECT = PROJECT.parent / "current_project.txt"
+project_lock = threading.Lock()
+
+
+def current_project():
+    return CURRENT_PROJECT.read_text(encoding="utf-8").strip() if CURRENT_PROJECT.exists() else "Default"
+
+
+def list_projects():
+    names = {current_project()}
+    if PROJECTS.exists():
+        names |= {p.name for p in PROJECTS.iterdir() if p.is_dir()}
+    return {"current": current_project(), "projects": sorted(names, key=str.lower)}
+
+
+def switch_project(name):
+    """The open project lives in project/ and editor_state/ (every tool uses these paths); the
+    others wait in projects/<name>/. Switching moves the folders (a rename, nothing is copied)."""
+    if not re.fullmatch(r"[A-Za-z0-9 _-]{1,40}", name):
+        raise ValueError("Project name: letters, digits, space, _ and -")
+    with project_lock:
+        cur = current_project()
+        if name == cur:
+            return list_projects()
+        state = PROJECT.parent / "editor_state"
+        park = PROJECTS / cur
+        if park.exists():
+            raise ValueError(f"projects/{cur} exists already; move it away first.")
+        park.mkdir(parents=True)
+        try:
+            for src, dst in ((PROJECT, park / "project"), (state, park / "editor_state")):
+                if src.exists():
+                    src.rename(dst)
+        except OSError:
+            raise ValueError("A project file is in use; close the game and other programs and try again.")
+        nxt = PROJECTS / name
+        for part, dst in (("project", PROJECT), ("editor_state", state)):
+            if (nxt / part).exists():
+                (nxt / part).rename(dst)
+        if nxt.exists():
+            shutil.rmtree(nxt, ignore_errors=True)  # empty now
+        PROJECT.mkdir(parents=True, exist_ok=True)
+        CURRENT_PROJECT.write_text(name, encoding="utf-8")
+        _size_cache.clear()
+    return list_projects()
 EXPORTS = PROJECT.parent / "exports"
 
 
@@ -817,6 +863,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.static(WEB / "node_modules" / "three" / u.path[len("/three/"):])
             elif u.path == "/api/presets":
                 self.send(200, list_presets())
+            elif u.path == "/api/projects":
+                self.send(200, list_projects())
             elif u.path == "/api/modinfo":
                 self.send(200, read_modinfo())
             elif u.path == "/api/check":
@@ -833,7 +881,7 @@ class Handler(BaseHTTPRequestHandler):
             elif u.path == "/api/update/state":
                 self.send(200, updater.state)
             elif u.path == "/api/preset":
-                self.send(200, read_asset(q["path"]), "application/json")
+                self.send(200, read_asset(q["path"], original=q.get("original") == "1"), "application/json")
             elif u.path == "/api/collision":
                 self.send(200, collision_payload(ds1_for_preset(q["path"])))
             elif u.path == "/api/links":
@@ -928,6 +976,12 @@ class Handler(BaseHTTPRequestHandler):
                 if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", name):
                     return self.send(400, {"error": "Mod name: only letters, digits, _ and -"})
                 self.send(200, export_mod(name, info, bool(body.get("zip"))))
+            elif u.path == "/api/project":
+                self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                try:
+                    self.send(200, switch_project(q.get("name", "")))
+                except ValueError as e:
+                    self.send(400, {"error": str(e)})
             elif u.path == "/api/reveal":
                 self.rfile.read(int(self.headers.get("Content-Length") or 0))
                 EXPORTS.mkdir(parents=True, exist_ok=True)

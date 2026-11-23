@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { initI18n, locale, tr } from "./i18n.js?v=18";
+import { initI18n, locale, tr } from "./i18n.js?v=19";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -234,6 +234,7 @@ async function openPreset(path) {
   localStorage.setItem("recentMaps", JSON.stringify([path, ...recentMaps().filter((p) => p !== path)].slice(0, 8)));
   renderPresets();
   hiddenIds.clear();
+  if (compareRoot) { scene.remove(compareRoot); compareRoot = null; $("#btn-compare").classList.remove("active"); }
   setTimeout(renderGroups, 0);
   const token = ++loadToken;
   const stale = () => token !== loadToken;
@@ -1735,6 +1736,7 @@ window.addEventListener("keydown", (e) => {
   else if (e.key === "l") { setSpace(gizmo.space !== "local"); setStatus(tr(gizmo.space === "local" ? "Gizmo: object axes" : "Gizmo: world axes")); }
   else if (e.key === "m") toggleRuler();
   else if (e.key === "n") toggleMinimap();
+  else if (e.key === "c" && !e.ctrlKey) toggleCompare();
   else if (e.key === "g" && e.ctrlKey) { e.preventDefault(); saveGroup(); }
   else if (e.key === "q") setTool("objects");
   else if (e.key === "b") setTool(e.shiftKey ? "blockall" : "block");
@@ -2175,7 +2177,7 @@ for (const id of ["sc-count", "sc-radius", "sc-smin", "sc-smax", "sc-rot", "sc-g
 $("#sc-go").addEventListener("click", () => scatter(null));
 
 // ---------- keyboard help ----------
-const HELP_TEXT = "Mouse\n  Left click: select · Shift+click: add/remove · drag: box selection\n  Right mouse: turn the view · middle mouse: pan · wheel: zoom\n\nObjects\n  W / E / R: move / rotate / scale        Del: delete\n  Ctrl+C / Ctrl+V: copy / paste at the mouse cursor (also into other maps)\n  Ctrl+D: duplicate                        G: drop to the ground\n  Ctrl+A: select all\n  Arrow keys: move one snap step (Shift ×10), Page Up/Down: height\n  H: hide the selection                    Shift+H: show all hidden objects\n  F: focus the selection                   Esc: deselect\n\nPlacing\n  P: place the preview model at the mouse cursor\n  Shift+P: scatter the preview model around the mouse cursor (settings in the Models tab)\n  O: add a game object at the mouse cursor\n\nView and files\n  T: top view                              Ctrl+S: save\n  Ctrl+1..4: store the view, 1..4: go back to it\n  Ctrl+Z / Ctrl+Y: undo / redo             ? or F1: this help\n\nCollision\n  Q: objects tool    B: block (Shift+B: block + teleport)    X: clear    [ / ]: brush size\n\nGizmo\n  L: axes of the world or of the selected object\n  (every map opens again with the view you left it with)\n\nTools\n  M: ruler (click two points)    Mirror, circle and row copies: buttons under Selection\n  N: minimap    Ctrl+G: save the selection as a group (Objects tab)";
+const HELP_TEXT = "Mouse\n  Left click: select · Shift+click: add/remove · drag: box selection\n  Right mouse: turn the view · middle mouse: pan · wheel: zoom\n\nObjects\n  W / E / R: move / rotate / scale        Del: delete\n  Ctrl+C / Ctrl+V: copy / paste at the mouse cursor (also into other maps)\n  Ctrl+D: duplicate                        G: drop to the ground\n  Ctrl+A: select all\n  Arrow keys: move one snap step (Shift ×10), Page Up/Down: height\n  H: hide the selection                    Shift+H: show all hidden objects\n  F: focus the selection                   Esc: deselect\n\nPlacing\n  P: place the preview model at the mouse cursor\n  Shift+P: scatter the preview model around the mouse cursor (settings in the Models tab)\n  O: add a game object at the mouse cursor\n\nView and files\n  T: top view                              Ctrl+S: save\n  Ctrl+1..4: store the view, 1..4: go back to it\n  Ctrl+Z / Ctrl+Y: undo / redo             ? or F1: this help\n\nCollision\n  Q: objects tool    B: block (Shift+B: block + teleport)    X: clear    [ / ]: brush size\n\nGizmo\n  L: axes of the world or of the selected object\n  (every map opens again with the view you left it with)\n\nTools\n  M: ruler (click two points)    Mirror, circle and row copies: buttons under Selection\n  N: minimap    Ctrl+G: save the selection as a group (Objects tab)\n  C: compare with the game's original map";
 function showHelp() { modalShow(tr("Keyboard and mouse"), tr(HELP_TEXT)); }
 $("#btn-help").addEventListener("click", showHelp);
 $("#btn-help2").addEventListener("click", showHelp);
@@ -2557,7 +2559,7 @@ $("#minimap-hit").addEventListener("click", (e) => {
 });
 
 // ---------- groups: named selections per map (Ctrl+G) ----------
-function groupKey() { return "groups:" + presetPath; }
+function groupKey() { return "groups:" + (window.projectName || "") + ":" + presetPath; }
 function loadGroups() { return JSON.parse(localStorage.getItem(groupKey()) || "{}"); }
 function renderGroups() {
   const sel = $("#group-select");
@@ -2632,3 +2634,76 @@ window.addEventListener("pointerup", async () => {
   markDirty();
   setStatus(tr("Scatter brush: {0} objects placed").replace("{0}", s.made.length));
 });
+
+// ---------- projects: separate sets of maps, NPCs and settings ----------
+async function loadProjects() {
+  const r = await (await fetch(api("projects"))).json();
+  const sel = $("#project-select");
+  sel.textContent = "";
+  for (const p of r.projects) sel.append(new Option(p, p));
+  sel.value = r.current;
+  window.projectName = r.current;
+}
+async function switchProject(name) {
+  if (dirty && !confirm("Discard unsaved changes?")) { $("#project-select").value = window.projectName; return; }
+  const r = await postJSON("project", { name });
+  if (!r.ok) { $("#project-select").value = window.projectName; return setStatus(tr("Project not switched: {0}").replace("{0}", r.data.error)); }
+  dirty = false;
+  location.reload();
+}
+$("#project-select").addEventListener("change", (e) => switchProject(e.target.value));
+$("#project-new").addEventListener("click", () => {
+  const name = prompt("Name of the new project (letters, digits, space, _ and -):", "");
+  if (name) switchProject(name.trim());
+});
+loadProjects();
+
+// ---------- compare: the game's original map in place of your version (read-only) ----------
+let compareRoot = null;
+async function toggleCompare() {
+  if (!doc) return;
+  if (compareRoot) {
+    scene.remove(compareRoot);
+    compareRoot = null;
+    root.visible = true;
+    $("#btn-compare").classList.remove("active");
+    $("#banner").classList.add("hidden");
+    return setStatus(tr("Your version"));
+  }
+  let orig;
+  try {
+    orig = await (await fetch(api("preset", { path: presetPath, original: 1 }))).json();
+  } catch { return setStatus(tr("This map has no original in the game (a new map)")); }
+  if (!orig || !orig.entities) return setStatus(tr("This map has no original in the game (a new map)"));
+  select([]);
+  compareRoot = new THREE.Group();
+  scene.add(compareRoot);
+  for (const ent of orig.entities || []) buildEntity(ent, compareRoot);
+  root.visible = false;
+  $("#btn-compare").classList.add("active");
+  const ours = doc.entities.length, theirs = (orig.entities || []).length;
+  const banner = $("#banner");
+  banner.textContent = tr("Original of the game (read-only): {0} objects, your version: {1}. Press C or the button again to go back.")
+    .replace("{0}", theirs).replace("{1}", ours);
+  banner.classList.remove("hidden");
+  setStatus(tr("Original of the game"));
+}
+$("#btn-compare").addEventListener("click", toggleCompare);
+
+// ---------- light: day, dusk, night ----------
+const hemi = scene.children.find((o) => o.isHemisphereLight);
+const LIGHTS = {
+  day: { bg: 0x15130f, hemi: [0xfff4dd, 0x2a2418, 1.6], sun: [0xffffff, 2.2] },
+  dusk: { bg: 0x1a1210, hemi: [0xffc9a0, 0x241a14, 1.1], sun: [0xff9a5a, 1.6] },
+  night: { bg: 0x07090f, hemi: [0x8090c0, 0x101218, 0.55], sun: [0x9fb4ff, 0.6] },
+};
+function setLight(name) {
+  const l = LIGHTS[name] || LIGHTS.day;
+  scene.background.setHex(l.bg);
+  hemi.color.setHex(l.hemi[0]); hemi.groundColor.setHex(l.hemi[1]); hemi.intensity = l.hemi[2];
+  sun.color.setHex(l.sun[0]); sun.intensity = l.sun[1];
+  $("#light-select").value = name;
+  localStorage.setItem("light", name);
+}
+$("#light-select").addEventListener("change", (e) => setLight(e.target.value));
+setLight(localStorage.getItem("light") || "day");

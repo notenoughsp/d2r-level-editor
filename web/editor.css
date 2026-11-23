@@ -165,3 +165,6 @@ button.primary { background: #6b5527; border-color: #c7a35a; color: #fff; }
 
 #minimap-hit { position: absolute; z-index: 4; border: 1px solid #c7a35a; cursor: crosshair; box-shadow: 0 0 0 1px rgba(0,0,0,.6); }
 #group-select { flex: 1; min-width: 0; margin: 0; }
+
+#project-select { flex: 1; min-width: 0; margin: 0; }
+.row-line .lbl { color: #888; font-size: 12px; }
