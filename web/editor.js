@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { initI18n, locale, tr } from "./i18n.js?v=17";
+import { initI18n, locale, tr } from "./i18n.js?v=18";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -73,6 +73,7 @@ renderer.setAnimationLoop(() => {
   for (const b of selectionBoxes) b.update();
   keepMarkersUnscaled();
   renderer.render(scene, camera);
+  if (typeof drawMinimap === "function") drawMinimap();
 });
 
 // ---------- asset loading ----------
@@ -233,6 +234,7 @@ async function openPreset(path) {
   localStorage.setItem("recentMaps", JSON.stringify([path, ...recentMaps().filter((p) => p !== path)].slice(0, 8)));
   renderPresets();
   hiddenIds.clear();
+  setTimeout(renderGroups, 0);
   const token = ++loadToken;
   const stale = () => token !== loadToken;
   setStatus(`Loading ${path} …`);
@@ -1732,6 +1734,8 @@ window.addEventListener("keydown", (e) => {
   else if (["1", "2", "3", "4"].includes(e.key)) { if (e.ctrlKey) { e.preventDefault(); storeView(e.key); } else recallView(e.key); }
   else if (e.key === "l") { setSpace(gizmo.space !== "local"); setStatus(tr(gizmo.space === "local" ? "Gizmo: object axes" : "Gizmo: world axes")); }
   else if (e.key === "m") toggleRuler();
+  else if (e.key === "n") toggleMinimap();
+  else if (e.key === "g" && e.ctrlKey) { e.preventDefault(); saveGroup(); }
   else if (e.key === "q") setTool("objects");
   else if (e.key === "b") setTool(e.shiftKey ? "blockall" : "block");
   else if (e.key === "x") setTool("clear");
@@ -1747,6 +1751,7 @@ window.addEventListener("keydown", (e) => {
   else if (e.key === "Delete") { if (gameSel) deleteGameObject(gameSel.userData.gameIndex); else removeSelected(); }
   else if (e.key === "o") addGameObject(cursorGround ? cursorGround.clone() : null);
   else if (e.key === "Escape" && measuring) toggleRuler();
+  else if (e.key === "Escape" && brushOn) toggleScatterBrush();
   else if (e.key === "Escape" && !$("#export-dialog").classList.contains("hidden")) $("#export-dialog").classList.add("hidden");
   else if (e.key === "Escape") { selectGameObject(null); select([]); $("#modal").classList.add("hidden"); }
   else if (e.ctrlKey && e.key === "c") { e.preventDefault(); copySelection(); }
@@ -2126,12 +2131,12 @@ function scatterSettings() {
   return { count: Math.max(1, Math.min(200, Math.round(num("#sc-count", 10)))), radius: Math.max(0.5, num("#sc-radius", 15)),
            smin: Math.max(0.05, Math.min(smin, smax)), smax: Math.max(0.05, smin, smax), rotate: $("#sc-rot").checked, ground: $("#sc-ground").checked };
 }
-async function scatter(center) {
+async function scatter(center, inStroke = false) {
   if (!doc) return alert("Open a map first.");
   if (!previewPath) return setStatus(tr("Choose a model in the list first"));
   const o = scatterSettings();
   const c = center || orbit.target;
-  beginEdit();
+  if (!inStroke) beginEdit();
   addDependency(previewPath);
   rememberModel(previewPath);
   const base = previewPath.split("/").pop().replace(/\.model$/, "");
@@ -2156,7 +2161,9 @@ async function scatter(center) {
     doc.entities.push(ent);
     made.push(addObjectFor(ent));
   }
-  select(await Promise.all(made));
+  const objs = await Promise.all(made);
+  if (inStroke) return objs;
+  select(objs);
   markDirty();
   setStatus(tr("{0} copies of {1} scattered").replace("{0}", o.count).replace("{1}", base));
 }
@@ -2168,7 +2175,7 @@ for (const id of ["sc-count", "sc-radius", "sc-smin", "sc-smax", "sc-rot", "sc-g
 $("#sc-go").addEventListener("click", () => scatter(null));
 
 // ---------- keyboard help ----------
-const HELP_TEXT = "Mouse\n  Left click: select · Shift+click: add/remove · drag: box selection\n  Right mouse: turn the view · middle mouse: pan · wheel: zoom\n\nObjects\n  W / E / R: move / rotate / scale        Del: delete\n  Ctrl+C / Ctrl+V: copy / paste at the mouse cursor (also into other maps)\n  Ctrl+D: duplicate                        G: drop to the ground\n  Ctrl+A: select all\n  Arrow keys: move one snap step (Shift ×10), Page Up/Down: height\n  H: hide the selection                    Shift+H: show all hidden objects\n  F: focus the selection                   Esc: deselect\n\nPlacing\n  P: place the preview model at the mouse cursor\n  Shift+P: scatter the preview model around the mouse cursor (settings in the Models tab)\n  O: add a game object at the mouse cursor\n\nView and files\n  T: top view                              Ctrl+S: save\n  Ctrl+1..4: store the view, 1..4: go back to it\n  Ctrl+Z / Ctrl+Y: undo / redo             ? or F1: this help\n\nCollision\n  Q: objects tool    B: block (Shift+B: block + teleport)    X: clear    [ / ]: brush size\n\nGizmo\n  L: axes of the world or of the selected object\n  (every map opens again with the view you left it with)\n\nTools\n  M: ruler (click two points)    Mirror, circle and row copies: buttons under Selection";
+const HELP_TEXT = "Mouse\n  Left click: select · Shift+click: add/remove · drag: box selection\n  Right mouse: turn the view · middle mouse: pan · wheel: zoom\n\nObjects\n  W / E / R: move / rotate / scale        Del: delete\n  Ctrl+C / Ctrl+V: copy / paste at the mouse cursor (also into other maps)\n  Ctrl+D: duplicate                        G: drop to the ground\n  Ctrl+A: select all\n  Arrow keys: move one snap step (Shift ×10), Page Up/Down: height\n  H: hide the selection                    Shift+H: show all hidden objects\n  F: focus the selection                   Esc: deselect\n\nPlacing\n  P: place the preview model at the mouse cursor\n  Shift+P: scatter the preview model around the mouse cursor (settings in the Models tab)\n  O: add a game object at the mouse cursor\n\nView and files\n  T: top view                              Ctrl+S: save\n  Ctrl+1..4: store the view, 1..4: go back to it\n  Ctrl+Z / Ctrl+Y: undo / redo             ? or F1: this help\n\nCollision\n  Q: objects tool    B: block (Shift+B: block + teleport)    X: clear    [ / ]: brush size\n\nGizmo\n  L: axes of the world or of the selected object\n  (every map opens again with the view you left it with)\n\nTools\n  M: ruler (click two points)    Mirror, circle and row copies: buttons under Selection\n  N: minimap    Ctrl+G: save the selection as a group (Objects tab)";
 function showHelp() { modalShow(tr("Keyboard and mouse"), tr(HELP_TEXT)); }
 $("#btn-help").addEventListener("click", showHelp);
 $("#btn-help2").addEventListener("click", showHelp);
@@ -2482,3 +2489,146 @@ function undoMenu() {
 }
 $("#btn-undo-list").addEventListener("click", (e) => { e.stopPropagation(); undoMenu(); });
 window.addEventListener("click", (e) => { if (!e.target.closest("#undo-menu")) $("#undo-menu").classList.add("hidden"); });
+
+// ---------- minimap (N): the whole map from above in a corner; click to look there ----------
+const miniCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 5000);
+miniCam.layers.enable(1);
+const miniMarker = new THREE.Mesh(new THREE.RingGeometry(2.5, 4, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffd400, depthTest: false }));
+miniMarker.layers.set(1);
+miniMarker.renderOrder = 30;
+scene.add(miniMarker);
+let miniOn = localStorage.getItem("minimap") === "1";
+let miniBox = null, miniBoxFor = null;
+function miniBounds() {
+  if (miniBoxFor === presetPath && miniBox) return miniBox;
+  const b = new THREE.Box3();
+  if (coll) b.set(new THREE.Vector3(0, 0, 0), new THREE.Vector3(coll.width * 10, 0, coll.height * 10));
+  else for (const o of entityObjects.values()) b.expandByPoint(o.position);
+  if (b.isEmpty()) return null;
+  miniBox = b; miniBoxFor = presetPath;
+  return b;
+}
+function miniRect() {
+  const w = viewport.clientWidth, h = viewport.clientHeight, s = Math.round(Math.min(220, Math.min(w, h) * 0.3));
+  return { x: w - s - 10, y: 10, s, w, h };  // y from the bottom
+}
+function drawMinimap() {
+  const hit = $("#minimap-hit");
+  const b = miniOn && doc ? miniBounds() : null;
+  hit.classList.toggle("hidden", !b);
+  if (!b) return;
+  const r = miniRect();
+  const c = b.getCenter(new THREE.Vector3()), size = b.getSize(new THREE.Vector3());
+  const half = Math.max(size.x, size.z) / 2 + 10;
+  Object.assign(miniCam, { left: -half, right: half, top: half, bottom: -half });
+  miniCam.position.set(c.x, 2000, c.z);
+  miniCam.up.set(0, 0, -1);
+  miniCam.lookAt(c.x, 0, c.z);
+  miniCam.updateProjectionMatrix();
+  miniMarker.position.set(orbit.target.x, 50, orbit.target.z);
+  miniMarker.scale.setScalar(half / 60);
+  const helper = gizmo.getHelper ? gizmo.getHelper() : gizmo, gv = helper.visible;
+  helper.visible = false;
+  renderer.setScissorTest(true);
+  renderer.setScissor(r.x, r.y, r.s, r.s);
+  renderer.setViewport(r.x, r.y, r.s, r.s);
+  renderer.render(scene, miniCam);
+  renderer.setScissorTest(false);
+  renderer.setViewport(0, 0, r.w, r.h);
+  helper.visible = gv;
+  Object.assign(hit.style, { width: `${r.s}px`, height: `${r.s}px`, right: "10px", bottom: "10px" });
+  hit.dataset.cx = c.x; hit.dataset.cz = c.z; hit.dataset.half = half;
+}
+function toggleMinimap() {
+  miniOn = !miniOn;
+  localStorage.setItem("minimap", miniOn ? "1" : "0");
+  $("#btn-mini").classList.toggle("active", miniOn);
+}
+$("#btn-mini").classList.toggle("active", miniOn);
+$("#btn-mini").addEventListener("click", toggleMinimap);
+$("#minimap-hit").addEventListener("click", (e) => {
+  const el = e.currentTarget, r = el.getBoundingClientRect(), half = +el.dataset.half;
+  const x = +el.dataset.cx + ((e.clientX - r.left) / r.width * 2 - 1) * half;
+  const z = +el.dataset.cz + ((e.clientY - r.top) / r.height * 2 - 1) * half;
+  const d = new THREE.Vector3(x - orbit.target.x, 0, z - orbit.target.z);
+  orbit.target.add(d);
+  camera.position.add(d);
+  orbit.update();
+});
+
+// ---------- groups: named selections per map (Ctrl+G) ----------
+function groupKey() { return "groups:" + presetPath; }
+function loadGroups() { return JSON.parse(localStorage.getItem(groupKey()) || "{}"); }
+function renderGroups() {
+  const sel = $("#group-select");
+  const groups = loadGroups();
+  sel.textContent = "";
+  sel.append(new Option(tr("Groups ({0})").replace("{0}", Object.keys(groups).length), ""));
+  for (const [name, ids] of Object.entries(groups)) sel.append(new Option(`${name} (${ids.length})`, name));
+  $("#group-del").disabled = true;
+}
+function saveGroup() {
+  if (!presetPath || !selection.length) return setStatus(tr("Select the objects of the group first"));
+  const name = prompt("Name of the group:", "");
+  if (!name) return;
+  const groups = loadGroups();
+  groups[name.slice(0, 40)] = selection.map((o) => o.userData.entity.id);
+  localStorage.setItem(groupKey(), JSON.stringify(groups));
+  renderGroups();
+  setStatus(tr("Group {0} saved ({1} objects)").replace("{0}", name).replace("{1}", selection.length));
+}
+$("#group-select").addEventListener("change", (e) => {
+  const ids = loadGroups()[e.target.value];
+  $("#group-del").disabled = !ids;
+  if (!ids) return;
+  const objs = ids.map((id) => entityObjects.get(id)).filter(Boolean);
+  select(objs);
+  setStatus(tr("Group {0}: {1} object(s)").replace("{0}", e.target.value).replace("{1}", objs.length));
+});
+$("#group-save").addEventListener("click", saveGroup);
+$("#group-del").addEventListener("click", () => {
+  const name = $("#group-select").value;
+  if (!name || !confirm(tr("Delete the group {0}? The objects stay.").replace("{0}", name))) return;
+  const groups = loadGroups();
+  delete groups[name];
+  localStorage.setItem(groupKey(), JSON.stringify(groups));
+  renderGroups();
+});
+
+// ---------- scatter brush: paint copies of the preview model with the left mouse button ----------
+let brushOn = false, brushStroke = null;
+function toggleScatterBrush() {
+  brushOn = !brushOn;
+  $("#sc-brush").classList.toggle("active", brushOn);
+  setStatus(brushOn ? tr("Scatter brush: paint with the left mouse button (Esc ends it)") : tr("Scatter brush off"));
+}
+$("#sc-brush").addEventListener("click", toggleScatterBrush);
+renderer.domElement.addEventListener("pointerdown", async (e) => {
+  if (!brushOn || e.button !== 0 || tool !== "objects") return;
+  e.stopImmediatePropagation();
+  if (!doc || !previewPath || !cursorGround) return setStatus(tr("Choose a model in the list first"));
+  beginEdit();
+  brushStroke = { last: null, made: [] };
+  orbit.enabled = false;
+}, true);
+renderer.domElement.addEventListener("pointermove", async () => {
+  if (!brushStroke || !cursorGround) return;
+  const spacing = Math.max(1, scatterSettings().radius);
+  if (brushStroke.last && brushStroke.last.distanceTo(cursorGround) < spacing) return;
+  brushStroke.last = cursorGround.clone();
+  brushStroke.made.push(...(await scatter(cursorGround.clone(), true)));
+});
+renderer.domElement.addEventListener("pointerup", (e) => {
+  if (!brushOn) return;
+  e.stopImmediatePropagation();
+}, true);
+window.addEventListener("pointerup", async () => {
+  if (!brushStroke) return;
+  const s = brushStroke;
+  brushStroke = null;
+  orbit.enabled = true;
+  if (!s.last && cursorGround) s.made.push(...(await scatter(cursorGround.clone(), true)));  // a click without moving
+  if (!s.made.length) { undoStack.pop(); return; }
+  markDirty();
+  setStatus(tr("Scatter brush: {0} objects placed").replace("{0}", s.made.length));
+});

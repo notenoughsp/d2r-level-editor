@@ -162,3 +162,6 @@ button.primary { background: #6b5527; border-color: #c7a35a; color: #fff; }
 #ex-check .error { color: #ff7a6a; } #ex-check .warn { color: #e5c55a; } #ex-check .ok { color: #7fd17f; }
 #ex-result { white-space: pre-wrap; color: #ddd; font-size: 12px; margin: 8px 0 0; }
 .dialog .check-line { margin-top: 8px; color: #bbb; font-size: 12px; display: flex; gap: 6px; align-items: center; }
+
+#minimap-hit { position: absolute; z-index: 4; border: 1px solid #c7a35a; cursor: crosshair; box-shadow: 0 0 0 1px rgba(0,0,0,.6); }
+#group-select { flex: 1; min-width: 0; margin: 0; }
