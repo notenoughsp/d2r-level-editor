@@ -446,6 +446,7 @@ const DE = {
   "No free place for the new area in this act's world.": "Kein freier Platz für das neue Gebiet in der Welt dieses Akts.",
   "Choose a map as template.": "Eine Karte als Vorlage wählen.",
   "Map name: 2-40 small letters, digits or _": "Kartenname: 2-40 kleine Buchstaben, Ziffern oder _",
+  "Show effects (fire, smoke, fog, flies) as particles": "Effekte (Feuer, Rauch, Nebel, Fliegen) als Partikel zeigen",
   // messages from the editor server
   "Size does not match: {0} instead of {1} tiles": "Größe passt nicht: {0} statt {1} Kacheln",
   "The game objects of this DS1 file cannot be edited.": "Die Objekte dieser DS1-Datei können nicht bearbeitet werden.",

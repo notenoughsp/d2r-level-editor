@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { initI18n, locale, tr } from "./i18n.js?v=26";
+import { initI18n, locale, tr } from "./i18n.js?v=27";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -75,6 +75,7 @@ renderer.setAnimationLoop(() => {
   for (const b of selectionBoxes) b.update();
   keepMarkersUnscaled();
   renderer.render(scene, camera);
+  updateFx();
   if (typeof drawMinimap === "function") drawMinimap();
 });
 
@@ -211,6 +212,8 @@ async function buildEntity(ent, parent, depth = 0) {
     const marker = helperMarker(ent);
     marker.visible = showHelpers;
     g.add(marker);
+    const fx = fxFor(ent);
+    if (fx) g.add(fx);
   } else {
     g.visible = false;
   }
@@ -3095,7 +3098,7 @@ const OPTION_DEFAULTS = {
   uiScale: 100, fov: 45, rotateSpeed: 1, zoomSpeed: 1, panSpeed: 1, damping: true, showGrid: true, gridStep: 5,
   autosave: 60, undoSteps: 100, labels: true, labelScale: 1, hoverInfo: true, previewSpin: true, statusFade: 8,
   confirmDelete: 20, dupOffset: 2, minimapSize: 220, renderScale: 100, selColor: "#ffd400", bg: "", checkUpdates: true,
-  maxListEntries: 1500, tooltips: true, thumbs: true,
+  maxListEntries: 1500, tooltips: true, thumbs: true, effects: true,
 };
 let options = { ...OPTION_DEFAULTS, ...JSON.parse(localStorage.getItem("options") || "{}") };
 const OPTION_FORM = [
@@ -3127,6 +3130,7 @@ const OPTION_FORM = [
   ["Game objects and labels", [
     ["labels", "Show names over game objects", "check"],
     ["labelScale", "Size of the names", "number", 0.3, 3, 0.1],
+    ["effects", "Show effects (fire, smoke, fog, flies) as particles", "check"],
   ]],
   ["Saving and undo", [
     ["autosave", "Autosave a draft every (s, 0 = off)", "number", 0, 3600, 10],
@@ -3554,4 +3558,64 @@ async function addMapArea() {
   renderAct();
   setStatus(tr("Area {0} added at {1}, {2}. After the first build its map is in the project: edit it there, later builds keep it.")
     .replace("{0}", name).replace("{1}", free.offset[0]).replace("{2}", free.offset[1]));
+}
+
+// ---------- effects shown as simple particles (fire, smoke and fog, flies, water, magic) ----------
+const FX_KINDS = [
+  [/fire|torch|flame|ember|brazier|burn|lava|candle/i, { color: 0xff8a2a, count: 26, size: 0.9, rise: 2.4, spread: 0.6, life: 1.1, blend: true }],
+  [/smoke|fog|mist|haze|dust|cloud|steam/i, { color: 0x9a948a, count: 22, size: 3.2, rise: 0.25, spread: 5, life: 5, blend: false, opacity: 0.18 }],
+  [/fl(y|ies)|insect|bug|moth|bat/i, { color: 0x222018, count: 10, size: 0.35, rise: 0, spread: 2.5, life: 3, blend: false, buzz: true }],
+  [/water|drip|splash|rain|fountain|wave/i, { color: 0x6fb7ff, count: 18, size: 0.5, rise: -1.5, spread: 1.5, life: 1.4, blend: true }],
+  [/magic|glow|spark|portal|light|aura|rune|holy|soul/i, { color: 0xc77dff, count: 18, size: 0.6, rise: 0.8, spread: 1.2, life: 2, blend: true }],
+];
+const fxSystems = new Set();
+const fxTexture = (() => {
+  const c = document.createElement("canvas"); c.width = c.height = 64;
+  const g = c.getContext("2d"), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(0.4, "rgba(255,255,255,.6)"); gr.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+})();
+function fxFor(ent) {
+  const v = comp(ent, "VfxDefinitionComponent");
+  if (!v) return null;
+  const name = (v.filename || ent.name || "").split("/").pop();
+  const kind = (FX_KINDS.find(([rx]) => rx.test(name)) || [null, { color: 0xc77dff, count: 12, size: 0.5, rise: 0.6, spread: 1, life: 2, blend: true }])[1];
+  const n = kind.count;
+  const pos = new Float32Array(n * 3), st = [];
+  for (let i = 0; i < n; i++) st.push({ age: Math.random() * kind.life, seed: Math.random() * 100 });
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  const mat = new THREE.PointsMaterial({ color: kind.color, size: kind.size, map: fxTexture, transparent: true, depthWrite: false,
+    opacity: kind.opacity ?? 0.85, blending: kind.blend ? THREE.AdditiveBlending : THREE.NormalBlending });
+  const pts = new THREE.Points(geo, mat);
+  pts.userData.fx = { kind, st };
+  pts.userData.helperFx = true;
+  pts.raycast = () => {};  // effects are picked by their marker, not by the particles
+  fxSystems.add(pts);
+  return pts;
+}
+let fxLast = performance.now();
+function updateFx() {
+  const now = performance.now(), dt = Math.min(0.1, (now - fxLast) / 1000);
+  fxLast = now;
+  for (const p of fxSystems) {
+    let top = p;
+    while (top.parent) top = top.parent;
+    if (top !== scene) { fxSystems.delete(p); p.geometry.dispose(); p.material.dispose(); continue; }
+    p.visible = options.effects && showHelpers;
+    if (!p.visible) continue;
+    const { kind, st } = p.userData.fx, a = p.geometry.attributes.position.array;
+    const s = p.parent.scale, sx = 1 / (s.x || 1), sy = 1 / (s.y || 1), sz = 1 / (s.z || 1);
+    st.forEach((q, i) => {
+      q.age += dt;
+      if (q.age > kind.life) { q.age = 0; q.seed = Math.random() * 100; }
+      const t = q.age / kind.life, r = kind.spread * (kind.buzz ? 1 : 0.3 + t);
+      const ang = q.seed * 7 + (kind.buzz ? now / 300 * (1 + (q.seed % 1)) : 0);
+      a[i * 3] = Math.cos(ang) * r * ((q.seed * 13) % 1) * sx;
+      a[i * 3 + 1] = (1 + kind.rise * q.age + (kind.buzz ? Math.sin(now / 200 + q.seed) * 0.5 + 1.5 : 0)) * sy;
+      a[i * 3 + 2] = Math.sin(ang) * r * ((q.seed * 17) % 1) * sz;
+    });
+    p.geometry.attributes.position.needsUpdate = true;
+  }
 }
