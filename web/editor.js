@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { initI18n, locale, tr } from "./i18n.js?v=3";
+import { initI18n, locale, tr } from "./i18n.js?v=4";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -549,6 +549,12 @@ gizmo.addEventListener("objectChange", () => {
   markDirty();
 });
 
+function selectionExtent() {
+  const box = new THREE.Box3();
+  for (const o of selection) box.expandByPoint(o.position);
+  const s = box.getSize(new THREE.Vector3());
+  return tr("Spread: {0} × {1} (height {2})").replace("{0}", s.x.toFixed(1)).replace("{1}", s.z.toFixed(1)).replace("{2}", s.y.toFixed(1));
+}
 function showProps() {
   const el = $("#props");
   if (gameSel) return showGameProps();
@@ -563,7 +569,8 @@ function showProps() {
     `<div class="prop-buttons"><button id="b-coll" title="Block the tiles under the object; the blocked area moves with the object">Collision under object</button></div>`;
   if (selection.length > 1) {
     el.innerHTML = `<div class="sel-count">${selection.length} objects selected</div>` +
-      `<div class="prop-model">${selection.map((o) => o.userData.entity.name).slice(0, 12).join("<br>")}${selection.length > 12 ? "<br>…" : ""}</div>` + buttons;
+      `<div class="prop-model">${selection.map((o) => o.userData.entity.name).slice(0, 12).join("<br>")}${selection.length > 12 ? "<br>…" : ""}</div>` +
+      `<div class="prop-model">${selectionExtent()}</div>` + buttons;
   } else {
     const o = primary();
     const ent = o.userData.entity;
@@ -753,6 +760,7 @@ async function save() {
     setStatus("Gespeichert: " + r.data.saved);
     const li = document.querySelector(`#preset-list li[data-path="${presetPath}"]`);
     if (li) li.classList.add("edited");
+    editedMaps.add(presetPath);
   } else setStatus(`Error while saving: ${r.data.error}`);
 }
 
@@ -968,6 +976,7 @@ let previewToken = 0;
 async function showPreview(path) {
   const token = ++previewToken;
   $("#preview-info").textContent = `Loading ${path.replace("data/hd/", "")} …`;
+  updateFavButton();
   const m = await loadModel(path);
   if (token !== previewToken) return;
   if (previewObj) previewScene.remove(previewObj);
@@ -1519,6 +1528,7 @@ window.addEventListener("keydown", (e) => {
   else if (e.ctrlKey && e.key === "y") { e.preventDefault(); redo(); }
   else if (e.key === "p" && e.shiftKey && previewPath) scatter(cursorGround ? cursorGround.clone() : null);
   else if (e.key === "p" && previewPath && cursorGround) placeModel(previewPath, cursorGround.clone());
+  else if (["1", "2", "3", "4"].includes(e.key)) { if (e.ctrlKey) { e.preventDefault(); storeView(e.key); } else recallView(e.key); }
   else if (e.key === "h" && e.shiftKey) showHidden();
   else if (e.key === "h") hideSelection();
   else if (e.key === "?" || e.key === "F1") { ev.preventDefault(); showHelp(); }
@@ -1568,13 +1578,16 @@ function renderPresets() {
     all.textContent = tr("All maps");
     ul.appendChild(all);
   }
+  const onlyEdited = $("#preset-edited").checked;
   for (const p of presets) {
     const short = p.replace("data/hd/env/preset/", "");
     if (f && !short.includes(f)) continue;
+    if (onlyEdited && !editedMaps.has(p)) continue;
     const li = document.createElement("li");
     li.textContent = short;
     li.dataset.path = p;
     li.title = p;
+    if (editedMaps.has(p)) li.classList.add("edited");
     li.onclick = () => openPreset(p);
     ul.appendChild(li);
   }
@@ -1600,6 +1613,9 @@ async function searchModels() {
   let r;
   if (cat === "__recent") {
     const items = recentModels().filter((m) => !q || m.includes(q));
+    r = { items, total: items.length };
+  } else if (cat === "__fav") {
+    const items = favModels().filter((m) => !q || m.includes(q));
     r = { items, total: items.length };
   } else if (cat === "__own") {
     r = await (await fetch(api("models", { limit: 2000, q, own: 1 }))).json();
@@ -1632,7 +1648,7 @@ window.editor = { THREE, scene, camera, orbit, selectGameObject, get gameRoot() 
 
 (async () => {
   presets = await (await fetch(api("presets"))).json();
-  renderPresets();
+  await loadEdited();
   searchModels();
   setStatus(`${presets.length} map presets available`);
 })();
@@ -1940,6 +1956,50 @@ for (const id of ["sc-count", "sc-radius", "sc-smin", "sc-smax", "sc-rot", "sc-g
 $("#sc-go").addEventListener("click", () => scatter(null));
 
 // ---------- keyboard help ----------
-const HELP_TEXT = "Mouse\n  Left click: select · Shift+click: add/remove · drag: box selection\n  Right mouse: turn the view · middle mouse: pan · wheel: zoom\n\nObjects\n  W / E / R: move / rotate / scale        Del: delete\n  Ctrl+C / Ctrl+V: copy / paste at the mouse cursor (also into other maps)\n  Ctrl+D: duplicate                        G: drop to the ground\n  Arrow keys: move one snap step (Shift ×10), Page Up/Down: height\n  H: hide the selection                    Shift+H: show all hidden objects\n  F: focus the selection                   Esc: deselect\n\nPlacing\n  P: place the preview model at the mouse cursor\n  Shift+P: scatter the preview model around the mouse cursor (settings in the Models tab)\n  O: add a game object at the mouse cursor\n\nView and files\n  T: top view                              Ctrl+S: save\n  Ctrl+Z / Ctrl+Y: undo / redo             ? or F1: this help";
+const HELP_TEXT = "Mouse\n  Left click: select · Shift+click: add/remove · drag: box selection\n  Right mouse: turn the view · middle mouse: pan · wheel: zoom\n\nObjects\n  W / E / R: move / rotate / scale        Del: delete\n  Ctrl+C / Ctrl+V: copy / paste at the mouse cursor (also into other maps)\n  Ctrl+D: duplicate                        G: drop to the ground\n  Arrow keys: move one snap step (Shift ×10), Page Up/Down: height\n  H: hide the selection                    Shift+H: show all hidden objects\n  F: focus the selection                   Esc: deselect\n\nPlacing\n  P: place the preview model at the mouse cursor\n  Shift+P: scatter the preview model around the mouse cursor (settings in the Models tab)\n  O: add a game object at the mouse cursor\n\nView and files\n  T: top view                              Ctrl+S: save\n  Ctrl+1..4: store the view, 1..4: go back to it\n  Ctrl+Z / Ctrl+Y: undo / redo             ? or F1: this help";
 function showHelp() { modalShow(tr("Keyboard and mouse"), tr(HELP_TEXT)); }
 $("#btn-help").addEventListener("click", showHelp);
+
+// ---------- favourite models ----------
+function favModels() { return JSON.parse(localStorage.getItem("favModels") || "[]"); }
+function updateFavButton() {
+  const on = previewPath && favModels().includes(previewPath);
+  $("#fav-btn").textContent = on ? "★" : "☆";
+  $("#fav-btn").classList.toggle("active", !!on);
+}
+$("#fav-btn").addEventListener("click", () => {
+  if (!previewPath) return setStatus(tr("Choose a model in the list first"));
+  const list = favModels();
+  const on = list.includes(previewPath);
+  localStorage.setItem("favModels", JSON.stringify(on ? list.filter((m) => m !== previewPath) : [previewPath, ...list]));
+  updateFavButton();
+  setStatus(on ? tr("Removed from the favourites") : tr("Added to the favourites"));
+  if ($("#model-cat").value === "__fav") searchModels();
+});
+
+// ---------- camera bookmarks: Ctrl+1..4 stores the view of this map, 1..4 goes back to it ----------
+function viewKey() { return "views:" + presetPath; }
+function storeView(n) {
+  if (!presetPath) return;
+  const views = JSON.parse(localStorage.getItem(viewKey()) || "{}");
+  views[n] = { p: camera.position.toArray(), t: orbit.target.toArray() };
+  localStorage.setItem(viewKey(), JSON.stringify(views));
+  setStatus(tr("View {0} stored (key {0} goes back to it)").replace(/\{0\}/g, n));
+}
+function recallView(n) {
+  if (!presetPath) return;
+  const v = JSON.parse(localStorage.getItem(viewKey()) || "{}")[n];
+  if (!v) return setStatus(tr("No view {0} yet: Ctrl+{0} stores the current view").replace(/\{0\}/g, n));
+  camera.position.fromArray(v.p);
+  orbit.target.fromArray(v.t);
+  orbit.update();
+  setStatus(tr("View {0}").replace("{0}", n));
+}
+
+// ---------- maps saved in the project ----------
+let editedMaps = new Set();
+async function loadEdited() {
+  try { editedMaps = new Set(await (await fetch(api("edited"))).json()); } catch { editedMaps = new Set(); }
+  renderPresets();
+}
+$("#preset-edited").addEventListener("change", renderPresets);

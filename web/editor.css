@@ -107,3 +107,9 @@ input.num { width: 52px; }
 .tool-box label.check input { width: auto; display: inline; margin: 0; }
 .list li.list-head { color: #888; font-size: 11px; text-transform: uppercase; cursor: default; background: none; padding-top: 6px; }
 .list li.recent::before { content: "↺ "; color: #c7a35a; }
+
+#preview-box { position: relative; }
+#fav-btn { position: absolute; right: 4px; top: 10px; font-size: 16px; line-height: 1; padding: 2px 6px; background: rgba(0,0,0,.5); }
+#fav-btn.active { color: #ffd400; }
+.check-line { display: flex; gap: 6px; align-items: center; color: #aaa; font-size: 12px; margin-bottom: 6px; }
+.pane .check-line input { width: auto; margin: 0; }

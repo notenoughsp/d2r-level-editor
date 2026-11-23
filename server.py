@@ -716,6 +716,9 @@ class Handler(BaseHTTPRequestHandler):
                 self.static(WEB / "node_modules" / "three" / u.path[len("/three/"):])
             elif u.path == "/api/presets":
                 self.send(200, list_presets())
+            elif u.path == "/api/edited":  # maps saved in the project (edited or new)
+                self.send(200, sorted(p.relative_to(PROJECT).as_posix() for p in (PROJECT / "data/hd/env/preset").rglob("*.json"))
+                          if (PROJECT / "data/hd/env/preset").exists() else [])
             elif u.path == "/api/npcs":
                 self.send(200, npcs_payload())
             elif u.path == "/api/version":
