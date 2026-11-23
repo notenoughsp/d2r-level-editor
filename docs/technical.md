@@ -127,6 +127,29 @@ Tested 2026-11-23 in the act 1 town: a gold and a blue-green marble statue and a
 next to the originals ([screenshot](retexture-example.png)). A copy of the act 1 barrel stack
 (13 textures) did not show; the cause is not known yet.
 
+## Own 3D models
+
+`python -I tools/meshimport.py <mesh.obj | mesh.glb> <new model path> [texture.png] [height]`
+turns a mesh of your own (OBJ or binary glTF, e.g. a CC0 model) into a game model, for example
+`data/hd/env/model/custom/crystals.model`. Place it in the editor like any other model.
+
+- **Template:** writing a Granny file from scratch needs its whole type tree, so the tool takes
+  a game model with one mesh (the act 1 catacomb pillar) and replaces its geometry: the new
+  vertices and triangles are appended to the data section and the pointers are moved to them.
+  Skeleton, materials and shader settings stay; the albedo becomes the given texture.
+- **Vertices** (20 bytes): position int16 x3 + w, normal int8 x3, tangent int8 x3 + sign,
+  uv float16 x2. Normals are turned to the side the triangles face (counter-clockwise corners);
+  a mesh with normals pointing inward showed black.
+- **One LOD:** the new model is listed in `model_lod_desc.bin` with its own bounds and one LOD.
+  A model is skipped when a LOD file does not fit the LOD data of its entry: an exact copy of the
+  pillar with the LOD 0 mesh in all five LOD files did not show, the same copy with the real
+  LOD files did.
+- **Scale:** the mesh stands on the ground and is scaled to `height` (default 8; the pillar is
+  15 high).
+
+Tested 2026-11-23 in the act 1 town with three meshes made by script: a crystal cluster (Ice002),
+a stone needle (Rock035) and a torus knot (Metal034) ([screenshot](custom-models.png)).
+
 ## NPC creator
 
 `tools/npc_creator.py` turns the NPC list (`editor_state/npcs.json`) into table rows in both table
