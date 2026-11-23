@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { initI18n, locale, tr } from "./i18n.js?v=23";
+import { initI18n, locale, tr } from "./i18n.js?v=24";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -1868,8 +1868,17 @@ async function searchModels() {
   ul.innerHTML = "";
   for (const m of r.items) {
     const li = document.createElement("li");
-    li.textContent = m.replace("data/hd/", "");
     li.title = m;
+    if (options.thumbs) {
+      li.classList.add("with-thumb");
+      const img = document.createElement("img");
+      img.className = "thumb";
+      img.dataset.model = m;
+      img.alt = "";
+      li.append(img);
+      thumbObserver.observe(img);
+    }
+    li.append(document.createTextNode(m.replace("data/hd/", "")));
     li.onclick = () => {
       ul.querySelectorAll("li.active").forEach((x) => x.classList.remove("active"));
       li.classList.add("active");
@@ -3077,7 +3086,7 @@ const OPTION_DEFAULTS = {
   uiScale: 100, fov: 45, rotateSpeed: 1, zoomSpeed: 1, panSpeed: 1, damping: true, showGrid: true, gridStep: 5,
   autosave: 60, undoSteps: 100, labels: true, labelScale: 1, hoverInfo: true, previewSpin: true, statusFade: 8,
   confirmDelete: 20, dupOffset: 2, minimapSize: 220, renderScale: 100, selColor: "#ffd400", bg: "", checkUpdates: true,
-  maxListEntries: 1500, tooltips: true,
+  maxListEntries: 1500, tooltips: true, thumbs: true,
 };
 let options = { ...OPTION_DEFAULTS, ...JSON.parse(localStorage.getItem("options") || "{}") };
 const OPTION_FORM = [
@@ -3088,6 +3097,7 @@ const OPTION_FORM = [
     ["hoverInfo", "Name of the object under the mouse in the status bar", "check"],
     ["maxListEntries", "Entries shown in the objects list", "number", 100, 20000, 100],
     ["checkUpdates", "Look for updates at start", "check"],
+    ["thumbs", "Pictures in the model list", "check"],
   ]],
   ["Camera and view", [
     ["fov", "Field of view (degrees)", "number", 20, 100, 1],
@@ -3219,6 +3229,9 @@ function renderKeyOptions(box) {
     grid2.append(l);
   }
   box.append(grid2);
+  const tourBtn = Object.assign(document.createElement("button"), { textContent: tr("Show the tour again") });
+  tourBtn.addEventListener("click", () => { $("#options-dialog").classList.add("hidden"); showTour(0); });
+  box.append(tourBtn);
   const reset = Object.assign(document.createElement("button"), { textContent: tr("Default keys") });
   reset.addEventListener("click", () => { keyMap = {}; localStorage.removeItem("keyMap"); renderOptions(); });
   box.append(reset);
@@ -3284,3 +3297,117 @@ renderer.domElement.addEventListener("contextmenu", (e) => {
   Object.assign(menu.style, { left: `${Math.min(e.clientX, innerWidth - mw - 4)}px`, top: `${Math.min(e.clientY, innerHeight - mh - 4)}px` });
 });
 window.addEventListener("pointerdown", (e) => { if (!e.target.closest("#ctx-menu")) $("#ctx-menu").classList.add("hidden"); }, true);
+
+// ---------- thumbnails in the model list (rendered once, kept by the server) ----------
+const thumbRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+thumbRenderer.setSize(96, 96);
+thumbRenderer.outputColorSpace = THREE.SRGBColorSpace;
+const thumbScene = new THREE.Scene();
+thumbScene.add(new THREE.HemisphereLight(0xfff4dd, 0x2a2418, 1.8));
+const thumbSun = new THREE.DirectionalLight(0xffffff, 2.2);
+thumbSun.position.set(-1, 2, 1.5);
+thumbScene.add(thumbSun);
+const thumbCam = new THREE.PerspectiveCamera(35, 1, 0.1, 5000);
+const thumbQueue = [];
+let thumbBusy = false;
+function queueThumb(img) { thumbQueue.push(img); runThumbs(); }
+async function runThumbs() {
+  if (thumbBusy) return;
+  thumbBusy = true;
+  while (thumbQueue.length) {
+    const img = thumbQueue.shift();
+    if (!img.isConnected) continue;
+    const path = img.dataset.model;
+    const g = await new Promise((ok) => loader.load(api("model", { v: ASSET_VERSION, lod: 2, path }), (r) => ok(r.scene), undefined, () => ok(null)));
+    if (!g) { img.classList.add("none"); continue; }
+    g.traverse((o) => { if (o.isMesh && o.material && o.material.map) o.material.map.colorSpace = THREE.SRGBColorSpace; });
+    const box = new THREE.Box3().setFromObject(g), size = box.getSize(new THREE.Vector3());
+    g.position.sub(box.getCenter(new THREE.Vector3()));
+    thumbScene.add(g);
+    const r = Math.max(size.x, size.y, size.z) || 1;
+    thumbCam.position.set(r * 0.9, r * 0.7, r * 1.3);
+    thumbCam.lookAt(0, 0, 0);
+    thumbRenderer.render(thumbScene, thumbCam);
+    const url = thumbRenderer.domElement.toDataURL("image/webp", 0.8);
+    thumbScene.remove(g);
+    g.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); [].concat(o.material).forEach((m) => { m.map?.dispose(); m.dispose(); }); } });
+    img.src = url;
+    postJSON("thumb", { path }, { data: url });
+  }
+  thumbBusy = false;
+}
+const thumbObserver = new IntersectionObserver((entries) => {
+  for (const en of entries) {
+    if (!en.isIntersecting) continue;
+    const img = en.target;
+    thumbObserver.unobserve(img);
+    img.onerror = () => { img.onerror = null; queueThumb(img); };
+    img.src = api("thumb", { path: img.dataset.model });
+  }
+}, { root: $("#model-list"), rootMargin: "200px" });
+
+// ---------- where is a model used? ----------
+async function showUsage() {
+  if (!previewPath) return setStatus(tr("Choose a model in the list first"));
+  const box = $("#usage-box");
+  box.classList.remove("hidden");
+  for (;;) {
+    const r = await (await fetch(api("usage", { model: previewPath }))).json();
+    if (r.state !== "ready") {
+      box.textContent = tr("Looking through all maps once … {0}/{1}").replace("{0}", r.done).replace("{1}", r.total);
+      await new Promise((ok) => setTimeout(ok, 1000));
+      continue;
+    }
+    box.textContent = "";
+    const head = document.createElement("div");
+    head.className = "hint";
+    head.textContent = tr("{0} used in {1} map(s):").replace("{0}", previewPath.split("/").pop()).replace("{1}", r.maps.length);
+    box.append(head);
+    for (const m of r.maps.slice(0, 200)) {
+      const a = document.createElement("div");
+      a.className = "usage-item";
+      a.textContent = m.replace("data/hd/env/preset/", "");
+      a.title = tr("Open this map");
+      a.addEventListener("click", () => openPreset(m));
+      box.append(a);
+    }
+    return;
+  }
+}
+$("#usage-btn").addEventListener("click", showUsage);
+
+// ---------- first start: a short tour ----------
+const TOUR = [
+  ["#pane-presets", "Maps: choose a map here. Recently opened maps come first; the project selector is at the top."],
+  ['[data-tab="models"]', "Models: search all HD models, see a preview, place them with a double-click, scatter, recolour or import your own."],
+  ["#viewport", "The view: left click selects, drag draws a box, right mouse turns, middle mouse pans, the wheel zooms. Right-click an object for its menu."],
+  [".mode.active", "Move, rotate and scale the selection with W, E and R, or with these buttons."],
+  ["#right", "Selection: position, rotation, size and many tools for the selected objects; below, game objects and the map."],
+  ["#btn-save", "Save the map (Ctrl+S). Unsaved work is also kept as a draft."],
+  ["#btn-export", "Export: checks the project and writes everything into the game as a mod (D2RLoader -mod <name>)."],
+  ["#btn-options", "Options: camera, grid, autosave, keyboard shortcuts and more. ? shows all keys."],
+];
+let tourStep = -1;
+function showTour(i) {
+  tourStep = i;
+  const box = $("#tour"), hl = $("#tour-hl");
+  if (i < 0 || i >= TOUR.length) { box.classList.add("hidden"); hl.classList.add("hidden"); localStorage.setItem("tourDone", "1"); return; }
+  const [sel, text] = TOUR[i];
+  const el = document.querySelector(sel);
+  const r = el ? el.getBoundingClientRect() : { left: innerWidth / 2 - 100, top: innerHeight / 2 - 50, width: 200, height: 100, right: innerWidth / 2 + 100, bottom: innerHeight / 2 + 50 };
+  Object.assign(hl.style, { left: `${r.left - 4}px`, top: `${r.top - 4}px`, width: `${r.width + 8}px`, height: `${r.height + 8}px` });
+  hl.classList.remove("hidden");
+  $("#tour-text").textContent = tr(text);
+  $("#tour-count").textContent = `${i + 1}/${TOUR.length}`;
+  $("#tour-next").textContent = tr(i === TOUR.length - 1 ? "Done" : "Next");
+  box.classList.remove("hidden");
+  const bw = box.offsetWidth, bh = box.offsetHeight;
+  let x = r.right + 12, y = r.top;
+  if (x + bw > innerWidth - 8) x = Math.max(8, r.left - bw - 12);
+  if (x < 8 || r.width > innerWidth * 0.5) { x = Math.min(innerWidth - bw - 8, Math.max(8, r.left + r.width / 2 - bw / 2)); y = r.bottom + 12; }
+  if (y + bh > innerHeight - 8) y = Math.max(8, r.top + 20);
+  Object.assign(box.style, { left: `${x}px`, top: `${y}px` });
+}
+$("#tour-next").addEventListener("click", () => showTour(tourStep + 1));
+$("#tour-skip").addEventListener("click", () => showTour(-1));
+if (!localStorage.getItem("tourDone")) setTimeout(() => showTour(0), 1500);

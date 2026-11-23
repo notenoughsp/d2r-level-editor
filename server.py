@@ -217,6 +217,68 @@ def _excel(name):
 _preset_index = None
 
 
+# ---------------------------------------------------------------- model thumbnails and usage
+def thumb_file(path):
+    return CACHE / "thumb" / (hashlib.sha1(path.lower().encode()).hexdigest()[:20] + ".webp")
+
+
+usage = {"state": "idle", "done": 0, "total": 0, "index": None}
+
+
+def build_usage_index():
+    """Which maps use which model (all game maps and the project's), built once in the background
+    and kept in the cache until the game is updated."""
+    cache = CACHE / "usage_index.json"
+    stamp = str(_build_info)
+    if cache.exists():
+        data = json.loads(cache.read_text(encoding="utf-8"))
+        if data.get("stamp") == stamp:
+            usage.update(state="ready", index=data["index"])
+            return
+    presets = [k for k in names if k.startswith("data/hd/env/preset/") and k.endswith(".json")]
+    usage.update(state="building", done=0, total=len(presets))
+    idx = {}
+    for k in presets:
+        try:
+            doc = json.loads(read_asset(k, original=True))
+        except Exception:  # noqa: BLE001
+            doc = {}
+        seen = set()
+        for e in doc.get("entities", []):
+            for c in e.get("components", []):
+                f = c.get("filename") if c.get("type") == "ModelDefinitionComponent" else None
+                if f:
+                    seen.add(f.lower())
+        for f in seen:
+            idx.setdefault(f, []).append(k)
+        usage["done"] += 1
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cache.write_text(json.dumps({"stamp": stamp, "index": idx}), encoding="utf-8")
+    usage.update(state="ready", index=idx)
+
+
+def model_usage(model):
+    if usage["state"] == "idle":
+        usage["state"] = "building"
+        threading.Thread(target=build_usage_index, daemon=True).start()
+    if usage["state"] != "ready":
+        return {"state": "building", "done": usage["done"], "total": usage["total"]}
+    key = model.lower()
+    maps = list(usage["index"].get(key, []))
+    pdir = PROJECT / "data/hd/env/preset"  # the project's maps are read fresh
+    for f in pdir.rglob("*.json") if pdir.exists() else []:
+        k = f.relative_to(PROJECT).as_posix()
+        try:
+            txt = f.read_text(encoding="utf-8").lower()
+        except Exception:  # noqa: BLE001
+            continue
+        if f'"{key}"' in txt and k not in maps:
+            maps.append(k)
+        elif f'"{key}"' not in txt and k in maps:
+            maps.remove(k)
+    return {"state": "ready", "maps": sorted(maps)}
+
+
 def preset_info(preset_path):
     """How the game uses a map piece, from lvlprest.txt: level-specific (unique) or a generic
     piece (LevelId 0) that random level generation can place many times."""
@@ -987,6 +1049,14 @@ class Handler(BaseHTTPRequestHandler):
                     self.send(200, json.loads(kit_file(q.get("name", "")).read_text(encoding="utf-8")))
                 except ValueError as e:
                     self.send(400, {"error": str(e)})
+            elif u.path == "/api/thumb":
+                f = thumb_file(q["path"])
+                if f.exists():
+                    self.send(200, f.read_bytes(), "image/webp")
+                else:
+                    self.send(404, {"error": "no thumbnail"})
+            elif u.path == "/api/usage":
+                self.send(200, model_usage(q["model"]))
             elif u.path == "/api/world":
                 self.send(200, world_state())
             elif u.path == "/api/projects":
@@ -1118,6 +1188,15 @@ class Handler(BaseHTTPRequestHandler):
                     KITS.mkdir(parents=True, exist_ok=True)
                     f.write_text(json.dumps(kit, ensure_ascii=False), encoding="utf-8")
                 self.send(200, list_kits())
+            elif u.path == "/api/thumb":
+                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                raw = base64.b64decode(body["data"].split(",", 1)[-1])
+                if len(raw) > 200_000:
+                    return self.send(400, {"error": "too large"})
+                f = thumb_file(q["path"])
+                f.parent.mkdir(parents=True, exist_ok=True)
+                f.write_bytes(raw)
+                self.send(200, {"saved": True})
             elif u.path in ("/api/world/spec", "/api/world/build"):
                 length = int(self.headers.get("Content-Length") or 0)
                 body = json.loads(self.rfile.read(length)) if length else {}

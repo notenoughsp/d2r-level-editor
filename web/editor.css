@@ -192,3 +192,14 @@ button.primary { background: #6b5527; border-color: #c7a35a; color: #fff; }
 #ctx-menu kbd { color: #888; font: 11px system-ui; }
 #ctx-menu hr { border: none; border-top: 1px solid #3a3326; margin: 3px 0; width: 100%; }
 body.no-tips [title] { pointer-events: auto; }
+
+#model-list li.with-thumb { display: flex; align-items: center; gap: 6px; padding: 2px 4px; }
+#model-list img.thumb { width: 40px; height: 40px; flex: none; background: #0c0b09; border: 1px solid #2a261f; object-fit: contain; }
+#model-list img.thumb.none { visibility: hidden; }
+#usage-btn { margin-top: 4px; width: 100%; }
+#usage-box { max-height: 160px; overflow-y: auto; font-size: 12px; margin-top: 4px; }
+.usage-item { padding: 2px 4px; cursor: pointer; color: #c8c0a8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.usage-item:hover { background: #2a261f; }
+#tour-hl { position: fixed; z-index: 40; border: 2px solid #ffd400; border-radius: 4px; box-shadow: 0 0 0 9999px rgba(0,0,0,.55); pointer-events: none; }
+#tour { position: fixed; z-index: 41; width: 320px; background: #16140f; border: 1px solid #c7a35a; padding: 10px 12px; line-height: 1.5; box-shadow: 0 6px 20px rgba(0,0,0,.6); }
+.tour-foot { display: flex; gap: 6px; align-items: center; margin-top: 8px; } .tour-foot span { flex: 1; color: #888; font-size: 12px; }
