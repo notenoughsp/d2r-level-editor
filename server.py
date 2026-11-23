@@ -616,7 +616,103 @@ def list_models(q, limit, own_only=False):
     return seen[:limit], len(seen)
 
 
-def export_mod(name):
+MODINFO = PROJECT.parent / "editor_state" / "modinfo.json"
+EXPORTS = PROJECT.parent / "exports"
+
+
+def read_modinfo():
+    info = {"name": "D2REditor", "title": "", "version": "0.1.0", "author": "", "description": "", "website": ""}
+    if MODINFO.exists():
+        info.update(json.loads(MODINFO.read_text(encoding="utf-8")))
+    return info
+
+
+def write_modinfo(body):
+    info = read_modinfo()
+    for k in info:
+        if k in body:
+            info[k] = str(body[k]).strip()[:2000 if k == "description" else 120]
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", info["name"]):
+        raise ValueError("Mod name: only letters, digits, _ and -")
+    MODINFO.parent.mkdir(parents=True, exist_ok=True)
+    MODINFO.write_text(json.dumps(info, indent=2, ensure_ascii=False), encoding="utf-8")
+    return info
+
+
+def project_check():
+    """Problems that would make the exported mod break or look wrong, found before the export."""
+    from collections import Counter
+    probs = []
+    pdir = PROJECT / "data/hd/env/preset"
+    files = sorted(pdir.rglob("*.json")) if pdir.exists() else []
+    if not files and not (PROJECT / "data").exists():
+        probs.append({"level": "warn", "text": "The project is empty: nothing to export yet."})
+    for f in files:
+        key = f.relative_to(PROJECT).as_posix()
+        short = key.replace("data/hd/env/preset/", "")
+        try:
+            doc = json.loads(f.read_text(encoding="utf-8"))
+        except Exception as e:  # noqa: BLE001
+            probs.append({"level": "error", "text": f"{short}: not valid JSON ({e})"})
+            continue
+        ents = doc.get("entities", [])
+        dups = [i for i, n in Counter(e.get("id") for e in ents).items() if n > 1]
+        if dups:
+            probs.append({"level": "error", "text": f"{short}: {len(dups)} object ID(s) used twice"})
+        try:
+            w, h = preset_size(key)
+        except Exception:  # noqa: BLE001
+            w = h = None
+        missing, outside = set(), 0
+        for e in ents:
+            comps = {c.get("type"): c for c in e.get("components", [])}
+            md = comps.get("ModelDefinitionComponent")
+            if md and md.get("filename"):
+                try:
+                    model_file(md["filename"], 0)
+                except FileNotFoundError:
+                    missing.add(md["filename"])
+            pf = comps.get("PrefabPlacementDefinitionComponent")
+            if pf and pf.get("prefab") and not known_file(pf["prefab"].lower()):
+                missing.add(pf["prefab"])
+            t = comps.get("TransformDefinitionComponent")
+            if w and t and not comps.get("TerrainDefinitionComponent"):
+                p = t.get("position", {})
+                if not (-30 <= p.get("x", 0) <= w * 10 + 30 and -30 <= p.get("z", 0) <= h * 10 + 30):
+                    outside += 1
+        for m in sorted(missing)[:5]:
+            probs.append({"level": "error", "text": f"{short}: missing model or prefab {m}"})
+        if len(missing) > 5:
+            probs.append({"level": "error", "text": f"{short}: {len(missing) - 5} more missing models"})
+        if outside:
+            probs.append({"level": "warn", "text": f"{short}: {outside} object(s) far outside the map"})
+    ddir = PROJECT.parent / "editor_state" / "drafts"
+    for d in sorted(ddir.glob("*.json")) if ddir.exists() else []:
+        probs.append({"level": "warn", "text": "Unsaved draft (not exported): " + d.stem.replace("__", "/").replace("data/hd/env/preset/", "")})
+    return {"problems": probs, "maps": len(files)}
+
+
+def make_upload_zip(name, mod, info):
+    """A zip with mods/<name>/ and a README, ready to upload (e.g. to Nexus Mods)."""
+    import zipfile
+    EXPORTS.mkdir(parents=True, exist_ok=True)
+    out = EXPORTS / f"{name}-{info.get('version') or '0.1.0'}.zip"
+    readme = "\n".join(x for x in [
+        info.get("title") or name, f"Version {info.get('version', '')}" + (f" by {info['author']}" if info.get("author") else ""),
+        "", info.get("description", ""), "",
+        "INSTALL", f"1. Copy the folder mods\\{name} into your Diablo II: Resurrected folder.",
+        f"2. Start the game with D2RLoader (https://d2rloader.net): D2RLoader.exe -mod {name}",
+        "", "Made with the D2R Level Editor: https://github.com/notenoughsp/d2r-level-editor",
+        info.get("website", "")] if x is not None)
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+        for p in sorted(mod.rglob("*")):
+            if p.is_file() and not p.name.endswith((".log", ".old")):
+                z.write(p, pathlib.Path("mods") / name / p.relative_to(mod))
+        z.writestr(f"README - {name}.txt", readme.replace("\n", "\r\n"))
+    return out
+
+
+def export_mod(name, info=None, make_zip=False):
     """Copy every edited file from project/ into <game>/mods/<name>/<name>.mpq/ as loose files.
 
     D2R loads loose files from a folder named <name>.mpq when started with -mod <name>.
@@ -679,10 +775,15 @@ def export_mod(name):
     meta = mod / "d2rloader" / "metadata.json"
     meta.parent.mkdir(parents=True, exist_ok=True)
     meta.write_text(json.dumps({"schemaVersion": 1, "d2rloader": {"version": "1.3.1-beta"},
-                                "metadata": {"name": name, "author": "D2R Level Editor", "modVersion": "0.1.0",
-                                             "description": "HD level edits made with the D2R level editor.",
-                                             "website": ""}}, indent=2))
-    return {"mod": str(mod), "files": len(files)}
+                                "metadata": {"name": (info or {}).get("title") or name,
+                                             "author": (info or {}).get("author") or "D2R Level Editor",
+                                             "modVersion": (info or {}).get("version") or "0.1.0",
+                                             "description": (info or {}).get("description") or "HD level edits made with the D2R level editor.",
+                                             "website": (info or {}).get("website") or ""}}, indent=2))
+    result = {"mod": str(mod), "files": len(files)}
+    if make_zip:
+        result["zip"] = str(make_upload_zip(name, mod, info or {}))
+    return result
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -716,6 +817,10 @@ class Handler(BaseHTTPRequestHandler):
                 self.static(WEB / "node_modules" / "three" / u.path[len("/three/"):])
             elif u.path == "/api/presets":
                 self.send(200, list_presets())
+            elif u.path == "/api/modinfo":
+                self.send(200, read_modinfo())
+            elif u.path == "/api/check":
+                self.send(200, project_check())
             elif u.path == "/api/edited":  # maps saved in the project (edited or new)
                 self.send(200, sorted(p.relative_to(PROJECT).as_posix() for p in (PROJECT / "data/hd/env/preset").rglob("*.json"))
                           if (PROJECT / "data/hd/env/preset").exists() else [])
@@ -810,10 +915,25 @@ class Handler(BaseHTTPRequestHandler):
                 except ValueError as e:
                     self.send(400, {"error": str(e)})
             elif u.path == "/api/export":
-                name = q.get("name", "D2REditor")
+                length = int(self.headers.get("Content-Length") or 0)
+                body = json.loads(self.rfile.read(length)) if length else {}
+                if body.get("info"):
+                    try:
+                        info = write_modinfo(body["info"])
+                    except ValueError as e:
+                        return self.send(400, {"error": str(e)})
+                    name = info["name"]
+                else:
+                    info, name = None, q.get("name", "D2REditor")
                 if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", name):
                     return self.send(400, {"error": "Mod name: only letters, digits, _ and -"})
-                self.send(200, export_mod(name))
+                self.send(200, export_mod(name, info, bool(body.get("zip"))))
+            elif u.path == "/api/reveal":
+                self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                EXPORTS.mkdir(parents=True, exist_ok=True)
+                import os as _os
+                _os.startfile(str(EXPORTS))  # noqa: S606 (fixed local folder)
+                self.send(200, {"opened": str(EXPORTS)})
             elif u.path == "/api/collision":
                 body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
                 self.send(200, edit_collision(ds1_for_preset(q["path"]), body.get("ops", [])))

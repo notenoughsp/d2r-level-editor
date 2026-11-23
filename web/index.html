@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>D2R Level Editor</title>
-<link rel="stylesheet" href="/web/editor.css?v=35">
+<link rel="stylesheet" href="/web/editor.css?v=36">
 <script type="importmap">
 { "imports": { "three": "/three/build/three.module.js", "three/addons/": "/three/examples/jsm/" } }
 </script>
@@ -151,8 +151,26 @@
   </div>
 </div>
 <div id="undo-menu" class="hidden"></div>
+<div id="export-dialog" class="dialog hidden"><div class="dialog-box">
+  <div class="modal-head"><span>Export the mod</span></div>
+  <div class="dialog-body">
+    <div class="ex-grid">
+      <label>Folder name (mods\…) <input id="ex-name" maxlength="40"></label>
+      <label>Version <input id="ex-version" maxlength="20" placeholder="1.0.0"></label>
+      <label>Title <input id="ex-title" maxlength="120" placeholder="e.g. A greener Rogue Encampment"></label>
+      <label>Author <input id="ex-author" maxlength="120"></label>
+      <label class="wide">Description <textarea id="ex-description" rows="3"></textarea></label>
+      <label class="wide">Website <input id="ex-website" maxlength="120" placeholder="https://…"></label>
+    </div>
+    <label class="check-line"><input type="checkbox" id="ex-zip" checked> Also make a zip for uploading (e.g. Nexus Mods), with an install README</label>
+    <div class="ex-head">Check <button id="ex-recheck">Check again</button></div>
+    <div id="ex-check"></div>
+    <pre id="ex-result"></pre>
+  </div>
+  <div class="dialog-foot"><button id="ex-open" class="hidden">Open the zip folder</button><span class="spacer"></span><button id="ex-cancel">Cancel</button><button id="ex-go" class="primary">Export</button></div>
+</div></div>
 <div id="statusbar"><span id="status"></span><span id="hover-info" title="Object under the mouse"></span><span id="sel-info"></span><span id="cursor-pos"></span></div>
 <div id="modal" class="hidden"><div class="modal-box"><div class="modal-head"><span id="modal-title"></span><button id="modal-close">Close</button></div><pre id="modal-body"></pre></div></div>
-<script type="module" src="/web/editor.js?v=48"></script>
+<script type="module" src="/web/editor.js?v=50"></script>
 </body>
 </html>

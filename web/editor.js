@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { initI18n, locale, tr } from "./i18n.js?v=16";
+import { initI18n, locale, tr } from "./i18n.js?v=17";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -1663,19 +1663,65 @@ $("#btn-undo").addEventListener("click", undo);
 $("#btn-redo").addEventListener("click", redo);
 $("#btn-top").addEventListener("click", toggleTopView);
 $("#btn-test").addEventListener("click", startTest);
-$("#btn-export").addEventListener("click", async () => {
-  if (dirty && !confirm("The current map has unsaved changes. Export anyway (saved work only)?")) return;
-  const name = askModName();
-  if (!name) return;
-  const r = await postJSON("export", { name });
-  setStatus(r.ok ? `Exported: ${r.data.files} file(s) to ${r.data.mod}` : `Export failed: ${r.data.error}`);
+// ---------- export dialog: mod info, check, optional upload zip ----------
+const EXPORT_FIELDS = ["name", "title", "version", "author", "description", "website"];
+async function runCheck() {
+  const box = $("#ex-check");
+  box.textContent = tr("Checking …");
+  const r = await (await fetch(api("check"))).json();
+  const probs = [...r.problems];
+  if (dirty) probs.unshift({ level: "warn", text: tr("The open map has unsaved changes (only saved work is exported)") });
+  box.textContent = "";
+  if (!probs.length) {
+    box.innerHTML = `<div class="ok">✓ ${tr("No problems found")} (${tr("{0} edited map(s)").replace("{0}", r.maps)})</div>`;
+  }
+  for (const p of probs) {
+    const d = document.createElement("div");
+    d.className = p.level;
+    const icon = document.createElement("span");
+    icon.textContent = p.level === "error" ? "✗ " : "! ";
+    const text = document.createElement("span");
+    text.textContent = p.text;  // own node, so the language module can translate it
+    d.append(icon, text);
+    box.append(d);
+  }
+  return probs;
+}
+async function openExport() {
+  const info = await (await fetch(api("modinfo"))).json();
+  for (const k of EXPORT_FIELDS) $("#ex-" + k).value = info[k] || "";
+  if (!info.name || info.name === "D2REditor") $("#ex-name").value = localStorage.getItem("modName") || info.name || "D2REditor";
+  $("#ex-result").textContent = "";
+  $("#export-dialog").classList.remove("hidden");
+  runCheck();
+}
+$("#btn-export").addEventListener("click", openExport);
+$("#ex-cancel").addEventListener("click", () => $("#export-dialog").classList.add("hidden"));
+$("#ex-recheck").addEventListener("click", runCheck);
+$("#ex-open").addEventListener("click", () => postJSON("reveal"));
+$("#ex-go").addEventListener("click", async () => {
+  const errors = [...document.querySelectorAll("#ex-check .error")].length;
+  if (errors && !confirm(tr("The check found {0} error(s). Export anyway?").replace("{0}", errors))) return;
+  const infoBody = Object.fromEntries(EXPORT_FIELDS.map((k) => [k, $("#ex-" + k).value]));
+  localStorage.setItem("modName", infoBody.name);
+  $("#ex-go").disabled = true;
+  $("#ex-result").textContent = tr("Exporting …");
+  try {
+    const r = await postJSON("export", {}, { info: infoBody, zip: $("#ex-zip").checked });
+    if (!r.ok) { $("#ex-result").textContent = tr("Export failed: {0}").replace("{0}", r.data.error); return; }
+    let msg = tr("Exported: {0} file(s) to {1}").replace("{0}", r.data.files).replace("{1}", r.data.mod);
+    if (r.data.zip) msg += "\n" + tr("Zip for uploading: {0}").replace("{0}", r.data.zip);
+    $("#ex-result").textContent = msg;
+    $("#ex-open").classList.toggle("hidden", !r.data.zip);
+    setStatus(tr("Exported: {0} file(s) to {1}").replace("{0}", r.data.files).replace("{1}", r.data.mod));
+  } finally { $("#ex-go").disabled = false; }
 });
 
 window.addEventListener("keydown", (e) => {
   const t = e.target;
   if (t && (["INPUT", "SELECT", "TEXTAREA", "BUTTON"].includes(t.tagName) || t.isContentEditable)) return;
   if (e.altKey || e.metaKey) return;
-  if (!$("#modal").classList.contains("hidden") && e.key !== "Escape") return;  // a dialog is open
+  if ((!$("#modal").classList.contains("hidden") || !$("#export-dialog").classList.contains("hidden")) && e.key !== "Escape") return;  // a dialog is open
   const ev = e;
   if (ev.key.length === 1) e = { key: ev.key.toLowerCase(), ctrlKey: ev.ctrlKey, shiftKey: ev.shiftKey, preventDefault: () => ev.preventDefault() };
   if (e.ctrlKey && e.key === "s") { e.preventDefault(); save(); }
@@ -1701,6 +1747,7 @@ window.addEventListener("keydown", (e) => {
   else if (e.key === "Delete") { if (gameSel) deleteGameObject(gameSel.userData.gameIndex); else removeSelected(); }
   else if (e.key === "o") addGameObject(cursorGround ? cursorGround.clone() : null);
   else if (e.key === "Escape" && measuring) toggleRuler();
+  else if (e.key === "Escape" && !$("#export-dialog").classList.contains("hidden")) $("#export-dialog").classList.add("hidden");
   else if (e.key === "Escape") { selectGameObject(null); select([]); $("#modal").classList.add("hidden"); }
   else if (e.ctrlKey && e.key === "c") { e.preventDefault(); copySelection(); }
   else if (e.ctrlKey && e.key === "v") { e.preventDefault(); paste(); }
