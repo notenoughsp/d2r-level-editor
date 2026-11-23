@@ -1,0 +1,52 @@
+# Uploads the release zip to Nexus Mods as a new version of the editor's main file.
+#
+# Runs when a GitHub release is published (or by hand with a tag). Needs, in the repository
+# settings (Settings > Secrets and variables > Actions):
+#   secret   NEXUSMODS_API_KEY  your key from https://www.nexusmods.com/settings/api-keys
+#   variable NEXUS_FILE_ID      the ID of the main file on the mod page (Files tab, "Advanced")
+#   variable NEXUS_MOD_ID       optional: the mod's ID, for the changelog entry
+# Without NEXUS_FILE_ID the job is skipped. The file must already exist on Nexus (first upload by hand).
+name: Upload to Nexus Mods
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to upload, e.g. v0.3.1
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  nexus:
+    if: vars.NEXUS_FILE_ID != ''
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - name: Download the release zip
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "D2R-Level-Editor-*.zip"
+          ls -l D2R-Level-Editor-*.zip
+          echo "ZIP=$(ls D2R-Level-Editor-*.zip | head -n 1)" >> "$GITHUB_ENV"
+          echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
+
+      - name: Upload to Nexus Mods
+        uses: Nexus-Mods/upload-action@98532f7670c27cbecc78fae03fa3e278147827e2 # v1.0.0-beta.11
+        with:
+          api_key: ${{ secrets.NEXUSMODS_API_KEY }}
+          file_id: ${{ vars.NEXUS_FILE_ID }}
+          filename: ${{ env.ZIP }}
+          version: ${{ env.VERSION }}
+          display_name: D2R Level Editor ${{ env.VERSION }}
+          description: Portable editor, unpack and start D2REditor.exe. Contains no game data.
+          category: main
+          archive_existing_version: true
+          update_mod_version: true
+          mod_id: ${{ vars.NEXUS_MOD_ID }}
+          changelog: ${{ vars.NEXUS_MOD_ID != '' && format('See https://github.com/{0}/releases/tag/{1}', github.repository, env.TAG) || '' }}
