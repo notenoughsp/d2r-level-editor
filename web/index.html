@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>D2R Level Editor</title>
-<link rel="stylesheet" href="/web/editor.css?v=43">
+<link rel="stylesheet" href="/web/editor.css?v=44">
 <script type="importmap">
 { "imports": { "three": "/three/build/three.module.js", "three/addons/": "/three/examples/jsm/" } }
 </script>
@@ -48,6 +48,7 @@
   <select id="brush" title="Collision brush size ([ and ])"><option value="1">1×1</option><option value="3">3×3</option><option value="5">5×5</option></select>
   <label>LOD <select id="lod"><option>0</option><option selected>1</option><option>2</option></select></label>
   <span class="sep"></span>
+  <button id="btn-loot" title="Loot: what chests, bosses and monsters drop (treasure classes)">Loot</button>
   <button id="btn-acts" title="New areas, bosses with their loot and the quest chain of an act (needs d2r-world-mods)">Acts</button>
   <button id="btn-export" title="Write all saved maps into the game folder as a mod">Export</button>
   <button id="btn-test" title="Export and test automatically in the game (second monitor, muted)">Test in game</button>
@@ -67,18 +68,18 @@
       <div class="prop-buttons"><button id="preset-new" title="A copy of the open map under a new name, optionally empty, e.g. for a new area">New map …</button></div>
       <input id="preset-filter" placeholder="Search maps, e.g. act1/town" title="↑/↓: walk the list · Enter: open the map">
       <label class="check-line"><input type="checkbox" id="preset-edited"> Only maps edited in this project</label>
-      <ul id="preset-list" class="list"></ul>
+      <ul id="preset-list" class="list" translate="no"></ul>
     </div>
     <div class="pane hidden" id="pane-objects">
       <input id="object-filter" placeholder="Search objects of the map, e.g. palisade, light" title="Click: select · double-click: fly to the object">
       <div class="row-line"><select id="group-select" title="Groups of this map: choose one to select its objects"></select><button id="group-save" title="Ctrl+G: save the selection as a group">Save as group</button><button id="group-del" title="Delete the group (the objects stay)" disabled>✕</button></div>
       <div class="row-line"><span id="object-count"></span><button id="object-select-all" title="Select every object in the list (use the search to narrow it down, e.g. tree)">Select all in the list</button></div>
-      <ul id="object-list" class="list"></ul>
+      <ul id="object-list" class="list" translate="no"></ul>
     </div>
     <div class="pane hidden" id="pane-kits">
       <div class="npc-help">Building kits are groups of objects you saved (e.g. a camp with torches). They work in every map and project: double-click or "Place" puts one at the mouse cursor or the view centre.</div>
       <div class="prop-buttons"><button id="kit-save" title="Save the selected objects as a kit">Save the selection as a kit</button></div>
-      <ul id="kit-list" class="list"></ul>
+      <ul id="kit-list" class="list" translate="no"></ul>
       <div class="prop-buttons"><button id="kit-place">Place</button><button id="kit-del">Delete</button></div>
     </div>
     <div class="pane hidden" id="pane-npcs">
@@ -106,7 +107,7 @@
         <option value="env/model/act4">Act 4</option><option value="env/model/expansion">Act 5</option><option value="env/model/global">Global</option>
         <option value="env/foliage">Plants</option><option value="objects/">Game objects</option><option value="character/">Characters</option><option value="__own">Own models (imported, recoloured)</option></select>
       <div id="model-count"></div>
-      <ul id="model-list" class="list"></ul>
+      <ul id="model-list" class="list" translate="no"></ul>
       <div id="preview-box">
         <canvas id="preview"></canvas>
         <button id="fav-btn" title="Favourite: keep this model in the Favourites list">☆</button>
@@ -183,6 +184,15 @@
 </div>
 <div id="undo-menu" class="hidden"></div>
 <div id="ctx-menu" class="hidden"></div>
+<datalist id="tc-names"></datalist>
+<div id="loot-dialog" class="dialog hidden"><div class="dialog-box wide-box">
+  <div class="modal-head"><span>Loot (treasure classes)</span></div>
+  <div class="dialog-body loot-body">
+    <div class="loot-left"><input id="lt-q" placeholder="Search, e.g. Chest, Act 5, Baal"><ul id="lt-list" class="list" translate="no"></ul></div>
+    <div class="loot-right"><div class="hint">Chests drop from "Act N Chest A/B/C" (N: act, (N)/(H): Nightmare/Hell), chosen by the act and the area level; one change is for every chest of that act. Bosses and monsters use their own treasure classes (in the act editor a boss drops like the monster under "Loot like").</div><div id="lt-form"></div></div>
+  </div>
+  <div class="dialog-foot"><button id="lt-reset" disabled>Back to the game's</button><span class="spacer"></span><button id="lt-close">Close</button><button id="lt-save" class="primary" disabled>Save</button></div>
+</div></div>
 <div id="mods-dialog" class="dialog hidden"><div class="dialog-box">
   <div class="modal-head"><span>Combine two mods</span></div>
   <div class="dialog-body">
@@ -228,6 +238,6 @@
 </div></div>
 <div id="statusbar"><span id="status"></span><span id="hover-info" title="Object under the mouse"></span><span id="sel-info"></span><span id="cursor-pos"></span></div>
 <div id="modal" class="hidden"><div class="modal-box"><div class="modal-head"><span id="modal-title"></span><button id="modal-close">Close</button></div><pre id="modal-body"></pre></div></div>
-<script type="module" src="/web/editor.js?v=64"></script>
+<script type="module" src="/web/editor.js?v=66"></script>
 </body>
 </html>

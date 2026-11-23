@@ -958,6 +958,81 @@ def act_test():
     return {"started": True, "areas": len(ids), "mod": name}
 
 
+# ---------------------------------------------------------------- loot (treasure classes)
+TC_FIELDS = ["Picks", "Unique", "Set", "Rare", "Magic", "NoDrop"] + [f"{k}{i}" for i in range(1, 11) for k in ("Item", "Prob")]
+TC_BANKS = ("data/global/excel/treasureclassex.txt", "data/global/excel/base/treasureclassex.txt")
+
+
+def tc_rows(path):
+    raw = read_asset(path).decode("latin1")
+    nl = "\r\n" if "\r\n" in raw else "\n"
+    rows = [r.split("\t") for r in raw.split(nl)]
+    while rows and rows[-1] == [""]:
+        rows.pop()
+    return rows, nl
+
+
+def loot_list(q):
+    rows, _ = tc_rows(TC_BANKS[0])
+    names = [r[0] for r in rows[1:] if r and r[0]]
+    ql = q.lower()
+    return [n for n in names if ql in n.lower()][:300]
+
+
+def loot_get(name):
+    rows, _ = tc_rows(TC_BANKS[0])
+    h = rows[0]
+    r = next((r for r in rows[1:] if r and r[0] == name), None)
+    if r is None:
+        raise ValueError(f"No treasure class {name}")
+    orig, _ = tc_rows_original()
+    o = next((x for x in orig[1:] if x and x[0] == name), None)
+    return {"name": name, "fields": {k: (r[h.index(k)] if h.index(k) < len(r) else "") for k in TC_FIELDS},
+            "changed": o is not None and o != r}
+
+
+def tc_rows_original():
+    raw = read_asset(TC_BANKS[0], original=True).decode("latin1")
+    nl = "\r\n" if "\r\n" in raw else "\n"
+    return [r.split("\t") for r in raw.split(nl)], nl
+
+
+def loot_save(name, fields, reset=False):
+    """Change one treasure class in both table sets of the project (or put it back)."""
+    known = {r[0] for r in tc_rows(TC_BANKS[0])[0][1:] if r and r[0]}
+    for k in range(1, 11):
+        item = str(fields.get(f"Item{k}", "")).strip()
+        if item and item not in known and not re.fullmatch(r"[a-z0-9]{3,4}|gld(,mul=\d+)?", item):
+            raise ValueError(f"Unknown entry {item}: a treasure class name or an item code (e.g. gld, r33, cap)")
+    for bank in TC_BANKS:
+        try:
+            rows, nl = tc_rows(bank)
+            orig = read_asset(bank, original=True).decode("latin1").split(nl)
+        except FileNotFoundError:
+            continue
+        h = rows[0]
+        for r in rows[1:]:
+            if r and r[0] == name:
+                if reset:
+                    o = next((x.split("\t") for x in orig if x.split("\t")[0] == name), None)
+                    if o:
+                        r[:] = o
+                else:
+                    r += [""] * (len(h) - len(r))
+                    for k in TC_FIELDS:
+                        v = str(fields.get(k, "")).strip()
+                        if k.startswith("Prob") or k in ("Picks", "Unique", "Set", "Rare", "Magic", "NoDrop"):
+                            if v and not re.fullmatch(r"-?\d{1,6}", v):
+                                raise ValueError(f"{k}: a whole number")
+                        r[h.index(k)] = v
+        data = (nl.join("\t".join(r) for r in rows) + nl).encode("latin1")
+        if data == read_asset(bank, original=True):
+            (PROJECT / bank).unlink(missing_ok=True)
+        else:
+            write_project(bank, data)
+    return loot_get(name)
+
+
 def current_project():
     return CURRENT_PROJECT.read_text(encoding="utf-8").strip() if CURRENT_PROJECT.exists() else "Default"
 
@@ -1236,6 +1311,11 @@ class Handler(BaseHTTPRequestHandler):
                 self.send(200, {**info, "size": [w, h]})
             elif u.path == "/api/stamps":  # ground stamp masks of the game
                 self.send(200, sorted(k for k in names if k.startswith("data/hd/env/texture/terrain/stamp/") and k.endswith(".texture")))
+            elif u.path == "/api/loot":
+                try:
+                    self.send(200, loot_get(q["name"]) if q.get("name") else loot_list(q.get("q", "")))
+                except ValueError as e:
+                    self.send(400, {"error": str(e)})
             elif u.path == "/api/play":
                 self.send(200, {**play_state, "test": act_test_state})
             elif u.path == "/api/world":
@@ -1400,6 +1480,12 @@ class Handler(BaseHTTPRequestHandler):
                         self.send(200, act_test())
                     else:
                         self.send(200, play_here(body.get("path", ""), float(body.get("x", 0)), float(body.get("z", 0))))
+                except ValueError as e:
+                    self.send(400, {"error": str(e)})
+            elif u.path == "/api/loot":
+                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                try:
+                    self.send(200, loot_save(body["name"], body.get("fields", {}), bool(body.get("reset"))))
                 except ValueError as e:
                     self.send(400, {"error": str(e)})
             elif u.path == "/api/newmap":

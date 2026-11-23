@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { initI18n, locale, tr } from "./i18n.js?v=30";
+import { initI18n, locale, tr } from "./i18n.js?v=33";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -1815,7 +1815,7 @@ function renderPresets() {
   const recent = f ? [] : recentMaps().filter((p) => presets.includes(p));
   if (recent.length) {
     const head = document.createElement("li");
-    head.className = "list-head";
+    head.className = "list-head"; head.setAttribute("translate", "yes");
     head.textContent = "Recently opened";
     ul.appendChild(head);
     for (const p of recent) {
@@ -1827,7 +1827,7 @@ function renderPresets() {
       ul.appendChild(li);
     }
     const all = document.createElement("li");
-    all.className = "list-head";
+    all.className = "list-head"; all.setAttribute("translate", "yes");
     all.textContent = "All maps";
     ul.appendChild(all);
   }
@@ -2871,7 +2871,7 @@ async function loadKits() {
   ul.textContent = "";
   if (!kits.length) {
     const li = document.createElement("li");
-    li.className = "list-head";
+    li.className = "list-head"; li.setAttribute("translate", "yes");
     li.textContent = "No kits yet: select objects in a map and save them as a kit.";
     ul.append(li);
   }
@@ -3754,3 +3754,55 @@ window.addEventListener("pointerup", async () => {
 });
 $("#st-brush").addEventListener("click", toggleStampBrush);
 $("#st-box").addEventListener("toggle", () => { if ($("#st-box").open) loadStampMasks(); });
+
+// ---------- loot: treasure classes (chests, bosses, monsters) ----------
+let lootName = null;
+async function lootSearch() {
+  const list = await (await fetch(api("loot", { q: $("#lt-q").value }))).json();
+  const ul = $("#lt-list");
+  ul.textContent = "";
+  for (const n of list) {
+    const li = document.createElement("li");
+    li.textContent = n;
+    li.classList.toggle("active", n === lootName);
+    li.onclick = () => lootOpen(n);
+    ul.append(li);
+  }
+}
+async function lootOpen(name) {
+  lootName = name;
+  const r = await (await fetch(api("loot", { name }))).json();
+  if (r.error) return setStatus(r.error);
+  document.querySelectorAll("#lt-list li").forEach((li) => li.classList.toggle("active", li.textContent === name));
+  const f = r.fields, box = $("#lt-form");
+  const num = (k, label, title) => `<label title="${title || ""}">${tr(label)} <input data-tc="${k}" value="${f[k] || ""}"></label>`;
+  let html = `<h4><span translate="no">${name}</span>${r.changed ? ` <span class="changed">(${tr("changed")})</span>` : ""}</h4><div class="tc-grid">` +
+    num("Picks", "Picks", tr("How many times the list is drawn (negative: every entry its Prob times)")) + num("NoDrop", "Nothing (weight)") +
+    num("Unique", "Unique (per mille)") + num("Set", "Set (per mille)") + num("Rare", "Rare (per mille)") + num("Magic", "Magic (per mille)") + "</div>" +
+    `<table class="act-table"><tr><th>${tr("Entry (treasure class or item code)")}</th><th>${tr("Weight")}</th></tr>`;
+  for (let i = 1; i <= 10; i++) html += `<tr><td><input data-tc="Item${i}" list="tc-names" value="${f["Item" + i] || ""}"></td><td><input data-tc="Prob${i}" value="${f["Prob" + i] || ""}"></td></tr>`;
+  box.innerHTML = html + "</table>";
+  $("#lt-save").disabled = $("#lt-reset").disabled = false;
+}
+$("#lt-q").addEventListener("input", () => { clearTimeout(lootSearch.t); lootSearch.t = setTimeout(lootSearch, 250); });
+$("#lt-save").addEventListener("click", async () => {
+  const fields = Object.fromEntries([...document.querySelectorAll("[data-tc]")].map((i) => [i.dataset.tc, i.value]));
+  const r = await postJSON("loot", {}, { name: lootName, fields });
+  setStatus(r.ok ? tr("Loot {0} saved; it goes into the mod with the export").replace("{0}", lootName) : tr("Not saved: {0}").replace("{0}", r.data.error));
+  if (r.ok) lootOpen(lootName);
+});
+$("#lt-reset").addEventListener("click", async () => {
+  if (!confirm(tr("Put {0} back as in the game?").replace("{0}", lootName))) return;
+  await postJSON("loot", {}, { name: lootName, reset: true });
+  lootOpen(lootName);
+});
+$("#btn-loot").addEventListener("click", async () => {
+  $("#loot-dialog").classList.remove("hidden");
+  if (!$("#tc-names").options.length) {
+    const all = await (await fetch(api("loot", { q: "" }))).json();
+    $("#tc-names").innerHTML = all.map((n) => `<option value="${n.replace(/"/g, "&quot;")}">`).join("");
+  }
+  if (!$("#lt-q").value) $("#lt-q").value = "Chest";
+  lootSearch();
+});
+$("#lt-close").addEventListener("click", () => $("#loot-dialog").classList.add("hidden"));

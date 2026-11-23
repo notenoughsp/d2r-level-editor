@@ -212,3 +212,11 @@ body.no-tips [title] { pointer-events: auto; }
 .map-tab button { border: none; background: none; padding: 0 4px; color: #888; font-size: 11px; }
 .map-tab button:hover { color: #fff; }
 #mm-result { white-space: pre-wrap; font-size: 12px; color: #ddd; max-height: 260px; overflow-y: auto; }
+
+.loot-body { display: flex; gap: 12px; min-height: 420px; }
+.loot-left { width: 280px; display: flex; flex-direction: column; } .loot-left input { margin-bottom: 6px; }
+.loot-left .list { max-height: 60vh; }
+.loot-right { flex: 1; min-width: 0; }
+.tc-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 10px; margin: 6px 0; }
+.tc-grid label { display: flex; flex-direction: column; color: #bbb; font-size: 12px; }
+.changed { color: #c7a35a; font-size: 12px; }

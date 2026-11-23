@@ -477,6 +477,27 @@ const DE = {
   "Open a map and choose a mask first": "Erst eine Karte öffnen und eine Maske wählen",
   "{0} ground stamp(s) placed": "{0} Boden-Stempel gesetzt",
   "Show ground stamps with their ground layers (needs reopening the map)": "Boden-Stempel mit ihren Bodenschichten zeigen (Karte neu öffnen)",
+  "Loot": "Beute",
+  "Loot: what chests, bosses and monsters drop (treasure classes)": "Beute: was Truhen, Bosse und Monster fallen lassen (Schatzklassen)",
+  "Loot (treasure classes)": "Beute (Schatzklassen)",
+  "Search, e.g. Chest, Act 5, Baal": "Suchen, z. B. Chest, Act 5, Baal",
+  "Chests drop from \"Act N Chest A/B/C\" (N: act, (N)/(H): Nightmare/Hell), chosen by the act and the area level; one change is for every chest of that act. Bosses and monsters use their own treasure classes (in the act editor a boss drops like the monster under \"Loot like\").": "Truhen lassen aus \"Act N Chest A/B/C\" fallen (N: Akt, (N)/(H): Albtraum/Hölle), gewählt nach Akt und Gebietslevel; eine Änderung gilt für jede Truhe dieses Akts. Bosse und Monster haben eigene Schatzklassen (im Akt-Editor droppt ein Boss wie das Monster unter \"Beute wie\").",
+  "Back to the game's": "Zurück zum Original",
+  "changed": "geändert",
+  "Picks": "Ziehungen",
+  "Nothing (weight)": "Nichts (Gewicht)",
+  "How many times the list is drawn (negative: every entry its Prob times)": "Wie oft aus der Liste gezogen wird (negativ: jeder Eintrag so oft wie sein Gewicht)",
+  "Unique (per mille)": "Einzigartig (Promille)",
+  "Set (per mille)": "Set (Promille)",
+  "Rare (per mille)": "Selten (Promille)",
+  "Magic (per mille)": "Magisch (Promille)",
+  "Entry (treasure class or item code)": "Eintrag (Schatzklasse oder Gegenstandscode)",
+  "Weight": "Gewicht",
+  "Loot {0} saved; it goes into the mod with the export": "Beute {0} gespeichert; kommt mit dem Export in den Mod",
+  "Put {0} back as in the game?": "{0} wieder wie im Spiel machen?",
+  "Unknown entry {0}: a treasure class name or an item code (e.g. gld, r33, cap)": "Unbekannter Eintrag {0}: ein Schatzklassen-Name oder ein Gegenstandscode (z. B. gld, r33, cap)",
+  "{0}: a whole number": "{0}: eine ganze Zahl",
+  "No treasure class {0}": "Keine Schatzklasse {0}",
   // messages from the editor server
   "Size does not match: {0} instead of {1} tiles": "Größe passt nicht: {0} statt {1} Kacheln",
   "The game objects of this DS1 file cannot be edited.": "Die Objekte dieser DS1-Datei können nicht bearbeitet werden.",
@@ -702,6 +723,7 @@ function translateNode(node) {
   if (node.nodeType === Node.TEXT_NODE) {
     const p = node.parentNode;
     if (!p || p.nodeName === "SCRIPT" || p.nodeName === "STYLE") return;
+    if (p.closest && p.closest("[translate]")?.getAttribute("translate") === "no") return;  // game data (names of tables, files) stays as it is
     let en = origText.get(node);
     if (en === undefined || !known(node.nodeValue, en)) en = node.nodeValue;  // text set by the editor
     origText.set(node, en);
