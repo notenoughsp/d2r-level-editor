@@ -117,6 +117,12 @@ statue next to the original stone one. `<tag>` is four letters or digits.
   of the lower-case path, bounds, LOD data; sorted 44-byte entries, RVA 0xF75C60/0xF75AF0). The
   copy gets an entry copied from the original model; the project keeps its own copy of that file.
 
+`material <colour map> [repeat]` puts a tiling material on a model, for example a CC0 colour
+map from [ambientCG](https://ambientcg.com) (licence: CC0 1.0, free for any use, no credit
+needed). The picture is repeated over the texture and keeps the original's light and shadow.
+Tested 2026-11-23 with Marble006, Ice002, Metal034, Lava004, Moss002, Rock035, PavingStones092
+and Ground054 on statues and pillars ([screenshot](cc0-example.png)).
+
 Tested 2026-11-23 in the act 1 town: a gold and a blue-green marble statue and a red pillar show
 next to the originals ([screenshot](retexture-example.png)). A copy of the act 1 barrel stack
 (13 textures) did not show; the cause is not known yet.

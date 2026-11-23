@@ -15,6 +15,8 @@ the section table on) is written new.
 
   python -I tools/retexture.py <model path> <tag> tint <r> <g> <b> [strength]
   python -I tools/retexture.py <model path> <tag> image <picture.png>
+  python -I tools/retexture.py <model path> <tag> material <colour map.jpg> [repeat]
+(material: a tiling material such as a CC0 colour map, shaded with the original's light and shadow)
 (model path as in a preset, e.g. data/hd/env/model/act1/.../l_barrel01.model; the result goes
 into the editor project as <name>_<tag>.model)
 """
@@ -108,6 +110,24 @@ def new_texture_path(path, tag):
     if len(name) < len(".texture") + 8:
         raise ValueError(f"texture name too short to tag: {path}")
     return "data/hd/env/tx_" + tag + folder + "/" + tag + name[4:]
+
+
+def material(image, picture, repeat=2, keep=0.7):
+    """A tiling material picture (e.g. a CC0 colour map) on the model: the picture is repeated
+    over the texture and darkened where the original is dark (keep = how much of the original's
+    light and shadow stays), so the model's carved and painted detail still shows."""
+    import numpy as np
+    from PIL import Image
+    a = np.asarray(image.convert("RGBA")).astype(np.float32) / 255
+    w, h = image.size
+    tile = picture.convert("RGB").resize((max(1, w // repeat), max(1, h // repeat)), Image.LANCZOS)
+    t = np.asarray(tile).astype(np.float32) / 255
+    t = np.tile(t, (repeat + 1, repeat + 1, 1))[:h, :w]
+    lum = a[..., :3] @ np.array([0.299, 0.587, 0.114], dtype=np.float32)
+    shade = lum / max(1e-3, float(lum[a[..., 3] > 0.1].mean()) if (a[..., 3] > 0.1).any() else 0.5)
+    shade = np.clip((1 - keep) + keep * shade, 0, 2)
+    a[..., :3] = np.clip(t * shade[..., None], 0, 1)
+    return Image.fromarray((a * 255 + 0.5).astype(np.uint8), "RGBA")
 
 
 def tinted(image, rgb, strength=0.85):
@@ -239,6 +259,11 @@ def main():
         from PIL import Image
         picture = Image.open(sys.argv[4]).convert("RGBA")
         make = lambda img, _p: picture.resize(img.size)  # noqa: E731
+    elif mode == "material":
+        from PIL import Image
+        picture = Image.open(sys.argv[4])
+        repeat = int(sys.argv[5]) if len(sys.argv) > 5 else 2
+        make = lambda img, _p: material(img, picture, repeat)  # noqa: E731
     else:
         sys.exit(__doc__)
 
