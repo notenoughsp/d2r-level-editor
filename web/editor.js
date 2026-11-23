@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { initI18n, locale, tr } from "./i18n.js?v=20";
+import { initI18n, locale, tr } from "./i18n.js?v=21";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -1526,8 +1526,8 @@ function copySelection() {
   localStorage.setItem("d2r-clipboard", JSON.stringify({ anchor: [anchor.x, anchor.y, anchor.z], items }));
   setStatus(`${items.length} object(s) copied`);
 }
-async function paste() {
-  const clip = JSON.parse(localStorage.getItem("d2r-clipboard") || "null");
+async function paste(fromKit = null) {
+  const clip = fromKit || JSON.parse(localStorage.getItem("d2r-clipboard") || "null");
   if (!clip || !doc) return setStatus("The clipboard is empty");
   beginEdit();
   const target = cursorGround ? cursorGround.clone() : orbit.target.clone();
@@ -1630,7 +1630,8 @@ setInterval(async () => {
 // ---------- UI wiring ----------
 document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => {
   document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("active", x === b));
-  for (const t of ["presets", "models", "objects", "npcs"]) $("#pane-" + t).classList.toggle("hidden", b.dataset.tab !== t);
+  for (const t of ["presets", "models", "objects", "npcs", "kits"]) $("#pane-" + t).classList.toggle("hidden", b.dataset.tab !== t);
+  if (b.dataset.tab === "kits") loadKits();
   if (b.dataset.tab === "npcs") loadNpcs();
 }));
 
@@ -2827,3 +2828,53 @@ async function addLight() {
   setStatus(tr("Point light added: change its colour and reach under Selection"));
 }
 $("#add-light").addEventListener("click", addLight);
+
+// ---------- building kits: saved groups of objects to place in any map ----------
+let kitSel = null;
+async function loadKits() {
+  const kits = await (await fetch(api("kits"))).json();
+  const ul = $("#kit-list");
+  ul.textContent = "";
+  if (!kits.length) {
+    const li = document.createElement("li");
+    li.className = "list-head";
+    li.textContent = "No kits yet: select objects in a map and save them as a kit.";
+    ul.append(li);
+  }
+  for (const k of kits) {
+    const li = document.createElement("li");
+    li.textContent = `${k.name} (${k.count})`;
+    li.title = k.name;
+    li.classList.toggle("active", k.name === kitSel);
+    li.onclick = () => { kitSel = k.name; ul.querySelectorAll("li").forEach((x) => x.classList.toggle("active", x === li)); };
+    li.ondblclick = () => placeKit(k.name);
+    ul.append(li);
+  }
+}
+async function saveKit() {
+  if (!selection.length) return setStatus(tr("Select the objects of the kit first"));
+  const name = prompt("Name of the kit (e.g. camp with torches):", "");
+  if (!name) return;
+  const anchor = primary().position;
+  const items = selection.map((o) => o.userData.entity);
+  const r = await postJSON("kit", { name: name.trim() }, { anchor: [anchor.x, anchor.y, anchor.z], items, from: presetPath });
+  if (!r.ok) return setStatus(tr("Kit not saved: {0}").replace("{0}", r.data.error));
+  kitSel = name.trim();
+  await loadKits();
+  setStatus(tr("Kit {0} saved ({1} objects)").replace("{0}", name).replace("{1}", items.length));
+}
+async function placeKit(name) {
+  if (!doc) return alert("Open a map first.");
+  const kit = await (await fetch(api("kit", { name }))).json();
+  if (!kit.items) return setStatus(tr("Kit not found"));
+  await paste(kit);
+  setStatus(tr("Kit {0} placed ({1} objects)").replace("{0}", name).replace("{1}", kit.items.length));
+}
+$("#kit-save").addEventListener("click", saveKit);
+$("#kit-place").addEventListener("click", () => kitSel ? placeKit(kitSel) : setStatus(tr("Choose a kit in the list first")));
+$("#kit-del").addEventListener("click", async () => {
+  if (!kitSel || !confirm(tr("Delete the kit {0}?").replace("{0}", kitSel))) return;
+  await postJSON("kit/delete", { name: kitSel });
+  kitSel = null;
+  loadKits();
+});

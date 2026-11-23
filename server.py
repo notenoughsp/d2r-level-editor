@@ -638,6 +638,25 @@ CURRENT_PROJECT = PROJECT.parent / "current_project.txt"
 project_lock = threading.Lock()
 
 
+KITS = PROJECT.parent / "kits"  # building kits: shared by all projects
+
+
+def kit_file(name):
+    if not re.fullmatch(r"[^\\/:*?\"<>|]{1,60}", name or "") or name.strip() != name or name.startswith("."):
+        raise ValueError("Kit name: up to 60 characters, no \\ / : * ? \" < > |")
+    return KITS / f"{name}.json"
+
+
+def list_kits():
+    out = []
+    for f in sorted(KITS.glob("*.json"), key=lambda p: p.stem.lower()) if KITS.exists() else []:
+        try:
+            out.append({"name": f.stem, "count": len(json.loads(f.read_text(encoding="utf-8")).get("items", []))})
+        except Exception:  # noqa: BLE001
+            continue
+    return out
+
+
 def current_project():
     return CURRENT_PROJECT.read_text(encoding="utf-8").strip() if CURRENT_PROJECT.exists() else "Default"
 
@@ -879,6 +898,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.static(WEB / "node_modules" / "three" / u.path[len("/three/"):])
             elif u.path == "/api/presets":
                 self.send(200, list_presets())
+            elif u.path == "/api/kits":
+                self.send(200, list_kits())
+            elif u.path == "/api/kit":
+                try:
+                    self.send(200, json.loads(kit_file(q.get("name", "")).read_text(encoding="utf-8")))
+                except ValueError as e:
+                    self.send(400, {"error": str(e)})
             elif u.path == "/api/projects":
                 self.send(200, list_projects())
             elif u.path == "/api/modinfo":
@@ -992,6 +1018,22 @@ class Handler(BaseHTTPRequestHandler):
                 if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", name):
                     return self.send(400, {"error": "Mod name: only letters, digits, _ and -"})
                 self.send(200, export_mod(name, info, bool(body.get("zip"))))
+            elif u.path in ("/api/kit", "/api/kit/delete"):
+                length = int(self.headers.get("Content-Length") or 0)
+                body = self.rfile.read(length) if length else b""
+                try:
+                    f = kit_file(q.get("name", ""))
+                except ValueError as e:
+                    return self.send(400, {"error": str(e)})
+                if u.path.endswith("delete"):
+                    f.unlink(missing_ok=True)
+                else:
+                    kit = json.loads(body)
+                    if not isinstance(kit.get("items"), list) or not kit["items"]:
+                        return self.send(400, {"error": "A kit needs at least one object."})
+                    KITS.mkdir(parents=True, exist_ok=True)
+                    f.write_text(json.dumps(kit, ensure_ascii=False), encoding="utf-8")
+                self.send(200, list_kits())
             elif u.path == "/api/project":
                 self.rfile.read(int(self.headers.get("Content-Length") or 0))
                 try:
