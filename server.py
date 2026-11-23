@@ -282,6 +282,7 @@ def edit_objects(ds1_path, new_objects):
     if not o.editable:
         raise ValueError("The game objects of this DS1 file cannot be edited.")
     moved = {}
+    new_paths = {}  # NPC position -> path drawn in the editor ([] removes it)
     clean = []
     for ob in new_objects:
         x, y = int(ob["x"]), int(ob["y"])
@@ -290,6 +291,8 @@ def edit_objects(ds1_path, new_objects):
         frm = tuple(ob.get("from") or (x, y))
         if ob.get("type") == 1:
             moved[frm] = (x, y)
+            if "path" in ob:
+                new_paths[(x, y)] = [[int(a), int(b)] for a, b in (ob["path"] or [])[:64]]
         clean.append({"type": int(ob["type"]), "id": int(ob["id"]), "x": x, "y": y, "flags": int(ob.get("flags", 0))})
     paths = []
     for p in o.paths:
@@ -299,6 +302,19 @@ def edit_objects(ds1_path, new_objects):
         nx, ny = moved[key]
         dx, dy = nx - p["x"], ny - p["y"]
         paths.append({"x": nx, "y": ny, "nodes": [[n[0] + dx, n[1] + dy] + n[2:] for n in p["nodes"]]})
+    if new_paths:
+        if d.version < 14 and any(new_paths.values()):
+            raise ValueError("This DS1 file is too old for NPC paths.")
+        per_node = 3 if d.version >= 15 else 2
+        actions = [n[2] for p in o.paths for n in p["nodes"] if len(n) > 2]
+        action = max(set(actions), key=actions.count) if actions else 1  # the map's usual node action
+        paths = [p for p in paths if (p["x"], p["y"]) not in new_paths]
+        for (x, y), pts in new_paths.items():
+            for a, b in pts:
+                if not (0 <= a < d.width * 5 and 0 <= b < d.height * 5):
+                    raise ValueError(f"Path point outside the map: subtile {a}, {b}")
+            if pts:
+                paths.append({"x": x, "y": y, "nodes": [[a, b] + ([action] if per_node == 3 else []) for a, b in pts]})
     o.objects, o.paths = clean, paths
     d.tail = o.to_tail()
     write_ds1_override(ds1_path, d.to_bytes())

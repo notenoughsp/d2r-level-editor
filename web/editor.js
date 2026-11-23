@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { initI18n, locale, tr } from "./i18n.js?v=19";
+import { initI18n, locale, tr } from "./i18n.js?v=20";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -627,7 +627,9 @@ function showProps() {
       row("Position", "p", [o.position.x, o.position.y, o.position.z].map((v) => v.toFixed(2))) +
       row("Rotation°", "r", [deg(e.x), deg(e.y), deg(e.z)]) +
       row("Scaling", "s", [o.scale.x, o.scale.y, o.scale.z].map((v) => v.toFixed(3))) +
+      lightProps(o) +
       `<div class="prop-row"><span>${tr("Size (all axes)")}</span><input type="number" step="0.05" min="0.01" id="p-uniform" value="${o.scale.x.toFixed(3)}"></div>` + buttons;
+    wireLightProps(o);
     $("#p-uniform").addEventListener("change", (ev) => {
       ev.stopImmediatePropagation();
       const v = parseFloat(ev.target.value);
@@ -1409,11 +1411,19 @@ function showGameProps() {
     `${ob.path && ob.path.length ? ` · path with ${ob.path.length} points` : ""}</div>` +
     `<div class="prop-row"><span>Type</span><select id="go-id">${list.map((e) => `<option value="${e.id}"${e.id === ob.id ? " selected" : ""}>${e.id}: ${e.name}</option>`).join("")}</select></div>` +
     `<div class="prop-row"><span>Subtile</span><input id="go-x" type="number" value="${ob.x}"><input id="go-y" type="number" value="${ob.y}"><span></span></div>` +
+    (ob.type === 1 && gameObjects.editable ? `<div class="prop-buttons"><button id="go-path" title="Click points on the ground; Enter: done, Esc: cancel">Draw a walking path</button>` +
+      `${ob.path && ob.path.length ? `<button id="go-path-clear">Remove the path</button>` : ""}</div>` : "") +
     `<div class="prop-buttons"><button id="go-del">Delete</button></div>` +
     (gameObjects.editable ? "" : `<div class="prop-model">This DS1 does not allow object changes.</div>`);
   $("#go-id").onchange = () => editGameObject(gameSel.userData.gameIndex, { id: +$("#go-id").value });
   $("#go-x").onchange = $("#go-y").onchange = () => editGameObject(gameSel.userData.gameIndex, { x: +$("#go-x").value, y: +$("#go-y").value });
   $("#go-del").onclick = () => deleteGameObject(gameSel.userData.gameIndex);
+  if ($("#go-path")) $("#go-path").onclick = () => startPath(gameSel.userData.gameIndex);
+  if ($("#go-path-clear")) $("#go-path-clear").onclick = () => {
+    const objs = currentObjects();
+    objs[gameSel.userData.gameIndex].path = [];
+    sendGameObjects(objs, beginEdit());
+  };
 }
 
 async function sendGameObjects(objects, entry) {
@@ -2177,7 +2187,7 @@ for (const id of ["sc-count", "sc-radius", "sc-smin", "sc-smax", "sc-rot", "sc-g
 $("#sc-go").addEventListener("click", () => scatter(null));
 
 // ---------- keyboard help ----------
-const HELP_TEXT = "Mouse\n  Left click: select · Shift+click: add/remove · drag: box selection\n  Right mouse: turn the view · middle mouse: pan · wheel: zoom\n\nObjects\n  W / E / R: move / rotate / scale        Del: delete\n  Ctrl+C / Ctrl+V: copy / paste at the mouse cursor (also into other maps)\n  Ctrl+D: duplicate                        G: drop to the ground\n  Ctrl+A: select all\n  Arrow keys: move one snap step (Shift ×10), Page Up/Down: height\n  H: hide the selection                    Shift+H: show all hidden objects\n  F: focus the selection                   Esc: deselect\n\nPlacing\n  P: place the preview model at the mouse cursor\n  Shift+P: scatter the preview model around the mouse cursor (settings in the Models tab)\n  O: add a game object at the mouse cursor\n\nView and files\n  T: top view                              Ctrl+S: save\n  Ctrl+1..4: store the view, 1..4: go back to it\n  Ctrl+Z / Ctrl+Y: undo / redo             ? or F1: this help\n\nCollision\n  Q: objects tool    B: block (Shift+B: block + teleport)    X: clear    [ / ]: brush size\n\nGizmo\n  L: axes of the world or of the selected object\n  (every map opens again with the view you left it with)\n\nTools\n  M: ruler (click two points)    Mirror, circle and row copies: buttons under Selection\n  N: minimap    Ctrl+G: save the selection as a group (Objects tab)\n  C: compare with the game's original map";
+const HELP_TEXT = "Mouse\n  Left click: select · Shift+click: add/remove · drag: box selection\n  Right mouse: turn the view · middle mouse: pan · wheel: zoom\n\nObjects\n  W / E / R: move / rotate / scale        Del: delete\n  Ctrl+C / Ctrl+V: copy / paste at the mouse cursor (also into other maps)\n  Ctrl+D: duplicate                        G: drop to the ground\n  Ctrl+A: select all\n  Arrow keys: move one snap step (Shift ×10), Page Up/Down: height\n  H: hide the selection                    Shift+H: show all hidden objects\n  F: focus the selection                   Esc: deselect\n\nPlacing\n  P: place the preview model at the mouse cursor\n  Shift+P: scatter the preview model around the mouse cursor (settings in the Models tab)\n  O: add a game object at the mouse cursor\n\nView and files\n  T: top view                              Ctrl+S: save\n  Ctrl+1..4: store the view, 1..4: go back to it\n  Ctrl+Z / Ctrl+Y: undo / redo             ? or F1: this help\n\nCollision\n  Q: objects tool    B: block (Shift+B: block + teleport)    X: clear    [ / ]: brush size\n\nGizmo\n  L: axes of the world or of the selected object\n  (every map opens again with the view you left it with)\n\nTools\n  M: ruler (click two points)    Mirror, circle and row copies: buttons under Selection\n  N: minimap    Ctrl+G: save the selection as a group (Objects tab)\n  C: compare with the game's original map\n  Game objects: NPCs can get a walking path (Draw a walking path), \"Add a group\" places several at once";
 function showHelp() { modalShow(tr("Keyboard and mouse"), tr(HELP_TEXT)); }
 $("#btn-help").addEventListener("click", showHelp);
 $("#btn-help2").addEventListener("click", showHelp);
@@ -2707,3 +2717,113 @@ function setLight(name) {
 }
 $("#light-select").addEventListener("change", (e) => setLight(e.target.value));
 setLight(localStorage.getItem("light") || "day");
+
+// ---------- NPC walking paths: draw them with clicks ----------
+let pathDraw = null;  // { index, points: [[x, y], ...], line }
+function pathLine(points, ob) {
+  const pts = [[ob.x, ob.y], ...points].map(([x, y]) => new THREE.Vector3(x * 2 + 1, groundHeight(x * 2 + 1, y * 2 + 1) + 0.4, y * 2 + 1));
+  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xffd400, depthTest: false }));
+  line.renderOrder = 22;
+  return line;
+}
+function startPath(i) {
+  const ob = gameObjects.objects[i];
+  pathDraw = { index: i, points: [], line: null };
+  setStatus(tr("Path of {0}: click points on the ground · Backspace: remove the last · Enter: done · Esc: cancel").replace("{0}", ob.name));
+}
+function redrawPath() {
+  if (pathDraw.line) { scene.remove(pathDraw.line); pathDraw.line.geometry.dispose(); }
+  pathDraw.line = pathLine(pathDraw.points, gameObjects.objects[pathDraw.index]);
+  scene.add(pathDraw.line);
+}
+function endPath(save) {
+  const p = pathDraw;
+  pathDraw = null;
+  if (p.line) { scene.remove(p.line); p.line.geometry.dispose(); }
+  if (!save) return setStatus(tr("Path not changed"));
+  const objs = currentObjects();
+  objs[p.index].path = p.points;
+  sendGameObjects(objs, beginEdit()).then((ok) => ok && setStatus(tr("Path saved: {0} point(s)").replace("{0}", p.points.length)));
+}
+renderer.domElement.addEventListener("pointerdown", (e) => { if (pathDraw && e.button === 0) e.stopImmediatePropagation(); }, true);
+renderer.domElement.addEventListener("pointerup", (e) => {
+  if (!pathDraw || e.button !== 0 || !cursorGround) return;
+  e.stopImmediatePropagation();
+  pathDraw.points.push([Math.floor(cursorGround.x / 2), Math.floor(cursorGround.z / 2)]);
+  redrawPath();
+}, true);
+window.addEventListener("keydown", (e) => {
+  if (!pathDraw) return;
+  if (e.key === "Enter") { e.preventDefault(); e.stopImmediatePropagation(); endPath(true); }
+  else if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); endPath(false); }
+  else if (e.key === "Backspace") { e.preventDefault(); e.stopImmediatePropagation(); pathDraw.points.pop(); redrawPath(); }
+}, true);
+
+// ---------- monster groups: several NPCs/monsters around a point in one step ----------
+async function addMonsterGroup() {
+  if (!gameObjects || !gameObjects.editable) return setStatus("This map has no editable game objects");
+  const answer = prompt("Group of the chosen type: count, radius in subtiles (1 tile = 5 subtiles)", localStorage.getItem("groupArgs") || "5, 6");
+  if (!answer) return;
+  const [count, radius] = answer.split(/[,; ]+/).map(Number);
+  if (!(count >= 1 && count <= 40) || !(radius >= 0 && radius <= 50)) return setStatus(tr("Count 1-40 and a radius 0-50, e.g. 5, 6"));
+  localStorage.setItem("groupArgs", answer);
+  const p = cursorGround || orbit.target;
+  const cx = Math.floor(p.x / 2), cy = Math.floor(p.z / 2);
+  const maxX = (coll ? coll.width : 1e4) * 5 - 1, maxY = (coll ? coll.height : 1e4) * 5 - 1;
+  const objs = currentObjects();
+  const before = objs.length;
+  const used = new Set(objs.map((o) => `${o.x},${o.y}`));
+  for (let i = 0, tries = 0; i < count && tries < count * 30; tries++) {
+    const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * radius;
+    const x = Math.max(0, Math.min(maxX, Math.round(cx + Math.cos(a) * r))), y = Math.max(0, Math.min(maxY, Math.round(cy + Math.sin(a) * r)));
+    if (used.has(`${x},${y}`)) continue;
+    used.add(`${x},${y}`);
+    objs.push({ type: +$("#add-obj-type").value, id: +$("#add-obj-id").value, x, y, flags: 0 });
+    i++;
+  }
+  gameSel = null;
+  if (await sendGameObjects(objs, beginEdit())) setStatus(tr("{0} game objects added").replace("{0}", objs.length - before));
+}
+$("#add-obj-group").addEventListener("click", addMonsterGroup);
+
+// ---------- lights: edit colour, power and reach; add new point lights ----------
+const toHex = (c) => "#" + [c.x, c.y, c.z].map((v) => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, "0")).join("");
+const fromHex = (h) => ({ x: parseInt(h.slice(1, 3), 16) / 255, y: parseInt(h.slice(3, 5), 16) / 255, z: parseInt(h.slice(5, 7), 16) / 255 });
+function lightProps(o) {
+  const lc = o.userData.entity.components.find((c) => /LightDefinitionComponent$/.test(c.type));
+  if (!lc) return "";
+  const fields = ["power", "radius", "distance", "angle", "attenuation"].filter((k) => typeof lc[k] === "number");
+  return `<div class="light-box"><div class="prop-model">${lc.type.replace("DefinitionComponent", "")}</div>` +
+    `<div class="prop-row light-row"><span>${tr("Colour")}</span><input type="color" id="lt-color" value="${toHex(lc.color || { x: 1, y: 1, z: 1 })}"></div>` +
+    fields.map((k) => `<div class="prop-row light-row"><span>${tr(k)}</span><input type="number" step="any" data-light="${k}" value="${lc[k]}"></div>`).join("") + "</div>";
+}
+function wireLightProps(o) {
+  const lc = o.userData.entity.components.find((c) => /LightDefinitionComponent$/.test(c.type));
+  if (!lc || !$("#lt-color")) return;
+  $("#lt-color").addEventListener("change", (e) => { beginEdit(); lc.color = fromHex(e.target.value); markDirty(); setStatus(tr("Light colour changed")); });
+  document.querySelectorAll("[data-light]").forEach((inp) => inp.addEventListener("change", () => {
+    const v = parseFloat(inp.value);
+    if (!Number.isFinite(v)) return;
+    beginEdit();
+    lc[inp.dataset.light] = v;
+    markDirty();
+    setStatus(tr("Light changed"));
+  }));
+}
+async function addLight() {
+  if (!doc) return alert("Open a map first.");
+  beginEdit();
+  const p = cursorGround || orbit.target;
+  const name = `pointlight_${Date.now() % 100000}`;
+  const ent = { type: "Entity", name, id: newId(), components: [
+    { type: "TransformDefinitionComponent", name: `${name}_TransformDefinitionComponent`, position: { x: p.x, y: groundHeight(p.x, p.z) + 5, z: p.z },
+      orientation: { x: 0, y: 0, z: 0, w: 1 }, scale: { x: 1, y: 1, z: 1 }, inheritOnlyPosition: false },
+    { type: "PointLightDefinitionComponent", name: `${name}_PointLightDefinition`, color: { x: 1, y: 0.85, z: 0.55 }, power: 3000, radius: 15,
+      attenuation: 4, lightMask: 1, isLocalLight: false, diffuseContribution: 1, specularContribution: 1 },
+  ] };
+  doc.entities.push(ent);
+  select([await addObjectFor(ent)]);
+  markDirty();
+  setStatus(tr("Point light added: change its colour and reach under Selection"));
+}
+$("#add-light").addEventListener("click", addLight);
