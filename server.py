@@ -757,6 +757,63 @@ def world_catalog():
     return _world_catalog
 
 
+def free_offset(w, h, act=4, taken=()):
+    """A free place (tiles) in an act's world for a new level of w x h tiles: not overlapping the
+    game's levels of that act (levels.txt, the project's copy), nor the given rectangles, and
+    below 6500 tiles (coordinates above 32767 subtiles are not drawn)."""
+    raw = read_asset("data/global/excel/levels.txt").decode("latin1").replace("\r\n", "\n").split("\n")
+    head = raw[0].split("\t")
+    c = {k: i for i, k in enumerate(head)}
+    rects = list(taken)
+    for line in raw[1:]:
+        r = line.split("\t")
+        if len(r) <= c["OffsetY"] or r[c["Act"]] != str(act):
+            continue
+        try:
+            ox, oy = int(r[c["OffsetX"]] or 0), int(r[c["OffsetY"]] or 0)
+            sx, sy = int(r[c["SizeX"]] or 0) or 100, int(r[c["SizeY"]] or 0) or 100
+        except ValueError:
+            continue
+        rects.append((ox, oy, sx, sy))
+    m = 20
+    for y in range(200, 6500 - h, 50):
+        for x in range(3000, 6500 - w, 50):
+            if all(x + w + m <= ox or ox + sx + m <= x or y + h + m <= oy or oy + sy + m <= y for ox, oy, sx, sy in rects):
+                return [x, y]
+    raise ValueError("No free place for the new area in this act's world.")
+
+
+def new_map(template, name, empty):
+    """A new map in the project: a copy of a game map (preset JSON and DS1 tiles) under a new name,
+    optionally without its models and game objects. The terrain stays at the template's paths."""
+    from ds1 import Ds1Objects
+    template = template.replace("\\", "/").lower()
+    if not re.fullmatch(r"data/hd/env/preset/[a-z0-9_/]+\.json", template):
+        raise ValueError("Choose a map as template.")
+    if not re.fullmatch(r"[a-z0-9_]{2,40}", name):
+        raise ValueError("Map name: 2-40 small letters, digits or _")
+    dst = template.rsplit("/", 1)[0] + f"/{name}.json"
+    if known_file(dst):
+        raise ValueError(f"{dst} exists already.")
+    doc = json.loads(read_asset(template))
+    terrain = any(c.get("type") == "TerrainDefinitionComponent" for e in doc.get("entities", []) for c in e.get("components", []))
+    if empty:
+        doc["entities"] = [e for e in doc.get("entities", [])
+                           if any(c.get("type") in ("TerrainDefinitionComponent", "TerrainStampDefinitionComponent") for c in e.get("components", []))]
+    doc["name"] = name
+    write_project(dst, json.dumps(doc, indent=1).encode())
+    src_ds1, dst_ds1 = ds1_for_preset(template), dst.replace("data/hd/env/preset/", "data/global/tiles/")[:-5] + ".ds1"
+    d = DS1(read_asset(src_ds1))
+    if empty:
+        o = Ds1Objects(d)
+        if o.editable:
+            o.objects, o.paths = [], []
+            d.tail = o.to_tail()
+    write_project(dst_ds1, d.to_bytes())
+    w, h = preset_size(template)
+    return {"path": dst, "size": [w, h], "terrain": terrain}
+
+
 def world_state():
     if not world_available():
         return {"available": False, "path": str(WORLD)}
@@ -1067,6 +1124,16 @@ class Handler(BaseHTTPRequestHandler):
                 if not all(re.fullmatch(r"[A-Za-z0-9 _.-]{1,60}", x) and (mods / x).is_dir() for x in (a, b)):
                     return self.send(400, {"error": "Choose two mods."})
                 self.send(200, modmerge.conflicts(mods / a, mods / b))
+            elif u.path == "/api/world/free":
+                try:
+                    taken = json.loads(q.get("taken", "[]"))
+                    self.send(200, {"offset": free_offset(int(q["w"]), int(q["h"]), int(q.get("act", 4)), taken)})
+                except ValueError as e:
+                    self.send(400, {"error": str(e)})
+            elif u.path == "/api/presetinfo2":
+                info = preset_info(q["path"])
+                w, h = preset_size(q["path"])
+                self.send(200, {**info, "size": [w, h]})
             elif u.path == "/api/world":
                 self.send(200, world_state())
             elif u.path == "/api/projects":
@@ -1218,6 +1285,12 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(400, {"error": "Mod name: only letters, digits, _ and -"})
                 try:
                     self.send(200, modmerge.merge(mods / a, mods / b, mods / out, lambda p: read_asset(p, original=True), q.get("bwins") == "1"))
+                except ValueError as e:
+                    self.send(400, {"error": str(e)})
+            elif u.path == "/api/newmap":
+                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                try:
+                    self.send(200, new_map(body.get("template", ""), str(body.get("name", "")).lower(), bool(body.get("empty"))))
                 except ValueError as e:
                     self.send(400, {"error": str(e)})
             elif u.path in ("/api/world/spec", "/api/world/build"):

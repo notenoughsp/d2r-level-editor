@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { initI18n, locale, tr } from "./i18n.js?v=25";
+import { initI18n, locale, tr } from "./i18n.js?v=26";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -2957,6 +2957,7 @@ function renderAct() {
   $("#acts-body").innerHTML = `
     <div class="ex-grid"><label>${tr("Act tab")} <input id="act-tab" value="${esc(act.questlog.tab)}" maxlength="6"></label><label>${tr("Act title")} <input id="act-title" value="${esc(act.questlog.title)}"></label></div>
     <h4>${tr("Areas")}</h4><table class="act-table"><tr><th>ID</th><th>${tr("Name")}</th><th>${tr("Kind")}</th><th>${tr("Open from stage")}</th><th>${tr("Monsters")}</th><th>${tr("Monster level")}</th><th>${tr("Boss")}</th><th></th></tr>${zoneRows}</table>
+    <div class="prop-buttons"><button id="act-map-add" title="${esc(tr("An area with a fixed map that you design in the editor"))}">${tr("Add a map area")}</button></div>
     <div class="prop-buttons"><select id="act-maze">${actCat.mazes.map((m) => `<option value="${m.id}">${esc(m.name)} (${m.id})</option>`).join("")}</select><button id="act-zone-add">${tr("Add a dungeon area")}</button></div>
     <h4>${tr("Bosses and their loot")}</h4><table class="act-table"><tr><th>${tr("Name")}</th><th>${tr("Look")}</th><th>${tr("Level")}</th><th>${tr("Life")}</th><th>${tr("Loot like")}</th><th></th></tr>${bossRows}</table>
     <div class="prop-buttons"><button id="act-boss-add">${tr("Add a boss")}</button></div>
@@ -3047,6 +3048,7 @@ function wireAct() {
       monsters: ["fallen1", "skeleton1"], mlvl: [45, 69, 85], maze: { "Rooms": 12, "Rooms(N)": 12, "Rooms(H)": 12 } });
     renderAct();
   });
+  $("#act-map-add").addEventListener("click", addMapArea);
   $("#act-boss-add").addEventListener("click", () => {
     const name = prompt("Name of the new boss:", "");
     if (!name) return;
@@ -3499,3 +3501,57 @@ $("#mm-merge").addEventListener("click", async () => {
 });
 $("#ex-mods").addEventListener("click", () => { $("#export-dialog").classList.add("hidden"); openMods(); });
 $("#mm-close").addEventListener("click", () => $("#mods-dialog").classList.add("hidden"));
+
+// ---------- new map: a copy of a game map under a new name, optionally empty ----------
+async function newMap() {
+  const template = presetPath;
+  if (!template) return alert("Open the map to copy first (its size and ground are used).");
+  const name = prompt("Name of the new map (small letters, digits, _). It is a copy of the open map:", "my_map");
+  if (!name) return;
+  const empty = confirm(tr("Remove all models and game objects from the copy (keep only the ground)?"));
+  const r = await postJSON("newmap", {}, { template, name: name.toLowerCase(), empty });
+  if (!r.ok) return setStatus(tr("No new map: {0}").replace("{0}", r.data.error));
+  presets = await (await fetch(api("presets"))).json();
+  await loadEdited();
+  await openPreset(r.data.path);
+  setStatus(tr("New map {0} ({1} × {2} tiles). Use it as an area in the act editor or with \"Take over a map\".")
+    .replace("{0}", r.data.path.replace("data/hd/env/preset/", "")).replace("{1}", r.data.size[0]).replace("{2}", r.data.size[1]));
+}
+$("#preset-new").addEventListener("click", newMap);
+
+// act editor: an area with a fixed map (a map of the project or the game, edited in the editor)
+async function addMapArea() {
+  const path = prompt("Map of the new area (path as in the Maps list, e.g. act1/court/my_map.json). Make one with \"New map\" in the Maps tab first:",
+    presetPath ? presetPath.replace("data/hd/env/preset/", "") : "");
+  if (!path) return;
+  const full = path.startsWith("data/") ? path : "data/hd/env/preset/" + path;
+  const info = await (await fetch(api("presetinfo2", { path: full }))).json();
+  if (info.error) return setStatus(info.error);
+  // the level settings come from a game level that uses a map piece of this folder
+  let row = info.rows.find((r) => r.levelId > 0 && r.levelId < 137) || info.rows.find((r) => r.levelId > 0);
+  if (!row) {
+    const folder = full.split("/").slice(0, -1).join("/");
+    for (const sib of presets.filter((p) => p.startsWith(folder + "/") && p !== full).slice(0, 40)) {
+      const rs = (await (await fetch(api("presetinfo2", { path: sib }))).json()).rows;
+      row = rs.find((r) => r.levelId > 0 && r.levelId < 137) || rs.find((r) => r.levelId > 0);
+      if (row) break;
+    }
+  }
+  if (!row) return setStatus(tr("No game level uses maps of this folder; choose a map from another folder"));
+  const taken = act.zones.filter((z) => z.offset).map((z) => [z.offset[0], z.offset[1], 220, 220]);
+  const free = await (await fetch(api("world/free", { w: info.size[0], h: info.size[1], taken: JSON.stringify(taken) }))).json();
+  if (free.error) return setStatus(free.error);
+  const name = prompt("Name of the new area:", "New Glade");
+  if (!name) return;
+  const prefix = act.prefix || "a6";
+  const key = prefix.toUpperCase() + name.replace(/[^A-Za-z0-9]/g, "").slice(0, 20);
+  const id = Math.max(...act.zones.map((z) => z.id)) + 1;
+  const own = full.split("/").pop().startsWith(prefix + "_");
+  act.zones.push({ id, key, name, open: act.quest.length, template_level: row.levelId, lvlprest: row.name, preset: full,
+    path: own ? full : full.replace(/[^/]+\.json$/, `${prefix}_${name.toLowerCase().replace(/[^a-z0-9]/g, "")}.json`),
+    offset: free.offset, monsters: ["fallen1", "skeleton1"], mlvl: [45, 69, 85],
+    design: { keep_map: true, keep_objects: true, objects: [] } });
+  renderAct();
+  setStatus(tr("Area {0} added at {1}, {2}. After the first build its map is in the project: edit it there, later builds keep it.")
+    .replace("{0}", name).replace("{1}", free.offset[0]).replace("{2}", free.offset[1]));
+}
