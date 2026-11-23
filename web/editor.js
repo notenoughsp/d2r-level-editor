@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { initI18n, locale, tr } from "./i18n.js?v=5";
+import { initI18n, locale, tr } from "./i18n.js?v=6";
 
 initI18n();
 const $ = (s) => document.querySelector(s);

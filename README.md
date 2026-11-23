@@ -21,14 +21,14 @@ The language (English or Deutsch) can be switched in the toolbar.
 
 | | |
 |---|---|
-| **Maps** | Open any HD map (towns, outdoor pieces, dungeons). A banner tells whether the game uses the map once or as a shared piece in random areas. |
-| **Models** | Search all ~12,000 HD models with a preview, and place them with a double-click or **P**. |
-| **Edit** | Select, move, rotate, scale, duplicate, copy and paste (also into other maps), snap to a grid, drop to the ground, random rotation. Undo and redo. |
+| **Maps** | Open any HD map (towns, outdoor pieces, dungeons). A banner tells whether the game uses the map once or as a shared piece in random areas. Recently opened maps come first; maps you edited are marked and can be filtered. |
+| **Models** | Search all ~12,000 HD models with a preview, and place them with a double-click or **P**. Mark favourites with the star. **Scatter** places many copies at once (count, radius, size range, random rotation), e.g. plants and rocks. |
+| **Edit** | Select, move, rotate, scale, duplicate, copy and paste (also into other maps), snap to a grid, drop to the ground, random rotation, copies in a row (fences, torches), align and space several objects, hide objects while you work. Undo and redo. |
 | **Game objects** | NPCs, monster spawns, chests, waypoints, torches: move, change, delete or add them. |
 | **Collision** | See where the player can walk and paint tiles blocked or free. "Collision under object" blocks the tiles under a model and moves along with it. |
-| **NPCs** | Make new NPCs (tab "NPCs"): a name, the look of a game NPC, and a role. A *talking* NPC says your text in the game's own speech window; a *trader* also opens the game's trade window with the goods of a town NPC you choose. Place them like other NPCs and export. |
-| **New textures** | `tools/retexture.py` makes a copy of a game model with new colours or a picture of your own as texture, e.g. a gold statue (see [docs](docs/technical.md#new-textures-on-game-models)). |
-| **Own 3D models** | `tools/meshimport.py` turns an OBJ or glTF mesh (e.g. a free CC0 model) into a game model with your texture (see [docs](docs/technical.md#own-3d-models)). |
+| **NPCs** | Make new NPCs (tab "NPCs"): a name, the look of a game NPC, and a role. A *talking* NPC says your text in the game's own speech window; a *trader* also opens the game's trade window with the goods of a town NPC you choose. Place them like other NPCs and export. For quest mods an NPC can get other texts from a quest stage on. |
+| **New textures** | "Recolour the model" (tab Models) makes a copy of a game model with a new colour, a tiling material (e.g. CC0) or a picture of your own as texture, e.g. a gold statue (see [docs](docs/technical.md#new-textures-on-game-models)). |
+| **Own 3D models** | "Import a 3D model" (tab Models) turns an OBJ or glTF mesh (e.g. a free CC0 model) into a game model with your texture (see [docs](docs/technical.md#own-3d-models)). Imported and recoloured models are listed under "Own models". |
 | **Legacy graphics** | View the map in the old SD graphics. |
 | **Export** | Writes the mod into `<game>/mods/<Name>/`. Your edits never touch the game's own files. |
 | **Test in game** | Exports and runs an automatic test in the game: are the edits there, and do blocked tiles stop the player? |
@@ -50,7 +50,10 @@ Unsaved work is autosaved every 60 seconds and offered again when you reopen the
 | Ctrl+Z / Ctrl+Y (or Ctrl+Shift+Z) | undo / redo |
 | Arrow keys, Page Up/Down | move one grid step (Shift: ten), change height |
 | F, G, T | focus selection, drop to ground, top-down view |
-| P, O | place the previewed model, add a game object at the cursor |
+| P, Shift+P, O | place the previewed model, scatter it, add a game object at the cursor |
+| H, Shift+H | hide the selection, show hidden objects |
+| Ctrl+1..4, 1..4 | store a camera view of the map, go back to it |
+| ? or F1 | keyboard and mouse help |
 | Esc | deselect |
 
 ## Good to know
