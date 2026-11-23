@@ -620,7 +620,8 @@ class Handler(BaseHTTPRequestHandler):
             elif u.path == "/api/texture":
                 mip = int(q.get("mip", "1"))
                 p = q["path"]
-                self.send(200, cached("png", f"{p}|{mip}|2", lambda: make_png(p, mip), "png")  # |2: texture format table fixed, "image/png")
+                # "|2": texture format table fixed (2026-11-23), older cached PNGs are not used
+                self.send(200, cached("png", f"{p}|{mip}|2", lambda: make_png(p, mip), "png"), "image/png")
             else:
                 self.send(404, {"error": "not found"})
         except FileNotFoundError as e:
