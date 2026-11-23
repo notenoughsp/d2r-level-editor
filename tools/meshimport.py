@@ -18,6 +18,7 @@ import json
 import pathlib
 import re
 import struct
+import urllib.parse
 import sys
 import zlib
 
@@ -145,8 +146,10 @@ def read_obj(path):
 
 
 def read_glb(path):
-    """All triangle primitives of a binary glTF (node transforms applied), merged into one mesh;
-    also the first base colour image if the file embeds one."""
+    """All triangle primitives of a binary glTF (node transforms applied), merged into one mesh.
+    A game model here has one texture, so models with several materials get a texture atlas: every
+    material (its embedded base colour image, or its plain colour) gets a cell, and the uvs of its
+    primitives are moved into that cell (tiling uvs are folded into 0..1)."""
     data = pathlib.Path(path).read_bytes()
     jlen = struct.unpack_from("<I", data, 12)[0]
     j = json.loads(data[20:20 + jlen])
@@ -182,7 +185,7 @@ def read_glb(path):
             t = m @ t
         return t
 
-    P, T, N, F = [], [], [], []
+    P, T, N, F, M = [], [], [], [], []
     scene = j["scenes"][j.get("scene", 0)]
 
     def walk(ni, parent):
@@ -202,19 +205,67 @@ def read_glb(path):
                 P.append(pos)
                 N.append(nrm)
                 T.append(uv)
+                M.append(prim.get("material", -1))
         for c in node.get("children", []):
             walk(c, m)
 
     for ni in scene["nodes"]:
         walk(ni, np.eye(4))
+    import io
+    from PIL import Image
+
+    def embedded(i):
+        img = j["images"][i]
+        if "bufferView" not in img:  # a picture next to the file (command line use)
+            f = pathlib.Path(path).parent / urllib.parse.unquote(img.get("uri", ""))
+            return Image.open(f).convert("RGBA") if img.get("uri") and not img["uri"].startswith("data:") and f.is_file() else None
+        bv = j["bufferViews"][img["bufferView"]]
+        return Image.open(io.BytesIO(blob[bv.get("byteOffset", 0):bv.get("byteOffset", 0) + bv["byteLength"]])).convert("RGBA")
+
+    def material_look(mi):
+        """(image or None, rgba factor) of a material's base colour."""
+        if mi < 0 or mi >= len(j.get("materials", [])):
+            return None, (1, 1, 1, 1)
+        pbr = j["materials"][mi].get("pbrMetallicRoughness", {})
+        factor = tuple(pbr.get("baseColorFactor", (1, 1, 1, 1)))
+        tex = pbr.get("baseColorTexture")
+        img = embedded(j["textures"][tex["index"]]["source"]) if tex and "source" in j["textures"][tex["index"]] else None
+        return img, factor
+
+    mats = sorted(set(M))
+    looks = {m: material_look(m) for m in mats}
     image = None
-    for img in j.get("images", []):
-        if "bufferView" in img:
-            bv = j["bufferViews"][img["bufferView"]]
-            import io
-            from PIL import Image
-            image = Image.open(io.BytesIO(blob[bv.get("byteOffset", 0):bv.get("byteOffset", 0) + bv["byteLength"]]))
-            break
+    if len(mats) <= 1:
+        img, factor = looks[mats[0]] if mats else (None, (1, 1, 1, 1))
+        image = img
+        if img is None and factor[:3] != (1, 1, 1):
+            image = Image.new("RGBA", (64, 64), tuple(int(c * 255) for c in factor))
+    else:
+        g = int(np.ceil(np.sqrt(len(mats))))
+        size = 2048 if g > 2 else 1024
+        cell, pad = size // g, 4
+        atlas = Image.new("RGBA", (size, size), (128, 128, 128, 255))
+        where = {}
+        for k, m in enumerate(mats):
+            cx, cy = (k % g) * cell, (k // g) * cell
+            img, factor = looks[m]
+            if img is None:
+                tile = Image.new("RGBA", (cell, cell), tuple(int(c * 255) for c in factor))
+            else:
+                tile = img.resize((cell - 2 * pad, cell - 2 * pad))
+                if factor[:3] != (1, 1, 1):  # tint by the material's colour factor
+                    arr = np.asarray(tile, np.float32) * np.array(factor, np.float32)
+                    tile = Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), "RGBA")
+                tile = tile.resize((cell, cell)) if pad == 0 else tile
+            atlas.paste(tile, (cx + (pad if img is not None else 0), cy + (pad if img is not None else 0)))
+            where[m] = (cx + pad, cy + pad, cell - 2 * pad)
+        for i, m in enumerate(M):
+            uv = T[i].astype(np.float64)
+            uv = uv - np.floor(uv.min(axis=0))   # the primitive's tile of the texture
+            uv = np.where(uv > 1, uv - np.floor(uv), uv)
+            x0, y0, w = where[m]
+            T[i] = np.c_[(x0 + uv[:, 0] * w) / size, (y0 + uv[:, 1] * w) / size]
+        image = atlas
     return (np.concatenate(P).astype(np.float32), np.concatenate(T).astype(np.float32),
             np.concatenate(N).astype(np.float32), np.concatenate(F), image)
 
