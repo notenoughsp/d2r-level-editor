@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { initI18n, locale, tr } from "./i18n.js?v=9";
+import { initI18n, locale, tr } from "./i18n.js?v=10";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -1153,6 +1153,7 @@ function renderObjectList() {
     li.innerHTML = `<span class="kind" title="${kind}">${icon}</span>`;
     li.appendChild(document.createTextNode(ent.name));
     li.dataset.id = ent.id;
+    if (hiddenIds.has(ent.id)) li.classList.add("hidden-obj");
     li.onclick = (e) => {
       const o = entityObjects.get(ent.id);
       if (!o || o.userData.terrain) return;
@@ -1169,6 +1170,12 @@ function markListSelection() {
   document.querySelectorAll("#object-list li").forEach((li) => li.classList.toggle("sel", ids.has(li.dataset.id)));
 }
 $("#object-filter").addEventListener("input", scheduleObjectList);
+$("#object-select-all").addEventListener("click", () => {
+  const ids = [...document.querySelectorAll("#object-list li")].map((li) => +li.dataset.id);
+  const objs = ids.map((id) => entityObjects.get(id)).filter((o) => o && o.visible && !o.userData.terrain);
+  select(objs);
+  setStatus(tr("{0} object(s) selected").replace("{0}", objs.length));
+});
 
 // ---------- place at the mouse cursor ----------
 let cursorGround = null;
@@ -1934,12 +1941,14 @@ function hideSelection() {
   for (const o of selection) { o.visible = false; hiddenIds.add(o.userData.entity.id); }
   select([]);
   setStatus(tr("{0} object(s) hidden · Shift+H shows them again").replace("{0}", hiddenIds.size));
+  scheduleObjectList();
 }
 function showHidden() {
   for (const id of hiddenIds) { const o = entityObjects.get(id); if (o) o.visible = true; }
   const n = hiddenIds.size;
   hiddenIds.clear();
   setStatus(tr("{0} object(s) shown again").replace("{0}", n));
+  scheduleObjectList();
 }
 
 // ---------- scatter: many copies of the preview model around a point ----------

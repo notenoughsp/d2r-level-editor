@@ -127,6 +127,8 @@ const DE = {
   "Screenshot": "Screenshot",
   "Save a picture of the view as PNG (downloads folder)": "Ein Bild der Ansicht als PNG speichern (Download-Ordner)",
   "Screenshot saved: {0} (downloads folder)": "Screenshot gespeichert: {0} (Download-Ordner)",
+  "Select all in the list": "Alle in der Liste auswählen",
+  "Select every object in the list (use the search to narrow it down, e.g. tree)": "Alle Objekte der Liste auswählen (mit der Suche eingrenzen, z. B. tree)",
   // messages from the editor server
   "Size does not match: {0} instead of {1} tiles": "Größe passt nicht: {0} statt {1} Kacheln",
   "The game objects of this DS1 file cannot be edited.": "Die Objekte dieser DS1-Datei können nicht bearbeitet werden.",
