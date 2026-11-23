@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { initI18n, locale, tr } from "./i18n.js?v=22";
+import { initI18n, locale, tr } from "./i18n.js?v=23";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -16,7 +16,9 @@ const setStatus = (t) => {
   try { const top = undoStack[undoStack.length - 1]; if (top && !top.label) top.label = t; } catch { /* during start-up */ }
   statusEl.classList.remove("old");
   clearTimeout(statusTimer);
-  statusTimer = setTimeout(() => statusEl.classList.add("old"), 8000);
+  let fade = 8;
+  try { fade = options.statusFade; } catch { /* during start-up */ }
+  if (fade > 0) statusTimer = setTimeout(() => statusEl.classList.add("old"), fade * 1000);
 };
 const api = (path, params = {}) => `/api/${path}?` + new URLSearchParams(params).toString();
 async function postJSON(path, params, body) {
@@ -521,7 +523,7 @@ function select(objs) {
   selection = objs.filter(Boolean);
   for (const b of selectionBoxes.splice(0)) { scene.remove(b); b.geometry.dispose(); }
   for (const o of selection) {
-    const b = new THREE.BoxHelper(o, o === primary() ? 0xffd400 : 0xc7a35a);
+    const b = new THREE.BoxHelper(o, o === primary() ? options.selColor : 0xc7a35a);
     scene.add(b);
     selectionBoxes.push(b);
   }
@@ -684,7 +686,7 @@ function beginEdit() {
   const entry = snapshotState();
   entry.time = Date.now();
   undoStack.push(entry);
-  if (undoStack.length > 100) undoStack.shift();
+  while (undoStack.length > (options.undoSteps || 100)) undoStack.shift();
   redoStack.length = 0;
   return entry;
 }
@@ -790,7 +792,7 @@ async function duplicate() {
     ent.id = newId();
     ent.name = `${src.name}_copy`;
     const t = comp(ent, "TransformDefinitionComponent");
-    if (t) { t.position.x += 2; t.position.z += 2; }
+    if (t) { t.position.x += options.dupOffset; t.position.z += options.dupOffset; }
     doc.entities.push(ent);
     copies.push(await addObjectFor(ent));
   }
@@ -800,6 +802,7 @@ async function duplicate() {
 
 async function removeSelected() {
   if (!selection.length) return;
+  if (options.confirmDelete && selection.length > options.confirmDelete && !confirm(tr("Delete {0} objects?").replace("{0}", selection.length))) return;
   const entry = beginEdit();
   const gone = selection.map((o) => o.userData.entity);
   const goneSet = new Set(gone);
@@ -1118,7 +1121,7 @@ function renderPreview() {
     previewCamera.aspect = w / h;
     previewCamera.updateProjectionMatrix();
   }
-  if (previewObj && !previewDrag && performance.now() - previewTouched > 3000) previewObj.rotation.y += 0.01;
+  if (previewObj && !previewDrag && options.previewSpin && performance.now() - previewTouched > 3000) previewObj.rotation.y += 0.01;
   if (w) previewRenderer.render(previewScene, previewCamera);
   requestAnimationFrame(renderPreview);
 }
@@ -1241,7 +1244,7 @@ function renderObjectList() {
     const [icon, kind] = kindOf(ent);
     // the kind can be searched in the shown language too (e.g. "Licht" for lights)
     if (f && !ent.name.toLowerCase().includes(f) && !kind.toLowerCase().includes(f) && !tr(kind).toLowerCase().includes(f)) continue;
-    if (shown >= 1500) { shown += 1; continue; }  // the list shows 1500 entries, the count stays right
+    if (shown >= options.maxListEntries) { shown += 1; continue; }  // the list is capped, the count stays right
     shown += 1;
     const li = document.createElement("li");
     li.innerHTML = `<span class="kind" title="${kind}">${icon}</span>`;
@@ -1346,6 +1349,9 @@ function textSprite(text, color) {
   ctx.fillText(text, 8, 29);
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), depthTest: false }));
   sp.scale.set(cv.width / 16, cv.height / 16, 1);
+  sp.userData.baseW = cv.width / 16;
+  sp.userData.baseH = cv.height / 16;
+  try { sp.scale.multiplyScalar(options.labelScale); sp.visible = options.labels; } catch { /* during start-up */ }
   sp.renderOrder = 20;
   return sp;
 }
@@ -1621,11 +1627,7 @@ renderer.domElement.addEventListener("pointermove", () => {
 });
 
 // ---------- autosave drafts every 60 s while there are unsaved changes ----------
-setInterval(async () => {
-  if (!dirty || !doc || !presetPath) return;
-  const r = await postJSON("draft", { path: presetPath }, doc);
-  if (r.ok) setStatus(`Draft autosaved (${new Date().toLocaleTimeString(locale())})`);
-}, 60000);
+// (the autosave timer is set by applyOptions, see the options window)
 
 // ---------- UI wiring ----------
 document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => {
@@ -1735,9 +1737,13 @@ window.addEventListener("keydown", (e) => {
   const t = e.target;
   if (t && (["INPUT", "SELECT", "TEXTAREA", "BUTTON"].includes(t.tagName) || t.isContentEditable)) return;
   if (e.altKey || e.metaKey) return;
-  if ((!$("#modal").classList.contains("hidden") || !$("#export-dialog").classList.contains("hidden") || !$("#acts-dialog").classList.contains("hidden")) && e.key !== "Escape") return;  // a dialog is open
+  if (document.querySelector(".dialog:not(.hidden), #modal:not(.hidden)") && e.key !== "Escape") return;  // a dialog is open
   const ev = e;
-  if (ev.key.length === 1) e = { key: ev.key.toLowerCase(), ctrlKey: ev.ctrlKey, shiftKey: ev.shiftKey, preventDefault: () => ev.preventDefault() };
+  if (ev.key.length === 1) {
+    let key = ev.key.toLowerCase();
+    if (!ev.ctrlKey && /^[a-z0-9]$/.test(key)) { key = translateKey(key); if (key === null) return; }  // own shortcuts
+    e = { key, ctrlKey: ev.ctrlKey, shiftKey: ev.shiftKey, preventDefault: () => ev.preventDefault() };
+  }
   if (e.ctrlKey && e.key === "s") { e.preventDefault(); save(); }
   else if (e.ctrlKey && e.key === "z") { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
   else if (e.ctrlKey && e.key === "y") { e.preventDefault(); redo(); }
@@ -1767,6 +1773,8 @@ window.addEventListener("keydown", (e) => {
   else if (e.key === "Escape" && brushOn) toggleScatterBrush();
   else if (e.key === "Escape" && !$("#export-dialog").classList.contains("hidden")) $("#export-dialog").classList.add("hidden");
   else if (e.key === "Escape" && !$("#acts-dialog").classList.contains("hidden")) $("#acts-dialog").classList.add("hidden");
+  else if (e.key === "Escape" && !$("#options-dialog").classList.contains("hidden")) $("#options-dialog").classList.add("hidden");
+  else if (e.key === "Escape" && !$("#ctx-menu").classList.contains("hidden")) $("#ctx-menu").classList.add("hidden");
   else if (e.key === "Escape") { selectGameObject(null); select([]); $("#modal").classList.add("hidden"); }
   else if (e.ctrlKey && e.key === "c") { e.preventDefault(); copySelection(); }
   else if (e.ctrlKey && e.key === "v") { e.preventDefault(); paste(); }
@@ -1947,7 +1955,7 @@ async function checkForUpdate() {
   buttons.push([tr("Later"), () => { localStorage.setItem("skipUpdate", info.latest); updateMessage(""); }]);
   updateMessage(tr("Version {0} is available (you have {1}).").replace("{0}", info.latest).replace("{1}", info.current), buttons);
 }
-setTimeout(checkForUpdate, 3000);
+setTimeout(() => { if (options.checkUpdates) checkForUpdate(); }, 3000);
 
 // ---------- NPC creator (tools/npc_creator.py, plugin/npc.cpp) ----------
 let npcData = null;
@@ -2361,7 +2369,7 @@ listKeys($("#preset-filter"), $("#preset-list"), () => {}, (li) => li.click());
 // ---------- the object under the mouse, named in the status bar ----------
 let hoverTimer = 0;
 renderer.domElement.addEventListener("pointermove", (e) => {
-  if (e.buttons || tool !== "objects" || !root) return;
+  if (e.buttons || tool !== "objects" || !root || !options.hoverInfo) return;
   const now = performance.now();
   if (now - hoverTimer < 120) return;
   hoverTimer = now;
@@ -2523,7 +2531,7 @@ function miniBounds() {
   return b;
 }
 function miniRect() {
-  const w = viewport.clientWidth, h = viewport.clientHeight, s = Math.round(Math.min(220, Math.min(w, h) * 0.3));
+  const w = viewport.clientWidth, h = viewport.clientHeight, s = Math.round(Math.min(options.minimapSize, Math.min(w, h) * 0.45));
   return { x: w - s - 10, y: 10, s, w, h };  // y from the bottom
 }
 function drawMinimap() {
@@ -3063,3 +3071,216 @@ $("#acts-close").addEventListener("click", () => $("#acts-dialog").classList.add
 $("#acts-save").addEventListener("click", saveAct);
 $("#acts-build").addEventListener("click", () => buildAct(false));
 $("#acts-export").addEventListener("click", () => buildAct(true));
+
+// ---------- options window (stored in the browser, applied at once) ----------
+const OPTION_DEFAULTS = {
+  uiScale: 100, fov: 45, rotateSpeed: 1, zoomSpeed: 1, panSpeed: 1, damping: true, showGrid: true, gridStep: 5,
+  autosave: 60, undoSteps: 100, labels: true, labelScale: 1, hoverInfo: true, previewSpin: true, statusFade: 8,
+  confirmDelete: 20, dupOffset: 2, minimapSize: 220, renderScale: 100, selColor: "#ffd400", bg: "", checkUpdates: true,
+  maxListEntries: 1500, tooltips: true,
+};
+let options = { ...OPTION_DEFAULTS, ...JSON.parse(localStorage.getItem("options") || "{}") };
+const OPTION_FORM = [
+  ["Interface", [
+    ["uiScale", "Size of the interface (%)", "number", 70, 160, 5],
+    ["tooltips", "Show tooltips", "check"],
+    ["statusFade", "Status messages fade after (s, 0 = never)", "number", 0, 120, 1],
+    ["hoverInfo", "Name of the object under the mouse in the status bar", "check"],
+    ["maxListEntries", "Entries shown in the objects list", "number", 100, 20000, 100],
+    ["checkUpdates", "Look for updates at start", "check"],
+  ]],
+  ["Camera and view", [
+    ["fov", "Field of view (degrees)", "number", 20, 100, 1],
+    ["rotateSpeed", "Turn speed", "number", 0.1, 5, 0.1],
+    ["zoomSpeed", "Zoom speed", "number", 0.1, 5, 0.1],
+    ["panSpeed", "Pan speed", "number", 0.1, 5, 0.1],
+    ["damping", "Smooth camera movement", "check"],
+    ["renderScale", "Render resolution (%, lower = faster)", "number", 25, 200, 5],
+    ["bg", "Background colour (empty = from the light)", "color"],
+  ]],
+  ["Grid and selection", [
+    ["showGrid", "Show the grid", "check"],
+    ["gridStep", "Grid line every (units, 10 = 1 tile)", "number", 1, 50, 1],
+    ["selColor", "Colour of the selection box", "color"],
+    ["dupOffset", "Offset of duplicates (units)", "number", 0, 50, 0.5],
+    ["confirmDelete", "Ask before deleting more than (objects, 0 = never)", "number", 0, 10000, 1],
+  ]],
+  ["Game objects and labels", [
+    ["labels", "Show names over game objects", "check"],
+    ["labelScale", "Size of the names", "number", 0.3, 3, 0.1],
+  ]],
+  ["Saving and undo", [
+    ["autosave", "Autosave a draft every (s, 0 = off)", "number", 0, 3600, 10],
+    ["undoSteps", "Undo steps kept", "number", 10, 1000, 10],
+  ]],
+  ["Previews and minimap", [
+    ["previewSpin", "Turn the model preview by itself", "check"],
+    ["minimapSize", "Size of the minimap (pixels)", "number", 100, 500, 10],
+  ]],
+];
+let autosaveTimer = null;
+function applyOptions() {
+  document.body.style.zoom = options.uiScale / 100;
+  camera.fov = options.fov; camera.updateProjectionMatrix();
+  orbit.rotateSpeed = options.rotateSpeed; orbit.zoomSpeed = options.zoomSpeed; orbit.panSpeed = options.panSpeed;
+  orbit.enableDamping = options.damping;
+  grid.visible = options.showGrid;
+  const div = Math.max(1, Math.round(1000 / options.gridStep));
+  if (grid.userData.div !== div) {
+    const g = new THREE.GridHelper(1000, div, 0x3a3326, 0x221f19);
+    grid.geometry.dispose(); grid.geometry = g.geometry; grid.userData.div = div;
+  }
+  renderer.setPixelRatio(window.devicePixelRatio * options.renderScale / 100);
+  resize();
+  if (options.bg) scene.background.set(options.bg); else setLight(localStorage.getItem("light") || "day");
+  for (const b of selectionBoxes) b.material.color.set(b === selectionBoxes[selectionBoxes.length - 1] ? options.selColor : 0xc7a35a);
+  if (gameRoot) gameRoot.traverse((o) => { if (o.isSprite) { o.visible = options.labels; o.scale.set(o.userData.baseW * options.labelScale || o.scale.x, o.userData.baseH * options.labelScale || o.scale.y, 1); } });
+  $("#hover-info").classList.toggle("hidden", !options.hoverInfo);
+  document.body.classList.toggle("no-tips", !options.tooltips);
+  clearInterval(autosaveTimer);
+  if (options.autosave > 0) autosaveTimer = setInterval(async () => {
+    if (!dirty || !doc || !presetPath) return;
+    const r = await postJSON("draft", { path: presetPath }, doc);
+    if (r.ok) setStatus(`Draft autosaved (${new Date().toLocaleTimeString(locale())})`);
+  }, options.autosave * 1000);
+}
+function renderOptions() {
+  const box = $("#opt-body");
+  box.textContent = "";
+  for (const [section, items] of OPTION_FORM) {
+    const h = document.createElement("h4");
+    h.textContent = tr(section);
+    box.append(h);
+    const grid2 = document.createElement("div");
+    grid2.className = "opt-grid";
+    for (const [key, label, kind, min, max, step] of items) {
+      const l = document.createElement("label");
+      const span = document.createElement("span");
+      span.textContent = tr(label);
+      const inp = document.createElement("input");
+      inp.dataset.opt = key;
+      if (kind === "check") { inp.type = "checkbox"; inp.checked = !!options[key]; }
+      else if (kind === "color") { inp.type = "color"; inp.value = options[key] || "#15130f"; }
+      else Object.assign(inp, { type: "number", min, max, step, value: options[key] });
+      inp.addEventListener("change", () => {
+        options[key] = kind === "check" ? inp.checked : kind === "color" ? inp.value : Math.max(min, Math.min(max, +inp.value || OPTION_DEFAULTS[key]));
+        localStorage.setItem("options", JSON.stringify(options));
+        applyOptions();
+      });
+      l.append(span, inp);
+      grid2.append(l);
+    }
+    box.append(grid2);
+  }
+  renderKeyOptions(box);
+}
+
+// ---------- own keyboard shortcuts: a key per action, translated to the built-in key ----------
+const KEY_ACTIONS = [
+  ["w", "Move"], ["e", "Rotate"], ["r", "Scale"], ["t", "Top view"], ["g", "Drop to ground"], ["f", "Focus the selection"],
+  ["h", "Hide the selection"], ["p", "Place the preview model"], ["o", "Add a game object"], ["m", "Ruler"], ["n", "Minimap"],
+  ["c", "Compare with the original"], ["l", "World or object axes"], ["q", "Objects tool"], ["b", "Collision: block"], ["x", "Collision: clear"],
+];
+let keyMap = JSON.parse(localStorage.getItem("keyMap") || "{}");  // built-in key -> own key
+function translateKey(key) {
+  const own = Object.entries(keyMap).find(([, k]) => k === key);
+  if (own) return own[0];                       // an own key: do what its built-in key does
+  if (keyMap[key] && keyMap[key] !== key) return null;  // a built-in key that was moved away
+  return key;
+}
+function renderKeyOptions(box) {
+  const h = document.createElement("h4");
+  h.textContent = tr("Keyboard shortcuts");
+  box.append(h);
+  const hint = document.createElement("div");
+  hint.className = "hint";
+  hint.textContent = tr("Click a field and press a letter or digit key. Shift and Ctrl combinations stay as they are.");
+  box.append(hint);
+  const grid2 = document.createElement("div");
+  grid2.className = "opt-grid";
+  for (const [key, label] of KEY_ACTIONS) {
+    const l = document.createElement("label");
+    const span = document.createElement("span");
+    span.textContent = tr(label);
+    const inp = Object.assign(document.createElement("input"), { value: (keyMap[key] || key).toUpperCase(), readOnly: true, className: "key-input" });
+    inp.addEventListener("keydown", (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const k = ev.key.toLowerCase();
+      if (ev.key === "Escape" || ev.key === "Tab") return;
+      if (!/^[a-z0-9]$/.test(k)) return setStatus(tr("Only letters and digits"));
+      const taken = KEY_ACTIONS.find(([b]) => b !== key && (keyMap[b] || b) === k);
+      if (taken) return setStatus(tr("{0} is used by: {1}").replace("{0}", k.toUpperCase()).replace("{1}", tr(taken[1])));
+      if (k === key) delete keyMap[key]; else keyMap[key] = k;
+      localStorage.setItem("keyMap", JSON.stringify(keyMap));
+      inp.value = k.toUpperCase();
+    });
+    l.append(span, inp);
+    grid2.append(l);
+  }
+  box.append(grid2);
+  const reset = Object.assign(document.createElement("button"), { textContent: tr("Default keys") });
+  reset.addEventListener("click", () => { keyMap = {}; localStorage.removeItem("keyMap"); renderOptions(); });
+  box.append(reset);
+}
+$("#btn-options").addEventListener("click", () => { renderOptions(); $("#options-dialog").classList.remove("hidden"); });
+$("#opt-close").addEventListener("click", () => $("#options-dialog").classList.add("hidden"));
+$("#opt-reset").addEventListener("click", () => {
+  if (!confirm(tr("Reset all options to their defaults?"))) return;
+  options = { ...OPTION_DEFAULTS };
+  localStorage.setItem("options", JSON.stringify(options));
+  applyOptions(); renderOptions();
+});
+applyOptions();
+
+// ---------- right-click menu on objects (a right click without dragging) ----------
+let rightDown = null;
+renderer.domElement.addEventListener("pointerdown", (e) => { if (e.button === 2) rightDown = [e.clientX, e.clientY]; });
+renderer.domElement.addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  if (!rightDown || Math.hypot(e.clientX - rightDown[0], e.clientY - rightDown[1]) > 4 || tool !== "objects" || !root) return;
+  const r = renderer.domElement.getBoundingClientRect();
+  raycaster.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
+  let hit = null;
+  for (const h of raycaster.intersectObject(root, true)) {
+    let o = h.object;
+    while (o && !o.userData.entity) o = o.parent;
+    if (o && o.parent === root && !o.userData.terrain && o.visible) { hit = o; break; }
+  }
+  if (hit && !selection.includes(hit)) select([hit]);
+  const has = selection.length > 0, md = has && comp(primary().userData.entity, "ModelDefinitionComponent");
+  const items = [
+    [tr("Duplicate"), "Ctrl+D", has, duplicate],
+    [tr("Copy"), "Ctrl+C", has, copySelection],
+    [tr("Paste here"), "Ctrl+V", !!localStorage.getItem("d2r-clipboard"), paste],
+    null,
+    [tr("Replace with the preview model"), "", has && !!previewPath, replaceWithPreview],
+    [tr("Select same model"), "", !!md, selectSameModel],
+    [tr("Drop to ground"), "G", has, dropToGround],
+    [tr("Random rotation"), "", has, randomRotate],
+    [tr("Focus the selection"), "F", has, () => orbit.target.copy(primary().position)],
+    null,
+    [tr("Save as group"), "Ctrl+G", has, saveGroup],
+    [tr("Save the selection as a kit"), "", has, saveKit],
+    [tr("Hide the selection"), "H", has, hideSelection],
+    null,
+    [tr("Delete"), "Del", has, removeSelected],
+  ];
+  const menu = $("#ctx-menu");
+  menu.textContent = "";
+  for (const it of items) {
+    if (!it) { menu.append(Object.assign(document.createElement("hr"))); continue; }
+    const [label, key, on, fn] = it;
+    const b = document.createElement("button");
+    b.innerHTML = `<span></span><kbd></kbd>`;
+    b.firstChild.textContent = label;
+    b.lastChild.textContent = key;
+    b.disabled = !on;
+    b.addEventListener("click", () => { menu.classList.add("hidden"); fn(); });
+    menu.append(b);
+  }
+  menu.classList.remove("hidden");
+  const mw = menu.offsetWidth, mh = menu.offsetHeight;
+  Object.assign(menu.style, { left: `${Math.min(e.clientX, innerWidth - mw - 4)}px`, top: `${Math.min(e.clientY, innerHeight - mh - 4)}px` });
+});
+window.addEventListener("pointerdown", (e) => { if (!e.target.closest("#ctx-menu")) $("#ctx-menu").classList.add("hidden"); }, true);

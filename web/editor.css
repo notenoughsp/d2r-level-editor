@@ -180,3 +180,15 @@ button.primary { background: #6b5527; border-color: #c7a35a; color: #fff; }
 .act-table input, .act-table select { width: 100%; box-sizing: border-box; }
 #acts-body h4 { color: #c7a35a; margin: 12px 0 4px; }
 #acts-log { white-space: pre-wrap; max-height: 140px; overflow-y: auto; margin: 0 12px; color: #aaa; font-size: 11px; }
+
+.opt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 4px 18px; }
+.opt-grid label { display: flex; justify-content: space-between; align-items: center; gap: 10px; color: #bbb; font-size: 12px; padding: 3px 0; border-bottom: 1px solid #221f19; }
+.opt-grid input[type=number] { width: 80px; } .opt-grid input[type=color] { width: 60px; height: 24px; padding: 0; }
+.opt-grid .key-input { width: 50px; text-align: center; cursor: pointer; text-transform: uppercase; }
+#opt-body h4 { color: #c7a35a; margin: 12px 0 4px; }
+#ctx-menu { position: fixed; z-index: 35; min-width: 240px; background: #16140f; border: 1px solid #c7a35a; padding: 4px; display: flex; flex-direction: column; box-shadow: 0 4px 14px rgba(0,0,0,.6); }
+#ctx-menu button { display: flex; justify-content: space-between; gap: 20px; text-align: left; border: none; background: none; padding: 5px 8px; }
+#ctx-menu button:hover:not(:disabled) { background: #3a3326; }
+#ctx-menu kbd { color: #888; font: 11px system-ui; }
+#ctx-menu hr { border: none; border-top: 1px solid #3a3326; margin: 3px 0; width: 100%; }
+body.no-tips [title] { pointer-events: auto; }
