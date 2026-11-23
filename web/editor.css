@@ -203,3 +203,12 @@ body.no-tips [title] { pointer-events: auto; }
 #tour-hl { position: fixed; z-index: 40; border: 2px solid #ffd400; border-radius: 4px; box-shadow: 0 0 0 9999px rgba(0,0,0,.55); pointer-events: none; }
 #tour { position: fixed; z-index: 41; width: 320px; background: #16140f; border: 1px solid #c7a35a; padding: 10px 12px; line-height: 1.5; box-shadow: 0 6px 20px rgba(0,0,0,.6); }
 .tour-foot { display: flex; gap: 6px; align-items: center; margin-top: 8px; } .tour-foot span { flex: 1; color: #888; font-size: 12px; }
+
+#map-tabs { display: flex; gap: 2px; padding: 3px 6px 0; background: #1c1a17; border-bottom: 1px solid #3a3326; overflow-x: auto; flex: none; }
+.map-tab { display: flex; align-items: center; gap: 4px; padding: 3px 4px 3px 10px; background: #221f19; border: 1px solid #3a3326; border-bottom: none;
+  border-radius: 4px 4px 0 0; cursor: pointer; font-size: 12px; color: #aaa; white-space: nowrap; max-width: 260px; }
+.map-tab span { overflow: hidden; text-overflow: ellipsis; }
+.map-tab.active { background: #3a3326; color: #fff; }
+.map-tab button { border: none; background: none; padding: 0 4px; color: #888; font-size: 11px; }
+.map-tab button:hover { color: #fff; }
+#mm-result { white-space: pre-wrap; font-size: 12px; color: #ddd; max-height: 260px; overflow-y: auto; }

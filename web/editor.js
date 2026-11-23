@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { initI18n, locale, tr } from "./i18n.js?v=24";
+import { initI18n, locale, tr } from "./i18n.js?v=25";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -230,8 +230,9 @@ function rememberView() {
   if (presetPath) localStorage.setItem("lastView:" + presetPath, JSON.stringify({ p: camera.position.toArray(), t: orbit.target.toArray() }));
 }
 window.addEventListener("pagehide", rememberView);
-async function openPreset(path) {
-  if (dirty && !confirm("Discard unsaved changes?")) return;
+async function openPreset(path, opts = {}) {
+  if (dirty && !opts.fromTab) await keepAsDraft();  // unsaved work stays as a draft of its tab
+  addTab(path);
   rememberView();
   localStorage.setItem("recentMaps", JSON.stringify([path, ...recentMaps().filter((p) => p !== path)].slice(0, 8)));
   renderPresets();
@@ -252,6 +253,7 @@ async function openPreset(path) {
   redoStack.length = 0;
   presetPath = path;
   $("#empty-hint").classList.add("hidden");
+  renderTabs();
   const loaded = await (await fetch(api("preset", { path }))).json();
   if (stale()) return;
   doc = loaded;
@@ -264,9 +266,10 @@ async function openPreset(path) {
   }
   const draft = await (await fetch(api("draft", { path }))).json();
   if (stale()) return;
+  const tabDraft = mapTabs.find((t) => t.path === path && t.draft);
   if (draft.doc) {
     const when = new Date(draft.time * 1000).toLocaleString(locale());
-    if (confirm(`There is an autosaved, unsaved draft of this map from ${when}. Restore it?`)) {
+    if (tabDraft || confirm(`There is an autosaved, unsaved draft of this map from ${when}. Restore it?`)) {
       doc = draft.doc;
       restoredDraft = true;
     } else await postJSON("draft", { path });
@@ -475,6 +478,7 @@ function updateTitle() {
   updateUndoButtons();
 }
 function markDirty() {
+  if (!dirty) setTimeout(renderTabs, 0);
   dirty = true;
   updateSceneInfo();
   scheduleObjectList();
@@ -828,6 +832,9 @@ async function save() {
   const r = await postJSON("preset", { path: presetPath }, doc);
   if (r.ok) {
     dirty = false;
+    const tab = mapTabs.find((t) => t.path === presetPath);
+    if (tab) { tab.draft = false; saveTabs(); }
+    renderTabs();
     updateSceneInfo();
     setStatus("Saved: " + r.data.saved);
     const li = document.querySelector(`#preset-list li[data-path="${presetPath}"]`);
@@ -3411,3 +3418,84 @@ function showTour(i) {
 $("#tour-next").addEventListener("click", () => showTour(tourStep + 1));
 $("#tour-skip").addEventListener("click", () => showTour(-1));
 if (!localStorage.getItem("tourDone")) setTimeout(() => showTour(0), 1500);
+
+// ---------- tabs of open maps: switch without losing unsaved work (kept as a draft) ----------
+let mapTabs = JSON.parse(localStorage.getItem("mapTabs") || "[]");  // [{ path, draft }]
+function saveTabs() { localStorage.setItem("mapTabs", JSON.stringify(mapTabs)); }
+function renderTabs() {
+  const bar = $("#map-tabs");
+  bar.textContent = "";
+  bar.classList.toggle("hidden", !mapTabs.length);
+  for (const t of mapTabs) {
+    const b = document.createElement("div");
+    b.className = "map-tab" + (t.path === presetPath ? " active" : "");
+    b.title = t.path;
+    const name = document.createElement("span");
+    const unsaved = t.path === presetPath ? dirty : t.draft;
+    name.textContent = (unsaved ? "● " : "") + t.path.replace("data/hd/env/preset/", "").replace(/\.json$/, "");
+    const x = document.createElement("button");
+    x.textContent = "✕";
+    x.title = tr("Close the tab (unsaved work stays as a draft)");
+    x.addEventListener("click", (e) => { e.stopPropagation(); closeTab(t.path); });
+    b.append(name, x);
+    b.addEventListener("click", () => switchTab(t.path));
+    bar.append(b);
+  }
+}
+function addTab(path) {
+  if (!mapTabs.some((t) => t.path === path)) { mapTabs.push({ path, draft: false }); if (mapTabs.length > 12) mapTabs.shift(); }
+  saveTabs(); renderTabs();
+}
+async function keepAsDraft() {
+  if (!dirty || !doc || !presetPath) return;
+  await postJSON("draft", { path: presetPath }, doc);
+  const t = mapTabs.find((x) => x.path === presetPath);
+  if (t) t.draft = true;
+  dirty = false;
+  saveTabs();
+}
+async function switchTab(path) {
+  if (path === presetPath) return;
+  await keepAsDraft();
+  openPreset(path, { fromTab: true });
+}
+async function closeTab(path) {
+  if (path === presetPath) await keepAsDraft();
+  mapTabs = mapTabs.filter((t) => t.path !== path);
+  saveTabs(); renderTabs();
+}
+renderTabs();
+
+// ---------- combine two exported mods ----------
+async function openMods() {
+  const mods = await (await fetch(api("mods"))).json();
+  for (const id of ["#mm-a", "#mm-b"]) {
+    const sel = $(id);
+    sel.textContent = "";
+    for (const m of mods) sel.append(new Option(m, m));
+  }
+  if (mods.length > 1) $("#mm-b").selectedIndex = 1;
+  $("#mm-result").textContent = "";
+  $("#mods-dialog").classList.remove("hidden");
+}
+$("#mm-check").addEventListener("click", async () => {
+  const r = await (await fetch(api("mods/check", { a: $("#mm-a").value, b: $("#mm-b").value }))).json();
+  if (r.error) return ($("#mm-result").textContent = r.error);
+  const kinds = { table: tr("data table: merged row by row"), strings: tr("texts: merged by key"), file: tr("file: only one can win") };
+  $("#mm-result").textContent = r.conflicts.length
+    ? tr("{0} file(s) changed by both:").replace("{0}", r.conflicts.length) + "\n" + r.conflicts.map((c) => `  ${c.file}  (${kinds[c.kind]})`).join("\n")
+    : tr("No file is changed by both mods: they work side by side when merged.");
+  if (!$("#mm-out").value) $("#mm-out").value = `${$("#mm-a").value}_${$("#mm-b").value}`.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40);
+});
+$("#mm-merge").addEventListener("click", async () => {
+  const r = await postJSON("mods/merge", { a: $("#mm-a").value, b: $("#mm-b").value, out: $("#mm-out").value, bwins: $("#mm-bwins").checked ? 1 : 0 });
+  if (!r.ok) return ($("#mm-result").textContent = r.data.error);
+  const d = r.data;
+  let msg = d.written ? tr("Merged mod written: {0}").replace("{0}", d.written) : tr("Not merged: these files clash (tick \"second mod wins\" to take the second mod's version):");
+  if (d.clashes.length) msg += "\n" + d.clashes.map((c) => "  ✗ " + c).join("\n");
+  if (d.merged.length) msg += "\n" + tr("Merged row by row:") + "\n" + d.merged.map((c) => "  ✓ " + c).join("\n");
+  if (d.warnings.length) msg += "\n" + tr("Check:") + "\n" + d.warnings.map((c) => "  ! " + c).join("\n");
+  $("#mm-result").textContent = msg;
+});
+$("#ex-mods").addEventListener("click", () => { $("#export-dialog").classList.add("hidden"); openMods(); });
+$("#mm-close").addEventListener("click", () => $("#mods-dialog").classList.add("hidden"));

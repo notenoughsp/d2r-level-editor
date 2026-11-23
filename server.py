@@ -1057,6 +1057,16 @@ class Handler(BaseHTTPRequestHandler):
                     self.send(404, {"error": "no thumbnail"})
             elif u.path == "/api/usage":
                 self.send(200, model_usage(q["model"]))
+            elif u.path == "/api/mods":
+                mods = pathlib.Path(casc.GAME) / "mods"
+                self.send(200, sorted(p.name for p in mods.iterdir() if p.is_dir() and not p.name.endswith(".old")) if mods.exists() else [])
+            elif u.path == "/api/mods/check":
+                import modmerge
+                mods = pathlib.Path(casc.GAME) / "mods"
+                a, b = q.get("a", ""), q.get("b", "")
+                if not all(re.fullmatch(r"[A-Za-z0-9 _.-]{1,60}", x) and (mods / x).is_dir() for x in (a, b)):
+                    return self.send(400, {"error": "Choose two mods."})
+                self.send(200, modmerge.conflicts(mods / a, mods / b))
             elif u.path == "/api/world":
                 self.send(200, world_state())
             elif u.path == "/api/projects":
@@ -1197,6 +1207,19 @@ class Handler(BaseHTTPRequestHandler):
                 f.parent.mkdir(parents=True, exist_ok=True)
                 f.write_bytes(raw)
                 self.send(200, {"saved": True})
+            elif u.path == "/api/mods/merge":
+                import modmerge
+                self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                mods = pathlib.Path(casc.GAME) / "mods"
+                a, b, out = q.get("a", ""), q.get("b", ""), q.get("out", "")
+                if not all(re.fullmatch(r"[A-Za-z0-9 _.-]{1,60}", x) and (mods / x).is_dir() for x in (a, b)):
+                    return self.send(400, {"error": "Choose two mods."})
+                if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", out):
+                    return self.send(400, {"error": "Mod name: only letters, digits, _ and -"})
+                try:
+                    self.send(200, modmerge.merge(mods / a, mods / b, mods / out, lambda p: read_asset(p, original=True), q.get("bwins") == "1"))
+                except ValueError as e:
+                    self.send(400, {"error": str(e)})
             elif u.path in ("/api/world/spec", "/api/world/build"):
                 length = int(self.headers.get("Content-Length") or 0)
                 body = json.loads(self.rfile.read(length)) if length else {}
