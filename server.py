@@ -28,6 +28,7 @@ import collision  # noqa: E402
 import model_export  # noqa: E402
 from ds1 import DS1  # noqa: E402
 import texture  # noqa: E402
+import world_waypoints  # noqa: E402
 
 WEB = ROOT / "web"
 DATA = casc.DATA
@@ -91,7 +92,7 @@ def ds1_for_preset(preset_path):
 _size_cache = {}
 
 
-def install_world_plugin(mod):
+def install_world_plugin(mod, data_root=None):
     """New levels (zones/*.json, built with tools/new_zone.py) need the d2r-world plugin: extra
     towns and coming back to the new areas after leaving the game. Its config comes from the zones."""
     zones = [json.loads(p.read_text(encoding="utf-8")) for p in sorted((DATA / "zones").glob("*.json"))]
@@ -108,7 +109,10 @@ def install_world_plugin(mod):
     lines = ["; written by the editor export from zones/*.json",
              f"towns={','.join(map(str, towns))}", f"world={','.join(map(str, world))}",
              f"hub={towns[0] if towns else world[0]}", "hub_warp_type=0", "return_delay_frames=40"]
+    lines += world_waypoints.ini_lines(zones)
     (pdir / "d2r-world.ini").write_text("\n".join(lines) + "\n")
+    if data_root is not None:  # graphics of the World Waypoints window and its button in the waypoint panel
+        world_waypoints.install(data_root, lambda p: read_asset(p, original=True))
 
 
 def preset_size(preset_path):
@@ -541,7 +545,7 @@ def export_mod(name):
         pdir = mod / "d2rloader" / "plugins"
         pdir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(plugin, pdir / plugin.name)
-    install_world_plugin(mod)
+    install_world_plugin(mod, data_root)
     meta = mod / "d2rloader" / "metadata.json"
     meta.parent.mkdir(parents=True, exist_ok=True)
     meta.write_text(json.dumps({"schemaVersion": 1, "d2rloader": {"version": "1.3.1-beta"},

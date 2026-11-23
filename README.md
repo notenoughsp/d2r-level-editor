@@ -255,6 +255,26 @@ made from the zones:
 - **Coming back:** a character that leaves the game in a new area is brought back to its hub
   town when it joins again (LEVEL_WarpUnit 0x488180, the function a waypoint calls). State per
   character: `d2r-world-state.txt`.
+- **World Waypoints:** a second waypoint menu for the new areas, as an in-game window with
+  buttons (a D2RLoader panel) in blue-green copies of the waypoint graphics. It has one button
+  per zone, eight per page, and no limit of 40 waypoint bits or five act tabs, so a whole new act
+  can live there while the old acts stay as they are. It opens with the "World Waypoints" button
+  that the export adds to the game's waypoint panel, with Ctrl+W, or the console command
+  `world-waypoints`. Towns are open from the start; other zones open once the character has been
+  there (`d2r-world-waypoints.txt`). `tools/world_waypoints.py` writes the `waypoint=` lines of
+  the plugin config, the recoloured sprites and the extended waypoint panel layouts.
+
+  Findings: buttons in layouts only send messages whose target and command the game knows
+  (`WorldWaypoints:Travel0` never arrives), so the buttons send
+  `PanelManager:OpenPanel:d2r-world/<command>` and the plugin takes that message first. A hidden
+  widget still takes clicks, so every page is its own panel. `"tooltipString": "@strClose"` made
+  a plugin layout fail to load. D2RLoader 1.3.1 has the 56-byte widget service (no set-text).
+
+  Test without the real mouse: with `ui_test=2` in `d2r-world.ini` the plugin opens the game's
+  waypoint panel and answers `GetCursorPos`/`GetAsyncKeyState` from `d2r-world-cursor.txt`; a
+  script writes a position there and sends the button messages to the game window. Tested
+  2026-11-23: the button in the waypoint panel opens the window, page buttons switch pages, and
+  a destination button takes the character to the Sanctuary.
 
 Findings that the script relies on:
 
