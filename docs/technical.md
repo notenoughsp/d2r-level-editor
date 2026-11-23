@@ -171,6 +171,13 @@ What an NPC does is in the game code, per class. The plugin hooks:
 
 Menu entries (client): Talk 0x1161E0, Gossip 0x113340, Trade 0x112C80 (packet 0x38 mode 2).
 
+**Texts by quest stage:** an NPC in `npcs.json` may have `"stages": [{"stage": n, "text": ...}]`
+(set by tools, not in the NPC form). The plugin then shows the text of the highest stage up to the
+current one, read from `d2r-quest-stage.txt` next to the DLL (written by a quest plugin such as
+d2r-world), and reports each talk in `d2r-quest-talk.txt` (`speech_stage=<class>,<stage>,<string id>`
+in `d2r-npc.ini`). With `test_cursor=1`, `test_update=0` leaves out the per-frame hook (no dump),
+so another plugin that hooks the same function still loads.
+
 `python -I tools/npc_ingame_test.py <ModName>` tests the NPCs in the act 1 town without
 screenshots: the plugin (with `test_cursor=1`) logs NPC positions, the UI panels that open and
 every speech it replaces; the script clicks the NPCs through the plugin's fake mouse, runs the

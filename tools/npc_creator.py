@@ -101,7 +101,8 @@ def build(npcs, read_asset, project):
     # below 65536 (the same in both string folders)
     ini, classes, strings, speech = result
     ids = dict(zip(strings, free_string_ids(read_asset, len(strings)))) if strings else {}
-    ini = ini + [f"speech={cls},{ids[key]}" for cls, key in speech.items()]
+    ini = ini + [f"speech={cls},{ids[key]}" if isinstance(cls, int) else f"speech_stage={cls[0]},{cls[1]},{ids[key]}"
+                 for cls, key in speech.items()]
     for path in ("data/local/lng/strings/npcs.json", "data/local/lng/strings-legacy/npcs.json"):
         if npcs:
             add_strings(read_asset, project, path, strings, ids)
@@ -148,6 +149,10 @@ def build_bank(t, bank, npcs):
         if n.get("text", "").strip():
             strings[n["id"] + "Speech"] = n["text"].strip()
             speech[cls] = n["id"] + "Speech"
+        for st in n.get("stages", []):  # texts by quest stage (a quest plugin writes the stage)
+            key = f"{n['id']}Stage{int(st['stage'])}"
+            strings[key] = st["text"].strip()
+            speech[(cls, int(st["stage"]))] = key
         for act in range(1, 6):  # placeable in every act
             # the game reads each act's rows as one block: insert after the act's last row
             last = max(k for k, r in enumerate(pre_rows) if r and r[0] == str(act))

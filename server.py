@@ -124,8 +124,13 @@ def save_npcs(npcs):
         look = n.get("look") if n.get("look") in looks else "charsi"
         trade_like = n.get("trade_like") if n.get("trade_like") in npc_creator.TRADERS else "charsi"
         text = "\n".join(str(n.get("text", "")).replace("\r", "").split("\n")[:6])[:600]
-        clean.append({"id": nid, "name": name, "look": look, "role": role, "trade_like": trade_like,
-                      "text": text, "removed": bool(n.get("removed"))})
+        entry = {"id": nid, "name": name, "look": look, "role": role, "trade_like": trade_like,
+                 "text": text, "removed": bool(n.get("removed"))}
+        stages = [{"stage": int(st["stage"]), "text": "\n".join(str(st["text"]).replace("\r", "").split("\n")[:8])[:900]}
+                  for st in n.get("stages", []) if str(st.get("text", "")).strip()]
+        if stages:  # texts by quest stage (set by tools, not in the editor's NPC form)
+            entry["stages"] = stages
+        clean.append(entry)
     for nid, n in old.items():  # NPCs that vanished from the list stay as removed placeholders
         if nid not in used:
             clean.append({**n, "removed": True})

@@ -11,6 +11,9 @@
 // Config d2r-npc.ini next to the DLL (written by the editor export):
 //   npc=<class>,<base class>        a new NPC and the town NPC whose behaviour it has
 //   speech=<class>,<string id>      what the NPC says (its own string in the mod's npcs.json)
+//   speech_stage=<class>,<stage>,<string id>  what it says from that quest stage on; the stage is
+//                                   read from d2r-quest-stage.txt (written by a quest plugin such as
+//                                   d2r-world), and every talk is reported in d2r-quest-talk.txt
 //   test_spawn=<class>              test only: spawn this NPC next to the player in town
 //   test_cursor=1                   test only: mouse position and left button from d2r-npc-cursor.txt
 
@@ -83,10 +86,12 @@ const D2RL::DataTableServiceV1* Tables = nullptr;
 const D2RL::PluginContext* Ctx = nullptr;
 
 std::map<int, std::uint16_t> Speech;  // class -> string id of what it says
+std::map<int, std::map<int, std::uint16_t>> StageSpeech;  // class -> quest stage -> string id
 std::map<int, int> BaseOf;                                 // new class -> town NPC class
 std::map<int, std::array<std::uint8_t, NpcRecordSize>> Records;  // copies with the new class id
 int TestSpawn = -1;
 bool TestCursor = false;
+bool TestUpdate = true;  // test_update=0: no per-frame hook (no dump), when another plugin needs it
 bool TestSpawned = false;
 std::uint32_t LastGuid = 0;
 int LastCheck = -1;
@@ -116,7 +121,10 @@ void ReadConfig() {
         if (std::sscanf(line, "npc=%d,%d", &a, &b) == 2) BaseOf[a] = b;
         if (std::sscanf(line, "test_spawn=%d", &a) == 1) TestSpawn = a;
         if (std::sscanf(line, "test_cursor=%d", &a) == 1) TestCursor = a != 0;
+        if (std::sscanf(line, "test_update=%d", &a) == 1) TestUpdate = a != 0;
         if (std::sscanf(line, "speech=%d,%d", &a, &b) == 2) Speech[a] = static_cast<std::uint16_t>(b);
+        int c = 0;
+        if (std::sscanf(line, "speech_stage=%d,%d,%d", &a, &b, &c) == 3) StageSpeech[a][b] = static_cast<std::uint16_t>(c);
     }
     std::fclose(f);
 }
@@ -161,7 +169,6 @@ void PollTestAction();
 
 void __fastcall UpdateDetour(void* game) {
     OrigUpdate(game);
-    if (TestCursor) PollTestAction();
     if (!game) return;
     if (const std::string dump = Dir + "\\d2r-npc-dump.txt"; GetFileAttributesA(dump.c_str()) != INVALID_FILE_ATTRIBUTES) {
         std::remove(dump.c_str());
@@ -348,6 +355,24 @@ SpeakFn OrigSpeak = nullptr;
 void __fastcall SpeakDetour(void* unit, std::uint16_t stringId, void* done) {
     const int cls = *reinterpret_cast<int*>(Base + TalkClassRva);
     const auto it = Speech.find(cls);
+    if (const auto st = StageSpeech.find(cls); st != StageSpeech.end()) {
+        int stage = 0;
+        if (FILE* f = std::fopen((Dir + "\\d2r-quest-stage.txt").c_str(), "r")) {
+            if (std::fscanf(f, "%d", &stage) != 1) stage = 0;
+            std::fclose(f);
+        }
+        auto pick = st->second.upper_bound(stage);  // the text of the highest stage <= the current one
+        if (pick != st->second.begin()) {
+            --pick;
+            Log("speech: NPC class %d at quest stage %d says string %u (text of stage %d)", cls, stage, pick->second, pick->first);
+            if (FILE* f = std::fopen((Dir + "\\d2r-quest-talk.txt").c_str(), "w")) {
+                std::fprintf(f, "%d\n", cls);
+                std::fclose(f);
+            }
+            OrigSpeak(unit, pick->second, done);
+            return;
+        }
+    }
     if (it != Speech.end()) {
         Log("speech: NPC class %d says string %u instead of %u", cls, it->second, stringId);
         stringId = it->second;
@@ -371,6 +396,13 @@ void __cdecl RunAction(const D2RL::PluginContext*, void*) noexcept {
     if (PendingAction == "talk") reinterpret_cast<MenuActionFn>(Base + 0x1161E0)();
     else if (PendingAction == "gossip") reinterpret_cast<MenuActionFn>(Base + 0x113340)();
     else if (PendingAction == "trade") reinterpret_cast<MenuActionFn>(Base + 0x112C80)();
+}
+
+DWORD WINAPI PollThread(LPVOID) {
+    for (;;) {
+        Sleep(100);
+        PollTestAction();
+    }
 }
 
 void PollTestAction() {
@@ -440,11 +472,13 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
     const bool s = context->InstallInlineHook(D2RL::MakeInlineHook(
         StockRva, StockBytes.data(), static_cast<std::uint32_t>(StockBytes.size()),
         reinterpret_cast<void*>(&StockDetour), reinterpret_cast<void**>(&OrigStock)));
-    const bool m = Speech.empty() || context->InstallInlineHook(D2RL::MakeInlineHook(
+    const bool m = (Speech.empty() && StageSpeech.empty()) || context->InstallInlineHook(D2RL::MakeInlineHook(
         SpeakRva, SpeakBytes.data(), static_cast<std::uint32_t>(SpeakBytes.size()),
         reinterpret_cast<void*>(&SpeakDetour), reinterpret_cast<void**>(&OrigSpeak)));
     bool u = true;
-    if (TestSpawn >= 0 || TestCursor)
+    // the per-frame hook only for test spawns: other plugins (d2r-world) hook the same function, and
+    // the test actions of test_cursor are polled from a thread instead
+    if (TestSpawn >= 0 || (TestCursor && TestUpdate))
         u = context->InstallInlineHook(D2RL::MakeInlineHook(
             UpdateRva, UpdateBytes.data(), static_cast<std::uint32_t>(UpdateBytes.size()),
             reinterpret_cast<void*>(&UpdateDetour), reinterpret_cast<void**>(&OrigUpdate)));
@@ -454,6 +488,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
             const D2RL::SharedEvents::UiMessageListener l{D2RL::SharedEvents::UiMessageListenerSize, 0, 0, 0, OnUiMessage, nullptr};
             Events->registerUiMessageListener(context, &l, &Listener);
         }
+        CreateThread(nullptr, 0, PollThread, nullptr, 0, nullptr);
         RedirectCursor("GetCursorPos");
         RedirectCursor("GetPhysicalCursorPos");
         if (HMODULE w = LoadLibraryW(L"win32u.dll")) {
