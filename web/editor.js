@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { initI18n, locale, tr } from "./i18n.js?v=1";
+import { initI18n, locale, tr } from "./i18n.js?v=2";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -1574,6 +1574,8 @@ async function searchModels() {
   if (cat === "__recent") {
     const items = recentModels().filter((m) => !q || m.includes(q));
     r = { items, total: items.length };
+  } else if (cat === "__own") {
+    r = await (await fetch(api("models", { limit: 2000, q, own: 1 }))).json();
   } else {
     // the server filters by text only; an area needs the full match list, narrowed here
     const all = await (await fetch(api("models", { limit: cat ? 20000 : 400, q }))).json();
@@ -1709,8 +1711,40 @@ function selectNpc(i) {
   $("#npc-trade").value = n.trade_like || "charsi";
   $("#npc-text").value = n.text || "";
   $("#npc-trade-row").classList.toggle("hidden", n.role !== "trade");
+  $("#npc-stages-box").open = !!(n.stages && n.stages.length);
+  renderStages();
   renderNpcs();
 }
+function renderStages() {
+  const box = $("#npc-stages");
+  box.textContent = "";
+  const n = npcData.npcs[npcSel];
+  (n.stages || []).forEach((st, k) => {
+    const div = document.createElement("div");
+    div.className = "npc-stage";
+    const row = document.createElement("div");
+    row.className = "row";
+    const label = document.createElement("span");
+    label.textContent = tr("From quest stage");
+    const num = Object.assign(document.createElement("input"), { type: "number", min: 0, max: 99, value: st.stage });
+    num.addEventListener("input", () => { st.stage = +num.value || 0; });
+    const del = Object.assign(document.createElement("button"), { textContent: tr("Remove") });
+    del.addEventListener("click", () => { n.stages.splice(k, 1); renderStages(); });
+    row.append(label, num, del);
+    const text = Object.assign(document.createElement("textarea"), { rows: 4, value: st.text });
+    text.addEventListener("input", () => { st.text = text.value; });
+    div.append(row, text);
+    box.append(div);
+  });
+}
+$("#npc-stage-add").addEventListener("click", () => {
+  if (npcSel < 0) return;
+  const n = npcData.npcs[npcSel];
+  n.stages = n.stages || [];
+  const last = n.stages.length ? n.stages[n.stages.length - 1].stage : 0;
+  n.stages.push({ stage: last + 1, text: "" });
+  renderStages();
+});
 function formToNpc() {
   if (npcSel < 0) return;
   const n = npcData.npcs[npcSel];
@@ -1741,4 +1775,76 @@ $("#npc-save").addEventListener("click", async () => {
   npcData.npcs = r.data.npcs;
   renderNpcs();
   setStatus(tr("NPCs saved; place them with Add game object, then export"));
+});
+
+// ---------- own models: recolour a game model, import a mesh (tools/retexture.py, tools/meshimport.py) ----------
+function readFile(input) {
+  const f = input.files[0];
+  if (!f) return Promise.resolve(null);
+  return new Promise((ok, fail) => {
+    const r = new FileReader();
+    r.onload = () => ok({ name: f.name, data: r.result });
+    r.onerror = () => fail(r.error);
+    r.readAsDataURL(f);
+  });
+}
+async function showOwnModel(model) {
+  $("#model-cat").value = "__own";
+  $("#model-filter").value = "";
+  await searchModels();
+  previewPath = model;
+  showPreview(model);
+  const li = [...document.querySelectorAll("#model-list li")].find((x) => x.title === model);
+  if (li) { li.classList.add("active"); li.scrollIntoView({ block: "nearest" }); }
+}
+function rtModeChanged() {
+  const m = $("#rt-mode").value;
+  $("#rt-tint-row").classList.toggle("hidden", m !== "tint");
+  $("#rt-file-row").classList.toggle("hidden", m === "tint");
+  $("#rt-repeat-row").classList.toggle("hidden", m !== "material");
+}
+$("#rt-mode").addEventListener("change", rtModeChanged);
+rtModeChanged();
+$("#rt-go").addEventListener("click", async () => {
+  if (!previewPath) return setStatus(tr("Choose a model in the list first"));
+  const mode = $("#rt-mode").value;
+  const body = { model: previewPath, tag: $("#rt-tag").value.trim().toLowerCase(), mode };
+  if (mode === "tint") {
+    const hex = $("#rt-color").value;
+    body.rgb = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    body.strength = +$("#rt-strength").value;
+  } else {
+    const f = await readFile($("#rt-file"));
+    if (!f) return setStatus(tr("Choose a picture first"));
+    body.image = f.data;
+    body.repeat = +$("#rt-repeat").value || 2;
+  }
+  setStatus(tr("Recolouring …"));
+  $("#rt-go").disabled = true;
+  try {
+    const r = await postJSON("retexture", {}, body);
+    if (!r.ok) return setStatus(tr("Recolouring failed: {0}").replace("{0}", r.data.error));
+    setStatus(tr("New model {0} ({1} texture(s))").replace("{0}", r.data.model.replace("data/hd/", "")).replace("{1}", r.data.textures));
+    await showOwnModel(r.data.model);
+  } finally { $("#rt-go").disabled = false; }
+});
+$("#im-file").addEventListener("change", () => {
+  const f = $("#im-file").files[0];
+  if (f && !$("#im-name").value) $("#im-name").value = f.name.replace(/\.[^.]+$/, "").toLowerCase().replace(/[^a-z0-9_]+/g, "_").slice(0, 40);
+});
+$("#im-go").addEventListener("click", async () => {
+  const mesh = await readFile($("#im-file"));
+  if (!mesh) return setStatus(tr("Choose a mesh file first"));
+  const tex = await readFile($("#im-tex"));
+  const body = { name: $("#im-name").value.trim().toLowerCase(), filename: mesh.name, mesh: mesh.data,
+                 texture: tex ? tex.data : null, height: +$("#im-height").value || 8 };
+  setStatus(tr("Importing …"));
+  $("#im-go").disabled = true;
+  try {
+    const r = await postJSON("import", {}, body);
+    if (!r.ok) return setStatus(tr("Import failed: {0}").replace("{0}", r.data.error));
+    setStatus(tr("Imported {0}: {1} vertices, {2} triangles").replace("{0}", r.data.model.replace("data/hd/", ""))
+      .replace("{1}", r.data.vertices).replace("{2}", r.data.triangles));
+    await showOwnModel(r.data.model);
+  } finally { $("#im-go").disabled = false; }
 });

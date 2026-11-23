@@ -87,3 +87,17 @@ input.num { width: 52px; }
 #pane-npcs input, #pane-npcs select, #pane-npcs textarea { display: block; width: 100%; box-sizing: border-box; margin-top: 2px; }
 .npc-help { color: #999; font-size: 11px; margin: 4px 0 8px; }
 #npc-list { max-height: 30vh; }
+
+.tool-box { border-top: 1px solid #3a3326; padding: 4px 0; }
+.tool-box summary, #npc-stages-box summary { cursor: pointer; color: #c7a35a; padding: 2px 0; }
+.tool-box label { display: block; margin: 4px 0; color: #bbb; font-size: 12px; }
+.tool-box input, .tool-box select { display: block; width: 100%; box-sizing: border-box; margin-top: 2px; }
+.tool-box .tool-row { display: flex; gap: 6px; align-items: center; }
+.tool-box .tool-row input[type=color] { width: 40px; height: 26px; padding: 0; margin: 0; }
+.tool-box .tool-row label { flex: 1; margin: 0; }
+.tool-box button { margin-top: 4px; }
+.npc-stage { border: 1px solid #3a3326; padding: 4px; margin: 4px 0; }
+.npc-stage .row { display: flex; gap: 6px; align-items: center; }
+.npc-stage .row input { width: 60px !important; display: inline-block !important; }
+#pane-models { overflow-y: auto; }
+#pane-models .list { min-height: 120px; }

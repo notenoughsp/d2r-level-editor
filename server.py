@@ -427,18 +427,108 @@ def start_ingame_test(name):
     return {"started": True, "export": export}
 
 
+def known_file(key):
+    """A game file or a file of the project (models and textures made by the editor's tools)."""
+    return key in names or (PROJECT / key).is_file()
+
+
+def version_key(key):
+    """Cache key part that changes when a project file is written again (game files never change)."""
+    f = PROJECT / key
+    return f"|{f.stat().st_mtime_ns}" if f.is_file() else ""
+
+
 def model_file(vpath, lod):
     key = vpath.replace("\\", "/").lower()
-    if re.search(r"_lod\d\.model$", key) and key in names:
+    if re.search(r"_lod\d\.model$", key) and known_file(key):
         return key
     base = key[:-len(".model")] if key.endswith(".model") else key
     for l in [lod, 0, 1, 2]:
         cand = f"{base}_lod{l}.model"
-        if cand in names:
+        if known_file(cand):
             return cand
-    if key in names:
+    if known_file(key):
         return key
     raise FileNotFoundError(vpath)
+
+
+def write_project(path, data):
+    key = path.replace("\\", "/").lower().lstrip("/")
+    if ".." in key.split("/") or ":" in key or not key.startswith("data/"):
+        raise ValueError(f"bad path {path}")
+    dst = PROJECT / key
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.write_bytes(data)
+
+
+def decode_image(b64):
+    from PIL import Image
+    raw = base64.b64decode(b64.split(",", 1)[-1])
+    if len(raw) > 40 * 1024 * 1024:
+        raise ValueError("The picture is too large (40 MB at most).")
+    img = Image.open(io.BytesIO(raw))
+    img.load()
+    return img
+
+
+def make_retexture(body):
+    """A copy of a game model with new textures (tools/retexture.py) from the editor's form."""
+    import retexture
+    model = str(body.get("model", "")).lower()
+    if not re.fullmatch(r"data/hd/[a-z0-9_/]+\.model", model):
+        raise ValueError("Choose a game model first.")
+    tag = str(body.get("tag", "")).lower()
+    if not retexture.TAG.match(tag):
+        raise ValueError("Name: four letters or digits, e.g. gold")
+    mode = body.get("mode")
+    if mode == "tint":
+        rgb = tuple(max(0, min(255, int(v))) for v in body.get("rgb", [200, 160, 60]))
+        strength = max(0.0, min(1.0, float(body.get("strength", 0.85))))
+        make = lambda img, _p: retexture.tinted(img, rgb, strength)  # noqa: E731
+    elif mode in ("image", "material"):
+        picture = decode_image(body.get("image", ""))
+        if mode == "image":
+            picture = picture.convert("RGBA")
+            make = lambda img, _p: picture.resize(img.size)  # noqa: E731
+        else:
+            repeat = max(1, min(16, int(body.get("repeat", 2))))
+            make = lambda img, _p: retexture.material(img, picture, repeat)  # noqa: E731
+    else:
+        raise ValueError("unknown mode")
+    try:
+        new, textures = retexture.retexture(model, tag, make, lambda p: read_asset(p, original=True),
+                                            write_project, read_asset)
+    except FileNotFoundError:
+        raise ValueError("Model not found: only game models can be recoloured (not copies made by the editor).")
+    return {"model": new, "textures": len(textures)}
+
+
+def make_import(body):
+    """A new game model from an OBJ or glTF (.glb) mesh (tools/meshimport.py)."""
+    import meshimport
+    name = str(body.get("name", "")).lower()
+    if not re.fullmatch(r"[a-z0-9_]{2,40}", name):
+        raise ValueError("Model name: 2-40 small letters, digits or _")
+    fname = str(body.get("filename", "")).lower()
+    ext = ".glb" if fname.endswith(".glb") else ".obj" if fname.endswith(".obj") else None
+    if not ext:
+        raise ValueError("Mesh file: .obj or .glb")
+    raw = base64.b64decode(str(body.get("mesh", "")).split(",", 1)[-1])
+    if not raw or len(raw) > 60 * 1024 * 1024:
+        raise ValueError("The mesh file is empty or too large (60 MB at most).")
+    height = max(0.5, min(200.0, float(body.get("height", 8))))
+    tex = decode_image(body["texture"]) if body.get("texture") else None
+    tmp = CACHE / "import"
+    tmp.mkdir(parents=True, exist_ok=True)
+    src = tmp / ("upload" + ext)
+    src.write_bytes(raw)
+    try:
+        model, verts, tris = meshimport.import_mesh(str(src), f"data/hd/env/model/custom/{name}.model",
+                                                    lambda p: read_asset(p, original=True), write_project,
+                                                    read_asset, tex, height)
+    finally:
+        src.unlink(missing_ok=True)
+    return {"model": model, "vertices": verts, "triangles": tris}
 
 
 def cached(kind, key, make, ext):
@@ -507,13 +597,13 @@ def list_presets():
     return sorted(out)
 
 
-def list_models(q, limit):
+def list_models(q, limit, own_only=False):
     seen = []
     ql = q.lower()
     # models made by tools/retexture.py live only in the project
     own = [p.relative_to(PROJECT).as_posix().lower() for p in (PROJECT / "data/hd").rglob("*.model")] \
         if (PROJECT / "data/hd").exists() else []
-    for k in list(names) + own:
+    for k in ([] if own_only else list(names)) + own:
         if not k.endswith(".model") or "/hd/" not in k:
             continue
         base = re.sub(r"_lod\d\.model$", ".model", k)
@@ -663,17 +753,17 @@ class Handler(BaseHTTPRequestHandler):
                 import time as _t
                 self.send(200, {**test_state, "elapsed": _t.time() - test_state["started"] if test_state["started"] else 0})
             elif u.path == "/api/models":
-                items, total = list_models(q.get("q", ""), int(q.get("limit", "300")))
+                items, total = list_models(q.get("q", ""), int(q.get("limit", "300")), q.get("own") == "1")
                 self.send(200, {"items": items, "total": total})
             elif u.path == "/api/model":
                 lod = int(q.get("lod", "1"))
                 f = model_file(q["path"], lod)
-                self.send(200, cached("glb", f, lambda: model_export.convert(read_asset(f)), "glb"), "model/gltf-binary")
+                self.send(200, cached("glb", f + version_key(f), lambda: model_export.convert(read_asset(f)), "glb"), "model/gltf-binary")
             elif u.path == "/api/texture":
                 mip = int(q.get("mip", "1"))
                 p = q["path"]
                 # "|2": texture format table fixed (2026-11-23), older cached PNGs are not used
-                self.send(200, cached("png", f"{p}|{mip}|2", lambda: make_png(p, mip), "png"), "image/png")
+                self.send(200, cached("png", f"{p}|{mip}|2" + version_key(p.replace("\\", "/").lower().lstrip("/")), lambda: make_png(p, mip), "png"), "image/png")
             else:
                 self.send(404, {"error": "not found"})
         except FileNotFoundError as e:
@@ -704,6 +794,12 @@ class Handler(BaseHTTPRequestHandler):
                 self.rfile.read(int(self.headers.get("Content-Length") or 0))
                 ok = updater.apply_and_exit()  # the launcher restarts the server with the new version
                 self.send(200 if ok else 409, {"restarting": ok})
+            elif u.path in ("/api/retexture", "/api/import"):
+                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                try:
+                    self.send(200, (make_retexture if u.path.endswith("retexture") else make_import)(body))
+                except ValueError as e:
+                    self.send(400, {"error": str(e)})
             elif u.path == "/api/npcs":
                 body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
                 try:
