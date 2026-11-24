@@ -152,7 +152,7 @@ function showProps() {
       row("Rotation°", "r", [deg(e.x), deg(e.y), deg(e.z)]) +
       row("Scaling", "s", [o.scale.x, o.scale.y, o.scale.z].map((v) => v.toFixed(3))) +
       lightProps(o) +
-      `<div class="prop-row"><span>${tr("Size (all axes)")}</span><input type="number" step="0.05" min="0.01" id="p-uniform" value="${o.scale.x.toFixed(3)}"></div>` + buttons;
+      `<div class="prop-row"><span title="${tr("Scale on all axes at once")}">${tr("Size")}</span><input type="number" step="0.05" min="0.01" id="p-uniform" value="${o.scale.x.toFixed(3)}"></div>` + buttons;
     wireLightProps(o);
     $("#p-uniform").addEventListener("change", (ev) => {
       ev.stopImmediatePropagation();
