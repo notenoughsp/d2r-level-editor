@@ -1,16 +1,26 @@
-"""Reading the installed game: DS1 round trip, collision, animated characters and the export check.
-Skipped without the game (these need CASC access through server.py)."""
+"""Reading the installed game: DS1 round trip, collision, animated characters, the export check and
+project files. Skipped without the game (these need CASC access through server.py).
+The editor data folder is a temporary one, so the tests never touch the real projects."""
+import importlib
+import io
 import json
+import os
 import pathlib
 import struct
 import sys
+import tempfile
 import unittest
+import zipfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT))
+TMP = tempfile.TemporaryDirectory()
 try:
     import casc
+    os.environ["D2R_GAME"] = casc.GAME  # found with the real settings, then a fresh data folder
+    os.environ["D2R_EDITOR_DATA"] = TMP.name
+    casc = importlib.reload(casc)
     HAVE_GAME = casc.is_game_dir(casc.GAME)
 except Exception:  # noqa: BLE001
     HAVE_GAME = False
@@ -49,6 +59,21 @@ class GameData(unittest.TestCase):
 
     def test_check_runs(self):
         self.assertIn("problems", self.server.project_check())
+
+    def test_project_import_stays_in_its_folder(self):
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as z:
+            z.writestr("d2r-editor-project.json", "{}")
+            z.writestr("project/data/ok.txt", "ok")
+            z.writestr(r"project/a\..\..\..\escaped.txt", "bad")
+            z.writestr("project/../escaped2.txt", "bad")
+        self.server.project_import(buf.getvalue(), "Imported")
+        data = pathlib.Path(TMP.name)
+        self.assertEqual([p.name for p in data.rglob("escaped*")], [])
+        self.assertTrue((data / "project/data/ok.txt").exists())
+        self.server.switch_project("Default")
+        with self.assertRaises(ValueError):
+            self.server.project_import(buf.getvalue(), "imported")  # same folder name on Windows
 
 
 if __name__ == "__main__":

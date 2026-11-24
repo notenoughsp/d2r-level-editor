@@ -115,7 +115,7 @@ def _download(asset, version):
                 if not rel or rel.endswith("/") or rel.split("/")[0] not in PARTS:
                     continue  # only the program parts; never data/
                 dst = (out / rel).resolve()
-                if not str(dst).startswith(str(out.resolve())):
+                if not dst.is_relative_to(out.resolve()):
                     continue  # no paths outside the staging folder
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 with z.open(n) as src, open(dst, "wb") as f:

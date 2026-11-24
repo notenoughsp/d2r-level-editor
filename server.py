@@ -1283,7 +1283,7 @@ def project_import(raw, name):
     """A shared project zip becomes a new project (parked in projects/<name>, then opened)."""
     if not re.fullmatch(r"[A-Za-z0-9 _-]{1,40}", name):
         raise ValueError("Project name: letters, digits, space, _ and -")
-    if name in list_projects()["projects"]:
+    if name.lower() in (p.lower() for p in list_projects()["projects"]):  # folder names ignore case
         raise ValueError(f"A project {name} exists already.")
     z = zipfile.ZipFile(io.BytesIO(raw))
     if "d2r-editor-project.json" not in z.namelist():
@@ -1294,9 +1294,11 @@ def project_import(raw, name):
         if info.is_dir() or n == "d2r-editor-project.json":
             continue
         parts = pathlib.PurePosixPath(n).parts
-        if parts[0] not in ("project", "editor_state") or ".." in parts or ":" in n:
-            continue
+        if parts[0] not in ("project", "editor_state") or ".." in parts or ":" in n or "\\" in n:
+            continue  # a backslash would be a folder separator here and could lead out of the project
         out = dst.joinpath(*parts)
+        if not out.resolve().is_relative_to(dst.resolve()):
+            continue
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(z.read(info))
     dst.mkdir(parents=True, exist_ok=True)
