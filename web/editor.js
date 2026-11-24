@@ -6,7 +6,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/addons/utils/SkeletonUtils.js";
-import { initI18n, locale, tr } from "./i18n.js?v=44";
+import { initI18n, locale, tr } from "./i18n.js?v=45";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -78,6 +78,8 @@ renderer.setAnimationLoop(() => {
   renderer.render(scene, camera);
   updateFx();
   updateMixers();
+  updateMapLights();
+  updateFlight(1 / 60);
   if (gameSelBox) gameSelBox.update();
   drawMinimap();
 });
@@ -1854,6 +1856,8 @@ window.addEventListener("keydown", (e) => {
   else if (e.key === "r") setMode("scale");
   else if (e.key === "Delete") { if (gameSel) deleteGameObject(gameSel.userData.gameIndex); else removeSelected(); }
   else if (e.key === "o") addGameObject(cursorGround ? cursorGround.clone() : null);
+  else if (e.ctrlKey && e.key === "k") { e.preventDefault(); openPalette(); }
+  else if (e.key === "Escape" && flight) { flight = null; setStatus(tr("Camera flight stopped")); }
   else if (e.key === "Escape" && measuring) toggleRuler();
   else if (e.key === "Escape" && brushOn) toggleScatterBrush();
   else if (e.key === "Escape" && stampOn) toggleStampBrush();
@@ -2285,7 +2289,7 @@ for (const id of ["sc-count", "sc-radius", "sc-smin", "sc-smax", "sc-rot", "sc-g
 $("#sc-go").addEventListener("click", () => scatter(null));
 
 // ---------- keyboard help ----------
-const HELP_TEXT = "Mouse\n  Left click: select · Shift+click: add/remove · drag: box selection\n  Right mouse: turn the view · middle mouse: pan · wheel: zoom\n\nObjects\n  W / E / R: move / rotate / scale        Del: delete\n  Ctrl+C / Ctrl+V: copy / paste at the mouse cursor (also into other maps)\n  Ctrl+D: duplicate                        G: drop to the ground\n  Ctrl+A: select all\n  Arrow keys: move one snap step (Shift ×10), Page Up/Down: height\n  H: hide the selection                    Shift+H: show all hidden objects\n  F: focus the selection                   Esc: deselect\n\nPlacing\n  P: place the preview model at the mouse cursor\n  Shift+P: scatter the preview model around the mouse cursor (settings in the Models tab)\n  O: add a game object at the mouse cursor\n\nView and files\n  T: top view                              Ctrl+S: save\n  Ctrl+1..4: store the view, 1..4: go back to it\n  Ctrl+Z / Ctrl+Y: undo / redo             ? or F1: this help\n\nCollision\n  Q: objects tool    B: block (Shift+B: block + teleport)    X: clear    [ / ]: brush size\n\nGizmo\n  L: axes of the world or of the selected object\n  (every map opens again with the view you left it with)\n\nTools\n  M: ruler (click two points)    Mirror, circle and row copies: buttons under Selection\n  N: minimap    Ctrl+G: save the selection as a group (Objects tab)\n  C: compare with the game's original map\n  Game objects: NPCs can get a walking path (Draw a walking path), \"Add a group\" places several at once\n\nMaps and ground\n  Models tab: \"Decorate like the map\" fills an area with the map's own plants and rocks; \"Draw a path\" lays ground stamps along clicked points (Enter)\n  Maps tab: ⤓ saves the project as one file, ⤒ loads one as a new project\n  Double-click in the view: fly to the object there    Middle-click on a map tab: close it";
+const HELP_TEXT = "Mouse\n  Left click: select · Shift+click: add/remove · drag: box selection\n  Right mouse: turn the view · middle mouse: pan · wheel: zoom\n\nObjects\n  W / E / R: move / rotate / scale        Del: delete\n  Ctrl+C / Ctrl+V: copy / paste at the mouse cursor (also into other maps)\n  Ctrl+D: duplicate                        G: drop to the ground\n  Ctrl+A: select all\n  Arrow keys: move one snap step (Shift ×10), Page Up/Down: height\n  H: hide the selection                    Shift+H: show all hidden objects\n  F: focus the selection                   Esc: deselect\n\nPlacing\n  P: place the preview model at the mouse cursor\n  Shift+P: scatter the preview model around the mouse cursor (settings in the Models tab)\n  O: add a game object at the mouse cursor\n\nView and files\n  T: top view                              Ctrl+S: save\n  Ctrl+1..4: store the view, 1..4: go back to it\n  Ctrl+Z / Ctrl+Y: undo / redo             ? or F1: this help\n\nCollision\n  Q: objects tool    B: block (Shift+B: block + teleport)    X: clear    [ / ]: brush size\n\nGizmo\n  L: axes of the world or of the selected object\n  (every map opens again with the view you left it with)\n\nTools\n  M: ruler (click two points)    Mirror, circle and row copies: buttons under Selection\n  N: minimap    Ctrl+G: save the selection as a group (Objects tab)\n  C: compare with the game's original map\n  Game objects: NPCs can get a walking path (Draw a walking path), \"Add a group\" places several at once\n\nMaps and ground\n  Models tab: \"Decorate like the map\" fills an area with the map's own plants and rocks; \"Draw a path\" lays ground stamps along clicked points (Enter)\n  Maps tab: ⤓ saves the project as one file, ⤒ loads one as a new project\n  Double-click in the view: fly to the object there    Middle-click on a map tab: close it\n  Ctrl+K: search everything (maps, models, objects, kits, options)    View menu: lights, camera flight, changes against the original";
 function showHelp() { modalShow(tr("Keyboard and mouse"), tr(HELP_TEXT)); }
 $("#btn-help").addEventListener("click", showHelp);
 $("#btn-help2").addEventListener("click", showHelp);
@@ -4413,3 +4417,175 @@ async function copyToVariants() {
   await loadEdited();
   setStatus(tr("Copied into {0} variant(s): {1}").replace("{0}", r.data.maps.length).replace("{1}", r.data.maps.map((m) => m.split("/").pop()).join(", ")));
 }
+
+// ---------- the map's lights light the view (the nearest ones, a few at a time) ----------
+const LIGHT_POOL = 12;
+const lightPool = [];
+for (let i = 0; i < LIGHT_POOL; i++) {
+  const l = new THREE.PointLight(0xffffff, 0, 10, 1.6);
+  l.visible = false;
+  scene.add(l);
+  lightPool.push(l);
+}
+let lightTick = 0;
+function updateMapLights() {
+  if (performance.now() - lightTick < 400) return;
+  lightTick = performance.now();
+  const on = $("#show-lights").checked && doc;
+  const lights = [];
+  if (on) {
+    for (const o of entityObjects.values()) {
+      if (!o.visible) continue;
+      const lc = o.userData.entity.components.find((c) => /LightDefinitionComponent$/.test(c.type));
+      if (lc) lights.push([o, lc, o.position.distanceToSquared(orbit.target)]);
+    }
+    lights.sort((a, b) => a[2] - b[2]);
+  }
+  lightPool.forEach((l, i) => {
+    const it = lights[i];
+    l.visible = !!it;
+    if (!it) return;
+    const [o, lc] = it;
+    o.getWorldPosition(l.position);
+    l.color.setRGB(lc.color?.x ?? 1, lc.color?.y ?? 1, lc.color?.z ?? 1);
+    l.distance = (lc.radius || lc.distance || 15) * 1.4;
+    l.intensity = Math.min(60, (lc.power || 1000) / 60);
+  });
+}
+$("#show-lights").addEventListener("change", () => { lightTick = 0; updateMapLights(); });
+
+// ---------- camera flight over the stored views 1-4 ----------
+let flight = null;
+function startFlight() {
+  const views = JSON.parse(localStorage.getItem(viewKey()) || "{}");
+  const list = ["1", "2", "3", "4"].map((k) => views[k]).filter(Boolean);
+  if (list.length < 2) return setStatus(tr("Store at least two views first (Ctrl+1 ... Ctrl+4)"));
+  flight = { list, i: 0, t: 0 };
+  $("#view-pop").classList.add("hidden");
+  setStatus(tr("Camera flight over {0} views (Esc stops it)").replace("{0}", list.length));
+}
+function updateFlight(dt) {
+  if (!flight) return;
+  const { list } = flight;
+  flight.t += dt / 3;  // three seconds per stretch
+  if (flight.t >= 1) { flight.t = 0; flight.i++; }
+  if (flight.i >= list.length - 1) { flight = null; return setStatus(tr("Camera flight done")); }
+  const a = list[flight.i], b = list[flight.i + 1], s = flight.t * flight.t * (3 - 2 * flight.t);
+  camera.position.fromArray(a.p).lerp(new THREE.Vector3().fromArray(b.p), s);
+  orbit.target.fromArray(a.t).lerp(new THREE.Vector3().fromArray(b.t), s);
+}
+$("#btn-flight").addEventListener("click", startFlight);
+
+// ---------- search everything (Ctrl+K): maps, models, objects of the map, kits, figures, options ----------
+async function searchAll(q) {
+  const ql = q.toLowerCase(), out = [];
+  if (!ql) return out;
+  for (const p of presets) if (p.includes(ql)) out.push({ kind: "Map", label: p.replace("data/hd/env/preset/", ""), run: () => openPreset(p) });
+  if (doc) for (const e of doc.entities) if (e.name.toLowerCase().includes(ql)) out.push({ kind: "Object", label: e.name, run: () => { const o = entityObjects.get(e.id); if (o) { select([o]); orbit.target.copy(o.position); } } });
+  for (const k of await (await fetch(api("kits"))).json()) if (k.name.toLowerCase().includes(ql)) out.push({ kind: "Kit", label: k.name, run: () => placeKit(k.name) });
+  for (const [, items] of OPTION_FORM) for (const [key, label] of items) if (tr(label).toLowerCase().includes(ql) || label.toLowerCase().includes(ql)) out.push({ kind: "Option", label: tr(label), run: () => { renderOptions(); $("#options-dialog").classList.remove("hidden"); $(`[data-opt="${key}"]`)?.focus(); } });
+  const models = await (await fetch(api("models", { q: ql, limit: 25 }))).json();
+  for (const m of models.items) out.push({ kind: "Model", label: m.replace("data/hd/", ""), run: () => { document.querySelector('.tab[data-tab="models"]').click(); previewPath = m; showPreview(m); } });
+  return out.slice(0, 60);
+}
+let paletteToken = 0, paletteItems = [], paletteSel = 0;
+function renderPalette() {
+  const ul = $("#palette-list");
+  ul.textContent = "";
+  paletteItems.forEach((it, i) => {
+    const li = document.createElement("li");
+    const kind = document.createElement("span");
+    kind.className = "pk";
+    kind.textContent = tr(it.kind);
+    li.append(kind, marked(it.label, $("#palette-input").value));
+    li.classList.toggle("active", i === paletteSel);
+    li.addEventListener("click", () => runPalette(i));
+    ul.append(li);
+  });
+}
+function runPalette(i) {
+  const it = paletteItems[i];
+  closePalette();
+  if (it) it.run();
+}
+function openPalette() {
+  $("#palette").classList.remove("hidden");
+  $("#palette-input").value = "";
+  paletteItems = [];
+  renderPalette();
+  $("#palette-input").focus();
+}
+function closePalette() { $("#palette").classList.add("hidden"); }
+$("#palette-input").addEventListener("input", async () => {
+  const token = ++paletteToken;
+  const items = await searchAll($("#palette-input").value.trim());
+  if (token !== paletteToken) return;
+  paletteItems = items; paletteSel = 0;
+  renderPalette();
+});
+$("#palette-input").addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { e.preventDefault(); closePalette(); }
+  else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    paletteSel = Math.max(0, Math.min(paletteItems.length - 1, paletteSel + (e.key === "ArrowDown" ? 1 : -1)));
+    renderPalette();
+    $("#palette-list li.active")?.scrollIntoView({ block: "nearest" });
+  } else if (e.key === "Enter") { e.preventDefault(); runPalette(paletteSel); }
+});
+$("#palette").addEventListener("click", (e) => { if (e.target.id === "palette") closePalette(); });
+$("#btn-search").addEventListener("click", openPalette);
+
+// ---------- changes of this map against the game's original, each one can be undone ----------
+async function openChanges() {
+  if (!doc || !presetPath) return;
+  let orig;
+  try { orig = await (await fetch(api("preset", { path: presetPath, original: 1 }))).json(); } catch { orig = null; }
+  const box = $("#changes-body");
+  box.textContent = "";
+  if (!orig || !orig.entities) { box.textContent = tr("This map has no original in the game (a new map)"); $("#changes-dialog").classList.remove("hidden"); return; }
+  const before = new Map(orig.entities.map((e) => [e.id, e])), now = new Map(doc.entities.map((e) => [e.id, e]));
+  const changes = [];
+  for (const e of doc.entities) {
+    if (!before.has(e.id)) changes.push(["added", e, null]);
+    else if (JSON.stringify(before.get(e.id)) !== JSON.stringify(e)) changes.push(["changed", e, before.get(e.id)]);
+  }
+  for (const e of orig.entities) if (!now.has(e.id)) changes.push(["removed", null, e]);
+  const head = document.createElement("div");
+  head.className = "hint";
+  head.textContent = tr("{0} change(s) against the game's original. \"Undo\" puts one back (Ctrl+Z works too).").replace("{0}", changes.length);
+  box.append(head);
+  const label = { added: "added", changed: "changed", removed: "removed" };
+  for (const [kind, cur, old] of changes) {
+    const row = document.createElement("div");
+    row.className = "change-row " + kind;
+    const k = document.createElement("span");
+    k.textContent = tr(label[kind]);
+    const n = document.createElement("span");
+    n.className = "cn";
+    n.textContent = (cur || old).name;
+    n.title = tr("Show it");
+    n.addEventListener("click", () => { const o = entityObjects.get((cur || old).id); if (o) { select([o]); orbit.target.copy(o.position); } });
+    const b = Object.assign(document.createElement("button"), { textContent: tr("Undo") });
+    b.addEventListener("click", async () => {
+      beginEdit();
+      const id = (cur || old).id;
+      const o = entityObjects.get(id);
+      if (o) { root.remove(o); entityObjects.delete(id); }
+      doc.entities = doc.entities.filter((e) => e.id !== id);
+      if (old) {
+        const back = JSON.parse(JSON.stringify(old));
+        doc.entities.push(back);
+        await addObjectFor(back);
+      }
+      select([]);
+      markDirty();
+      setStatus(tr("Change undone: {0}").replace("{0}", (cur || old).name));
+      row.remove();
+    });
+    row.append(k, n, b);
+    box.append(row);
+  }
+  $("#changes-dialog").classList.remove("hidden");
+}
+$("#btn-changes").addEventListener("click", openChanges);
+$("#changes-close").addEventListener("click", () => $("#changes-dialog").classList.add("hidden"));

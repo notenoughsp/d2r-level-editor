@@ -274,3 +274,12 @@ button:focus:not(:focus-visible), select:focus:not(:focus-visible) { outline: no
 #mon-list { max-height: 20vh; }
 #pane-npcs { overflow-y: auto; }
 #pane-npcs .tool-row { display: flex; gap: 4px; } #pane-npcs .tool-row input { width: 33%; }
+
+#palette { position: fixed; inset: 0; z-index: 45; background: rgba(0,0,0,.45); display: flex; justify-content: center; align-items: flex-start; padding-top: 12vh; }
+.palette-box { width: min(640px, 92vw); background: #16140f; border: 1px solid #c7a35a; border-radius: 6px; box-shadow: 0 10px 30px rgba(0,0,0,.6); padding: 8px; }
+#palette-input { width: 100%; font-size: 16px; padding: 8px; box-sizing: border-box; }
+#palette-list { max-height: 50vh; margin-top: 6px; }
+#palette-list .pk { display: inline-block; min-width: 70px; color: #888; font-size: 11px; text-transform: uppercase; }
+.change-row { display: flex; gap: 10px; align-items: center; padding: 3px 0; border-bottom: 1px solid #221f19; font-size: 12px; }
+.change-row > span:first-child { width: 80px; } .change-row .cn { flex: 1; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.change-row.added > span:first-child { color: #7fd17f; } .change-row.removed > span:first-child { color: #ff7a6a; } .change-row.changed > span:first-child { color: #e5c55a; }
