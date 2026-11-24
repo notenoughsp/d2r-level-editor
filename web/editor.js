@@ -6,7 +6,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/addons/utils/SkeletonUtils.js";
-import { initI18n, locale, tr } from "./i18n.js?v=38";
+import { initI18n, locale, tr } from "./i18n.js?v=39";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -580,6 +580,8 @@ gizmo.addEventListener("dragging-changed", (e) => {
     dragStart = { pivotInv: pivot.matrix.clone().invert(), objs: selection.map((o) => { o.updateMatrix(); return [o, o.matrix.clone()]; }) };
   } else if (dragStart) {
     dragStart = null;
+    const n = selection.length, mode = gizmo.getMode();
+    setStatus(tr(mode === "rotate" ? "{0} object(s) rotated" : mode === "scale" ? "{0} object(s) scaled" : "{0} object(s) moved").replace("{0}", n));
     if ($("#follow-ground").checked && gizmo.getMode() === "translate") {
       for (const o of selection) { o.position.y = groundHeight(o.position.x, o.position.z); writeTransform(o); }
       showProps();
@@ -1099,6 +1101,8 @@ async function showPreview(path) {
   const token = ++previewToken;
   $("#preview-info").textContent = `Loading ${path.replace("data/hd/", "")} …`;
   updateFavButton();
+  $("#usage-btn").disabled = false;
+  $("#usage-box").classList.add("hidden");
   if (options.animations && await previewCharacter(path, token)) return;
   const m = await loadModel(path);
   if (token !== previewToken) return;
@@ -1819,6 +1823,7 @@ window.addEventListener("keydown", (e) => {
   else if (e.key === "Escape" && !$("#acts-dialog").classList.contains("hidden")) $("#acts-dialog").classList.add("hidden");
   else if (e.key === "Escape" && !$("#options-dialog").classList.contains("hidden")) $("#options-dialog").classList.add("hidden");
   else if (e.key === "Escape" && !$("#ctx-menu").classList.contains("hidden")) $("#ctx-menu").classList.add("hidden");
+  else if (e.key === "Escape" && !$("#view-pop").classList.contains("hidden")) $("#view-pop").classList.add("hidden");
   else if (e.key === "Escape") { selectGameObject(null); select([]); $("#modal").classList.add("hidden"); }
   else if (e.ctrlKey && e.key === "c") { e.preventDefault(); copySelection(); }
   else if (e.ctrlKey && e.key === "v") { e.preventDefault(); paste(); }
@@ -2250,7 +2255,7 @@ for (const id of ["sc-count", "sc-radius", "sc-smin", "sc-smax", "sc-rot", "sc-g
 $("#sc-go").addEventListener("click", () => scatter(null));
 
 // ---------- keyboard help ----------
-const HELP_TEXT = "Mouse\n  Left click: select · Shift+click: add/remove · drag: box selection\n  Right mouse: turn the view · middle mouse: pan · wheel: zoom\n\nObjects\n  W / E / R: move / rotate / scale        Del: delete\n  Ctrl+C / Ctrl+V: copy / paste at the mouse cursor (also into other maps)\n  Ctrl+D: duplicate                        G: drop to the ground\n  Ctrl+A: select all\n  Arrow keys: move one snap step (Shift ×10), Page Up/Down: height\n  H: hide the selection                    Shift+H: show all hidden objects\n  F: focus the selection                   Esc: deselect\n\nPlacing\n  P: place the preview model at the mouse cursor\n  Shift+P: scatter the preview model around the mouse cursor (settings in the Models tab)\n  O: add a game object at the mouse cursor\n\nView and files\n  T: top view                              Ctrl+S: save\n  Ctrl+1..4: store the view, 1..4: go back to it\n  Ctrl+Z / Ctrl+Y: undo / redo             ? or F1: this help\n\nCollision\n  Q: objects tool    B: block (Shift+B: block + teleport)    X: clear    [ / ]: brush size\n\nGizmo\n  L: axes of the world or of the selected object\n  (every map opens again with the view you left it with)\n\nTools\n  M: ruler (click two points)    Mirror, circle and row copies: buttons under Selection\n  N: minimap    Ctrl+G: save the selection as a group (Objects tab)\n  C: compare with the game's original map\n  Game objects: NPCs can get a walking path (Draw a walking path), \"Add a group\" places several at once\n\nMaps and ground\n  Models tab: \"Decorate like the map\" fills an area with the map's own plants and rocks; \"Draw a path\" lays ground stamps along clicked points (Enter)\n  Maps tab: ⤓ saves the project as one file, ⤒ loads one as a new project";
+const HELP_TEXT = "Mouse\n  Left click: select · Shift+click: add/remove · drag: box selection\n  Right mouse: turn the view · middle mouse: pan · wheel: zoom\n\nObjects\n  W / E / R: move / rotate / scale        Del: delete\n  Ctrl+C / Ctrl+V: copy / paste at the mouse cursor (also into other maps)\n  Ctrl+D: duplicate                        G: drop to the ground\n  Ctrl+A: select all\n  Arrow keys: move one snap step (Shift ×10), Page Up/Down: height\n  H: hide the selection                    Shift+H: show all hidden objects\n  F: focus the selection                   Esc: deselect\n\nPlacing\n  P: place the preview model at the mouse cursor\n  Shift+P: scatter the preview model around the mouse cursor (settings in the Models tab)\n  O: add a game object at the mouse cursor\n\nView and files\n  T: top view                              Ctrl+S: save\n  Ctrl+1..4: store the view, 1..4: go back to it\n  Ctrl+Z / Ctrl+Y: undo / redo             ? or F1: this help\n\nCollision\n  Q: objects tool    B: block (Shift+B: block + teleport)    X: clear    [ / ]: brush size\n\nGizmo\n  L: axes of the world or of the selected object\n  (every map opens again with the view you left it with)\n\nTools\n  M: ruler (click two points)    Mirror, circle and row copies: buttons under Selection\n  N: minimap    Ctrl+G: save the selection as a group (Objects tab)\n  C: compare with the game's original map\n  Game objects: NPCs can get a walking path (Draw a walking path), \"Add a group\" places several at once\n\nMaps and ground\n  Models tab: \"Decorate like the map\" fills an area with the map's own plants and rocks; \"Draw a path\" lays ground stamps along clicked points (Enter)\n  Maps tab: ⤓ saves the project as one file, ⤒ loads one as a new project\n  Double-click in the view: fly to the object there    Middle-click on a map tab: close it";
 function showHelp() { modalShow(tr("Keyboard and mouse"), tr(HELP_TEXT)); }
 $("#btn-help").addEventListener("click", showHelp);
 $("#btn-help2").addEventListener("click", showHelp);
@@ -3487,6 +3492,8 @@ function renderTabs() {
     x.addEventListener("click", (e) => { e.stopPropagation(); closeTab(t.path); });
     b.append(name, x);
     b.addEventListener("click", () => switchTab(t.path));
+    b.addEventListener("auxclick", (e) => { if (e.button === 1) { e.preventDefault(); closeTab(t.path); } });
+    b.addEventListener("mousedown", (e) => { if (e.button === 1) e.preventDefault(); });  // no autoscroll
     bar.append(b);
   }
 }
@@ -3846,7 +3853,9 @@ $("#lt-close").addEventListener("click", () => $("#loot-dialog").classList.add("
 const PANEL_DEFAULT = { left: 300, right: 280 };
 function setPanelWidth(side, w, keep = true) {
   if (keep) localStorage.setItem("panel-" + side, Math.round(w));  // the wish; small windows only show less
-  const max = Math.max(200, Math.floor(innerWidth * 0.45));
+  // the 3D view keeps at least 360 pixels between the panels
+  const other = $("#" + (side === "left" ? "right" : "left")).getBoundingClientRect().width || 0;
+  const max = Math.max(200, Math.floor(Math.min(innerWidth * 0.45, innerWidth - other - 360 - 14)));
   w = Math.max(200, Math.min(max, Math.round(w)));
   $("#" + side).style.width = w + "px";
   // the model preview grows with the panel
@@ -3901,10 +3910,10 @@ window.addEventListener("pointerdown", (e) => { if (!e.target.closest(".tb-menu"
 const charCache = new Map();
 function loadCharacter(ref) {
   if (!charCache.has(ref)) {
-    charCache.set(ref, new Promise((ok) => loader.load(api("character", { ref, lod: 1, v: 1 }), (g) => {
+    charCache.set(ref, trackLoad(new Promise((ok) => loader.load(api("character", { ref, lod: 1, v: 1 }), (g) => {
       g.scene.traverse((o) => { if (o.isMesh && o.material && o.material.map) o.material.map.colorSpace = THREE.SRGBColorSpace; });
       ok(g);
-    }, undefined, () => ok(null))));
+    }, undefined, () => ok(null)))));
   }
   return charCache.get(ref);
 }
@@ -4180,3 +4189,23 @@ function figureProps(g) {
   row.append(lab, sel);
   $("#props").insertBefore(row, $("#props").querySelector(".prop-buttons"));
 }
+
+// ---------- double-click in the view: fly to the object there ----------
+renderer.domElement.addEventListener("dblclick", (e) => {
+  if (tool !== "objects" || !root || measuring || brushOn || stampOn) return;
+  const r = renderer.domElement.getBoundingClientRect();
+  raycaster.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
+  let hit = null;
+  for (const h of raycaster.intersectObject(root, true)) {
+    let o = h.object;
+    while (o && !o.userData.entity) o = o.parent;
+    if (o && o.parent === root && !o.userData.terrain && o.visible) { hit = h; break; }
+  }
+  const target = hit ? hit.point : cursorGround;
+  if (!target) return;
+  const dir = camera.position.clone().sub(orbit.target).normalize();
+  const dist = Math.min(camera.position.distanceTo(orbit.target), 40);
+  orbit.target.copy(target);
+  camera.position.copy(target).addScaledVector(dir, dist);
+  orbit.update();
+});
