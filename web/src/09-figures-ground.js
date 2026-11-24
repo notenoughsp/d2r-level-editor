@@ -286,11 +286,22 @@ renderer.domElement.addEventListener("dblclick", (e) => {
   const target = hit ? hit.point : cursorGround;
   if (target) flyTo(target);
 });
-// the camera looks at a point from the same direction, at most 40 units away
-function flyTo(target) {
+// the camera looks at a point from the same direction, at most 40 units away (or from `dist`)
+function flyTo(target, dist) {
   const dir = camera.position.clone().sub(orbit.target).normalize();
-  const dist = Math.min(camera.position.distanceTo(orbit.target), 40);
+  dist ??= Math.min(camera.position.distanceTo(orbit.target), 40);
   orbit.target.copy(target);
   camera.position.copy(target).addScaledVector(dir, dist);
   orbit.update();
+}
+// F: the whole selection fills the view (objects, or the selected game object)
+function focusSelection() {
+  if (gameSel) return flyTo(gameSel.getWorldPosition(new THREE.Vector3()), 20);
+  if (!selection.length) return;
+  const box = new THREE.Box3();
+  for (const o of selection) box.expandByObject(o);
+  if (box.isEmpty()) for (const o of selection) box.expandByPoint(o.getWorldPosition(new THREE.Vector3()));
+  const size = box.getSize(new THREE.Vector3()).length();
+  const fit = size / 2 / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+  flyTo(box.getCenter(new THREE.Vector3()), Math.max(8, Math.min(fit * 1.2, 400)));
 }

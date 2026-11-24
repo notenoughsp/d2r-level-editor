@@ -162,7 +162,7 @@ window.addEventListener("keydown", (e) => {
     const map = { ArrowLeft: [-d, 0, 0], ArrowRight: [d, 0, 0], ArrowUp: [0, 0, -d], ArrowDown: [0, 0, d], PageUp: [0, d, 0], PageDown: [0, -d, 0] };
     nudge(...map[e.key]);
   }
-  else if (e.key === "f" && primary()) orbit.target.copy(primary().getWorldPosition(new THREE.Vector3()));
+  else if (e.key === "f") focusSelection();
 });
 window.addEventListener("beforeunload", (e) => { if (dirty) e.preventDefault(); });
 

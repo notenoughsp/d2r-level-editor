@@ -197,7 +197,7 @@ renderer.domElement.addEventListener("contextmenu", (e) => {
     [tr("Select same model"), "", !!md, selectSameModel],
     [tr("Drop to ground"), "G", has, dropToGround],
     [tr("Random rotation"), "", has, randomRotate],
-    [tr("Focus the selection"), "F", has, () => orbit.target.copy(primary().position)],
+    [tr("Focus the selection"), "F", has, focusSelection],
     null,
     [tr("Save as group"), "Ctrl+G", has, saveGroup],
     [tr("Save the selection as a kit"), "", has, saveKit],
