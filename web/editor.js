@@ -6,7 +6,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/addons/utils/SkeletonUtils.js";
-import { initI18n, locale, tr } from "./i18n.js?v=35";
+import { initI18n, locale, tr } from "./i18n.js?v=36";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -1398,6 +1398,7 @@ function buildGameObjects() {
         const box = new THREE.Box3().setFromObject(fig, true);
         fig.position.y -= box.min.y - g.position.y;
         label.position.y = (box.max.y - box.min.y) + 1.5;  // the name above the head
+        if (ob.path && ob.path.length) startWalker(g, fig, label, ob);
         m.material = m.material.clone();
         m.material.opacity = 0.25;
         m.material.transparent = true;
@@ -3123,12 +3124,13 @@ $("#acts-export").addEventListener("click", () => buildAct(true));
 // ---------- options window (stored in the browser, applied at once) ----------
 const OPTION_DEFAULTS = {
   uiScale: 100, fov: 45, rotateSpeed: 1, zoomSpeed: 1, panSpeed: 1, damping: false, showGrid: true, gridStep: 5,
-  autosave: 60, undoSteps: 100, labels: true, labelScale: 1, hoverInfo: true, previewSpin: true, statusFade: 8,
+  autosave: 60, undoSteps: 100, labels: true, labelScale: 0.6, hoverInfo: true, previewSpin: true, statusFade: 8,
   confirmDelete: 20, dupOffset: 2, minimapSize: 220, renderScale: 100, selColor: "#ffd400", bg: "", checkUpdates: true,
-  maxListEntries: 1500, tooltips: true, thumbs: true, effects: true, stamps: true, animations: true, figures: true, figureScale: 1,
+  maxListEntries: 1500, tooltips: true, thumbs: true, effects: true, stamps: true, animations: true, figures: true, figureScale: 1, walkPaths: true,
 };
 let options = { ...OPTION_DEFAULTS, ...JSON.parse(localStorage.getItem("options") || "{}") };
 if (!options.v2) { options.damping = false; options.v2 = true; localStorage.setItem("options", JSON.stringify(options)); }  // smoothing off since 0.5.1
+if (!options.v3) { if (options.labelScale === 1) options.labelScale = 0.6; options.v3 = true; localStorage.setItem("options", JSON.stringify(options)); }  // smaller names since 0.6
 const OPTION_FORM = [
   ["Interface", [
     ["uiScale", "Size of the interface (%)", "number", 70, 160, 5],
@@ -3163,6 +3165,7 @@ const OPTION_FORM = [
     ["animations", "Play character animations", "check"],
     ["figures", "Show NPCs and monsters as their figures (needs reopening the map)", "check"],
     ["figureScale", "Size of the figures", "number", 0.1, 5, 0.1],
+    ["walkPaths", "NPC figures walk their paths", "check"],
   ]],
   ["Saving and undo", [
     ["autosave", "Autosave a draft every (s, 0 = off)", "number", 0, 3600, 10],
@@ -3736,11 +3739,11 @@ function toggleStampBrush() {
   $("#st-brush").classList.toggle("active", stampOn);
   setStatus(stampOn ? tr("Ground brush: click or drag to stamp (Esc ends it)") : tr("Ground brush off"));
 }
-async function placeStamp(at) {
+async function placeStamp(at, yaw = null) {
   const size = Math.max(2, +$("#st-size").value || 20), strength = Math.max(0, Math.min(1, +$("#st-strength").value || 0.6));
   const biomeName = (doc.biomeFilename || "").split("/").pop().replace(/\.json$/, "");
   const name = `stamp_${Date.now() % 100000}_${Math.floor(Math.random() * 1000)}`;
-  const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), $("#st-rot").checked ? Math.random() * Math.PI * 2 : 0);
+  const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw !== null ? yaw : $("#st-rot").checked ? Math.random() * Math.PI * 2 : 0);
   const ent = { type: "Entity", name, id: newId(), components: [
     { type: "TransformDefinitionComponent", name: `${name}_TransformDefinitionComponent`, position: { x: at.x, y: 0, z: at.z },
       orientation: { x: q.x, y: q.y, z: q.z, w: q.w }, scale: { x: size, y: 80, z: size }, inheritOnlyPosition: false },
@@ -3919,6 +3922,7 @@ function charRefOf(path) {
 }
 function updateMixers() {
   const dt = Math.min(0.1, animClock.getDelta());
+  updateWalkers(dt);
   for (const m of mixers) {
     let top = m.getRoot();
     while (top.parent) top = top.parent;
@@ -3957,3 +3961,150 @@ async function previewCharacter(path, token) {
   show(sel.value);
   return true;
 }
+
+// ---------- NPC figures walk their paths (view only) ----------
+const walkers = new Set();
+function startWalker(g, fig, label, ob) {
+  const clips = fig.userData.clips || [];
+  const walk = clips.find((c) => /^walk/i.test(c.name)), idle = clips.find((c) => c.name === "neutral") || clips[0];
+  if (!walk) return;
+  const pts = [[ob.x, ob.y], ...ob.path.map((p) => [p[0], p[1]])].map(([x, y]) => {
+    const wx = x * 2 + 1, wz = y * 2 + 1;
+    return new THREE.Vector3(wx - g.position.x, groundHeight(wx, wz) - g.position.y, wz - g.position.z);
+  });
+  pts.push(pts[0].clone());  // back to the start
+  const mixer = fig.userData.mixer;
+  const aWalk = mixer.clipAction(walk), aIdle = idle ? mixer.clipAction(idle) : null;
+  fig.userData.walk = { pts, seg: 0, wait: 1 + Math.random() * 2, aWalk, aIdle, label, base: fig.position.y };
+  walkers.add(fig);
+}
+function updateWalkers(dt) {
+  for (const fig of walkers) {
+    let top = fig;
+    while (top.parent) top = top.parent;
+    if (top !== scene) { walkers.delete(fig); continue; }
+    const w = fig.userData.walk;
+    if (!options.walkPaths) continue;
+    if (w.wait > 0) {  // standing at a point
+      w.wait -= dt;
+      if (w.aIdle && !w.aIdle.isRunning()) { w.aWalk.stop(); w.aIdle.play(); }
+      continue;
+    }
+    if (!w.aWalk.isRunning()) { if (w.aIdle) w.aIdle.stop(); w.aWalk.play(); }
+    const to = w.pts[w.seg + 1];
+    const d = new THREE.Vector3(to.x - fig.position.x, 0, to.z - fig.position.z);
+    const len = d.length(), step = 3.2 * dt * options.figureScale;
+    if (len <= step) {
+      fig.position.x = to.x; fig.position.z = to.z;
+      w.seg = (w.seg + 1) % (w.pts.length - 1);
+      if (w.seg === 0) { fig.position.x = w.pts[0].x; fig.position.z = w.pts[0].z; }
+      w.wait = 0.8 + Math.random() * 2.5;
+    } else {
+      d.multiplyScalar(step / len);
+      fig.position.x += d.x; fig.position.z += d.z;
+      fig.rotation.y = Math.atan2(d.x, d.z);
+    }
+    fig.position.y = w.base + (to.y - 0) * 0;  // the figure keeps its ground offset
+    if (w.label) { w.label.position.x = fig.position.x; w.label.position.z = fig.position.z; }
+  }
+}
+
+// ---------- decorate: plants, rocks and small things of this map around the cursor ----------
+const DECOR = /foliage|plant|bush|shrub|grass|fern|flower|weed|rock|stone|pebble|boulder|debris|rubble|twig|branch|log|leaves|mushroom|bones|skull/i;
+// things that hang, climb or are big (trees) do not belong on open ground
+const NOT_DECOR = /hanging|climbing|ivy|vine|roots|tree|wall|canopy|cliff|bridge|fence|house|tent/i;
+function mapDecor() {
+  const count = new Map();
+  for (const ent of doc.entities) {
+    const md = comp(ent, "ModelDefinitionComponent");
+    if (!md || !md.filename || comp(ent, "TerrainDefinitionComponent") || !DECOR.test(md.filename) || NOT_DECOR.test(md.filename)) continue;
+    count.set(md.filename, (count.get(md.filename) || 0) + 1);
+  }
+  return [...count.entries()].sort((a, b) => b[1] - a[1]).slice(0, 24);
+}
+async function decorate(center) {
+  if (!doc) return alert("Open a map first.");
+  const pool = mapDecor();
+  if (!pool.length) return setStatus(tr("This map has no plants or rocks to take as decoration; use Scatter with a model instead"));
+  const o = scatterSettings(), c = center || orbit.target;
+  const total = pool.reduce((s, [, n]) => s + n, 0);
+  beginEdit();
+  const made = [];
+  for (let i = 0; i < o.count; i++) {
+    let r = Math.random() * total, model = pool[0][0];
+    for (const [m, n] of pool) { r -= n; if (r <= 0) { model = m; break; } }  // as often as on the map
+    const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * o.radius;
+    const x = c.x + Math.cos(a) * d, z = c.z + Math.sin(a) * d;
+    const s = o.smin + Math.random() * (o.smax - o.smin);
+    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.random() * Math.PI * 2);
+    const base = model.split("/").pop().replace(/\.model$/, "");
+    const name = `${base}_${Date.now() % 100000}_${i}`;
+    addDependency(model);
+    const ent = { type: "Entity", name, id: newId(), components: [
+      { type: "TransformDefinitionComponent", name: `${name}_TransformDefinitionComponent`, position: { x, y: groundHeight(x, z), z },
+        orientation: { x: q.x, y: q.y, z: q.z, w: q.w }, scale: { x: s, y: s, z: s }, inheritOnlyPosition: false },
+      { type: "ModelPlatformTierComponent", name: `${name}_ModelPlatformTierComponent`, visibilityTier: 0, shadowTier: 0 },
+      { type: "ModelDefinitionComponent", name: `${name}_ModelDefinitionComponent`, filename: model, visibleLayers: 1, lightMask: 19,
+        shadowMask: 3, ghostShadows: false, floorModel: false, terrainBlendEnableYUpBlend: false, terrainBlendMode: 1 },
+    ] };
+    doc.entities.push(ent);
+    made.push(addObjectFor(ent));
+  }
+  select(await Promise.all(made));
+  markDirty();
+  setStatus(tr("{0} decoration objects from {1} kinds of this map").replace("{0}", o.count).replace("{1}", pool.length));
+}
+$("#sc-decor").addEventListener("click", () => decorate(null));
+
+// ---------- paths and rivers: click points, Enter lays ground stamps along the line ----------
+let stampPath = null;
+function toggleStampPath() {
+  if (stampPath) return endStampPath(false);
+  if (!doc || !$("#st-mask").value) return setStatus(tr("Open a map and choose a mask first"));
+  stampPath = { pts: [], line: null };
+  $("#st-path").classList.add("active");
+  setStatus(tr("Path: click points on the ground · Backspace: remove the last · Enter: lay the stamps · Esc: cancel"));
+}
+function drawStampPath() {
+  if (stampPath.line) { scene.remove(stampPath.line); stampPath.line.geometry.dispose(); }
+  const pts = stampPath.pts.map((p) => new THREE.Vector3(p.x, groundHeight(p.x, p.z) + 0.5, p.z));
+  stampPath.line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x6fd3ff, depthTest: false }));
+  stampPath.line.renderOrder = 22;
+  scene.add(stampPath.line);
+}
+async function endStampPath(lay) {
+  const p = stampPath;
+  stampPath = null;
+  $("#st-path").classList.remove("active");
+  if (p.line) { scene.remove(p.line); p.line.geometry.dispose(); }
+  if (!lay || p.pts.length < 2) return setStatus(tr("Path cancelled"));
+  const size = Math.max(2, +$("#st-size").value || 20), spacing = size * 0.45;
+  beginEdit();
+  const made = [];
+  for (let i = 0; i < p.pts.length - 1; i++) {
+    const a = p.pts[i], b = p.pts[i + 1], len = a.distanceTo(b), n = Math.max(1, Math.ceil(len / spacing));
+    const yaw = Math.atan2(b.x - a.x, b.z - a.z);
+    for (let k = 0; k < n; k++) {
+      const at = a.clone().lerp(b, k / n);
+      const obj = await placeStamp(at, yaw);
+      made.push(obj);
+    }
+  }
+  made.push(await placeStamp(p.pts[p.pts.length - 1], 0));
+  markDirty();
+  setStatus(tr("Path laid: {0} ground stamps").replace("{0}", made.length));
+}
+renderer.domElement.addEventListener("pointerdown", (e) => { if (stampPath && e.button === 0) e.stopImmediatePropagation(); }, true);
+renderer.domElement.addEventListener("pointerup", (e) => {
+  if (!stampPath || e.button !== 0 || !cursorGround) return;
+  e.stopImmediatePropagation();
+  stampPath.pts.push(cursorGround.clone());
+  drawStampPath();
+}, true);
+window.addEventListener("keydown", (e) => {
+  if (!stampPath) return;
+  if (e.key === "Enter") { e.preventDefault(); e.stopImmediatePropagation(); endStampPath(true); }
+  else if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); endStampPath(false); }
+  else if (e.key === "Backspace") { e.preventDefault(); e.stopImmediatePropagation(); stampPath.pts.pop(); drawStampPath(); }
+}, true);
+$("#st-path").addEventListener("click", toggleStampPath);
