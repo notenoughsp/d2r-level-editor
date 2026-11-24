@@ -75,6 +75,7 @@ struct Config {
     int varySeed = 1;
     int play = 0;             // play=1: go there (moves.txt), then hand the game over to the player
     int testWindow = 0;       // test_window=1: in play mode still use the test monitor and mute (tests of play mode)
+    int god = 0;              // god=1: players take no damage (act tests with a weak test character)
 } Cfg;
 
 // Movement test (moves.txt next to the DLL: one "x y" world subtile per line, run 0 only).
@@ -167,6 +168,7 @@ void ReadConfig() {
         if (std::sscanf(line, "start_level=%d", &v) == 1) Cfg.startLevel = v;
         if (std::sscanf(line, "play=%d", &v) == 1) Cfg.play = v;
         if (std::sscanf(line, "test_window=%d", &v) == 1) Cfg.testWindow = v;
+        if (std::sscanf(line, "god=%d", &v) == 1) Cfg.god = v;
         if (std::strncmp(line, "levels=", 7) == 0) {
             Cfg.levels.clear();
             for (char* t = std::strtok(line + 7, ", \r\n"); t; t = std::strtok(nullptr, ", \r\n")) Cfg.levels.push_back(std::atoi(t));
@@ -270,6 +272,23 @@ void DumpRun(void* game, void* player, const char* prefix = "run", int index = -
     Log("%s %d dumped: seed %u player (%d,%d)", prefix, index, seed, px, py);
 }
 
+// UNITS_IsDeadOrBusy at RVA 0x34C2C0: a player in mode death/dead (or flag 0x10000) counts as busy.
+using UnitBoolFn = int(__fastcall*)(void* unit);
+UnitBoolFn IsDeadOrBusy = nullptr;
+
+// god=1: SUNITDMG_ApplyDamage(game, attacker, defender, damage) at RVA 0x44A9B0 does nothing when the
+// defender is a player, so the weak test character survives an act test with monsters.
+constexpr std::uint32_t ApplyDamageRva = 0x44A9B0;
+constexpr std::array<std::uint8_t, 16> ApplyDamageBytes{0x40, 0x53, 0x55, 0x57, 0x41, 0x56, 0x48, 0x81, 0xEC,
+                                                        0x88, 0x00, 0x00, 0x00, 0x49, 0x8B, 0xD9};
+using ApplyDamageFn = void(__fastcall*)(void* game, void* attacker, void* defender, void* damage);
+ApplyDamageFn OrigApplyDamage = nullptr;
+
+void __fastcall ApplyDamageDetour(void* game, void* attacker, void* defender, void* damage) {
+    if (defender && *static_cast<int*>(defender) == 0) return;  // unit type 0 = player
+    OrigApplyDamage(game, attacker, defender, damage);
+}
+
 void TrackServerPlayer(void* game);
 
 void __fastcall ProcessGameDetour(void* game) {
@@ -279,6 +298,12 @@ void __fastcall ProcessGameDetour(void* game) {
         const long long w = WarpRequest.exchange(-1);
         for (std::uint32_t guid = 0; guid < 16; ++guid) {
             if (void* player = GetServerUnit(game, 0, guid)) {
+                // A dead player is not warped: the client ignores the new position of a dead unit, so
+                // it stays in the old level, and the next warp crashes it ("Could not get act!").
+                if (IsDeadOrBusy(player)) {
+                    Log("warp to level %d skipped: the player is dead in level %d", static_cast<int>(w >> 32), ServerLevel.load());
+                    break;
+                }
                 Log("warp to level %d type %d", static_cast<int>(w >> 32), static_cast<int>(w & 0xFFFFFFFF));
                 LevelWarp(game, player, static_cast<int>(w >> 32), static_cast<int>(w & 0xFFFFFFFF));
                 break;
@@ -670,6 +695,13 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
     const bool c = context->InstallInlineHook(D2RL::MakeInlineHook(
         InitActRva, InitActBytes.data(), static_cast<std::uint32_t>(InitActBytes.size()),
         reinterpret_cast<void*>(&InitActDetour), reinterpret_cast<void**>(&OrigInitAct)));
+    IsDeadOrBusy = reinterpret_cast<UnitBoolFn>(base + 0x34C2C0);
+    if (Cfg.god) {
+        const bool g = context->InstallInlineHook(D2RL::MakeInlineHook(
+            ApplyDamageRva, ApplyDamageBytes.data(), static_cast<std::uint32_t>(ApplyDamageBytes.size()),
+            reinterpret_cast<void*>(&ApplyDamageDetour), reinterpret_cast<void**>(&OrigApplyDamage)));
+        Log("god mode: damage hook %d", g);
+    }
     Log("hooks: process game %d, draw %d, init act %d", a, b, c);
     if (!a || !b || !c || !IsInGame) {
         D2RL::LogError(context, "Editor Test Harness: setup failed, see harness.log");
