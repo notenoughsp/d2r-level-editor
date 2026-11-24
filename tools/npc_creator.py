@@ -67,26 +67,38 @@ BANKS = ("", "base/")  # the game keeps two table sets: current (data/global/exc
 TABLES = ("monstats", "npc", "monpreset")
 
 
-def build(npcs, read_asset, project):
-    """Write the NPC rows into the project's tables (both banks). Returns (ini lines, {npc id: class id})."""
+def build(npcs, read_asset, project, monsters=()):
+    """Write the NPC and own monster rows into the project's tables (both banks).
+    Returns (ini lines, {id: class id}). Monsters come after the NPCs, so NPC class ids stay."""
     t = Tables(read_asset, project)
     result = None
     for bank in BANKS:
-        ini, classes, strings, speech, tables = build_bank(t, bank, npcs)
+        ini, classes, strings, speech, tables = build_bank(t, bank, npcs, monsters)
         if result and result[1] != classes:
             raise ValueError("the two table sets give the NPCs different class ids")
         result = result or (ini, classes, strings, speech)
         for name, (rows, nl) in tables.items():
-            if npcs:
+            if npcs or monsters:
                 t.write(bank + name, rows, nl)
             else:  # no NPCs: the project's tables go back to the originals
                 (project / f"data/global/excel/{bank}{name}.txt").unlink(missing_ok=True)
     # HD look: the client finds data/hd/character/<group>/<monstats Id>.json, so every NPC gets a copy
     # of its look's file (the file names the look's model, skeleton and textures by full path)
     hd = project / "data/hd/character"
-    for old in hd.glob("*/npc*.json") if hd.exists() else []:
-        if old.stem not in {n["id"] for n in npcs}:
+    ours = {n["id"] for n in npcs} | {m["id"] for m in monsters}
+    for old in [*hd.glob("*/npc*.json"), *hd.glob("*/cm*.json")] if hd.exists() else []:
+        if old.stem not in ours:
             old.unlink()
+    for m in monsters:  # own monsters look like their game monster (enemy/ holds the monsters)
+        for group in ("enemy", "npc", "monsters"):
+            try:
+                raw = read_asset(f"data/hd/character/{group}/{m['look']}.json", original=True)
+            except FileNotFoundError:
+                continue
+            dst = hd / group / f"{m['id']}.json"
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_bytes(raw)
+            break
     for n in npcs:
         for group in ("npc", "monsters"):
             try:
@@ -104,14 +116,14 @@ def build(npcs, read_asset, project):
     ini = ini + [f"speech={cls},{ids[key]}" if isinstance(cls, int) else f"speech_stage={cls[0]},{cls[1]},{ids[key]}"
                  for cls, key in speech.items()]
     for path in ("data/local/lng/strings/npcs.json", "data/local/lng/strings-legacy/npcs.json"):
-        if npcs:
+        if npcs or monsters:
             add_strings(read_asset, project, path, strings, ids)
         else:
             (project / path).unlink(missing_ok=True)
     return ini, classes
 
 
-def build_bank(t, bank, npcs):
+def build_bank(t, bank, npcs, monsters=()):
     orig, nl = t.rows(bank + "monstats", original=True)
     col = {k: i for i, k in enumerate(orig[0])}
     by_id = {r[col["Id"]]: r for r in orig[1:] if len(r) > col["Id"]}
@@ -157,6 +169,31 @@ def build_bank(t, bank, npcs):
             # the game reads each act's rows as one block: insert after the act's last row
             last = max(k for k, r in enumerate(pre_rows) if r and r[0] == str(act))
             pre_rows.insert(last + 1, [str(act), n["id"]] + [""] * (len(pre_rows[0]) - 2))
+    for m in monsters:  # own monsters: a game monster's row with own name, level, life and loot
+        look, tc = by_id.get(m["look"]), by_id.get(m.get("tc") or m["look"])
+        if not look or not tc:
+            raise ValueError(f"{m['name']}: unknown monster {m['look']}")
+        cls = sum(1 for r in rows[1:] if r and r[0] != "Expansion")
+        row = list(look) + [""] * (len(orig[0]) - len(look))
+        row[col["Id"]] = m["id"]
+        row[col["*hcIdx"]] = str(cls)
+        row[col["NextInClass"]] = ""
+        row[col["NameStr"]] = m["id"]
+        row[col["enabled"]] = "1"
+        for k, v in zip(("Level", "Level(N)", "Level(H)"), m.get("level") or []):
+            row[col[k]] = str(int(v))
+        for k in ("minHP", "maxHP", "MinHP(N)", "MaxHP(N)", "MinHP(H)", "MaxHP(H)"):
+            if k in col and str(row[col[k]]).strip().lstrip("-").isdigit():
+                row[col[k]] = str(max(1, int(row[col[k]]) * int(m.get("hp", 100)) // 100))
+        for k in col:
+            if k.startswith("TreasureClass") and "Quest" not in k:
+                row[col[k]] = tc[col[k]] if col[k] < len(tc) else ""
+        rows.append(row)
+        classes[m["id"]] = cls
+        strings[m["id"]] = m["name"]
+        for act in range(1, 6):
+            last = max(k for k, r in enumerate(pre_rows) if r and r[0] == str(act))
+            pre_rows.insert(last + 1, [str(act), m["id"]] + [""] * (len(pre_rows[0]) - 2))
     return ini, classes, strings, speech, {"monstats": (rows, nl), "npc": (npc_rows, npc_nl), "monpreset": (pre_rows, pre_nl)}
 
 

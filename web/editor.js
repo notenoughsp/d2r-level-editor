@@ -6,7 +6,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/addons/utils/SkeletonUtils.js";
-import { initI18n, locale, tr } from "./i18n.js?v=41";
+import { initI18n, locale, tr } from "./i18n.js?v=42";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -1716,7 +1716,7 @@ document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () 
   document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("active", x === b));
   for (const t of ["presets", "models", "objects", "npcs", "kits"]) $("#pane-" + t).classList.toggle("hidden", b.dataset.tab !== t);
   if (b.dataset.tab === "kits") loadKits();
-  if (b.dataset.tab === "npcs") loadNpcs();
+  if (b.dataset.tab === "npcs") { loadNpcs(); loadMonsters(); }
 }));
 
 function setSpace(local) {
@@ -4227,4 +4227,81 @@ renderer.domElement.addEventListener("dblclick", (e) => {
   orbit.target.copy(target);
   camera.position.copy(target).addScaledVector(dir, dist);
   orbit.update();
+});
+
+// ---------- own monsters (NPCs tab): look, name, level, life and loot of a game monster ----------
+let monData = null, monSel = -1;
+async function loadMonsters() {
+  monData = await (await fetch(api("monsters"))).json();
+  $("#mon-ids").innerHTML = monData.ids.map((m) => `<option value="${m}">`).join("");
+  renderMonsters();
+}
+function renderMonsters() {
+  const ul = $("#mon-list");
+  ul.textContent = "";
+  monData.monsters.forEach((m, i) => {
+    if (m.removed) return;
+    const li = document.createElement("li");
+    li.textContent = `${m.name} · ${m.look}`;
+    li.classList.toggle("sel", i === monSel);
+    li.addEventListener("click", () => selectMonster(i));
+    ul.append(li);
+  });
+  $("#mon-form").classList.toggle("hidden", monSel < 0);
+}
+async function previewMonster(look) {
+  const g = await loadCharacter(look);
+  if (!g) return;
+  if (previewObj) previewScene.remove(previewObj);
+  previewObj = new THREE.Group();
+  const inner = animate(g);
+  previewObj.add(inner);
+  inner.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(inner), size = box.getSize(new THREE.Vector3());
+  inner.position.sub(box.getCenter(new THREE.Vector3()));
+  previewScene.add(previewObj);
+  const r = Math.max(size.x, size.y, size.z) || 1;
+  previewCamera.position.set(0, r * 0.4, r * 1.8);
+  previewCamera.lookAt(0, 0, 0);
+  $("#preview-info").textContent = `${look} · ${tr("animated")}`;
+}
+function selectMonster(i) {
+  monSel = i;
+  const m = monData.monsters[i];
+  $("#mon-name").value = m.name;
+  $("#mon-look").value = m.look;
+  $("#mon-tc").value = m.tc || m.look;
+  [$("#mon-l1").value, $("#mon-l2").value, $("#mon-l3").value] = m.level || [10, 40, 70];
+  $("#mon-hp").value = m.hp || 100;
+  renderMonsters();
+}
+function formToMonster() {
+  if (monSel < 0) return;
+  const m = monData.monsters[monSel];
+  m.name = $("#mon-name").value;
+  const before = m.look;
+  m.look = $("#mon-look").value.trim();
+  if ($("#mon-tc").value.trim() === before) $("#mon-tc").value = m.look;  // loot follows the look until changed
+  m.tc = $("#mon-tc").value.trim() || m.look;
+  m.level = [+$("#mon-l1").value || 1, +$("#mon-l2").value || 1, +$("#mon-l3").value || 1];
+  m.hp = +$("#mon-hp").value || 100;
+}
+for (const id of ["#mon-name", "#mon-look", "#mon-tc", "#mon-l1", "#mon-l2", "#mon-l3", "#mon-hp"])
+  $(id).addEventListener("input", () => { formToMonster(); renderMonsters(); });
+$("#mon-look").addEventListener("change", () => previewMonster($("#mon-look").value.trim()));
+$("#mon-new").addEventListener("click", () => {
+  if (!monData) return;
+  monData.monsters.push({ name: tr("New monster"), look: "zombie1", tc: "zombie1", level: [10, 40, 70], hp: 100 });
+  selectMonster(monData.monsters.length - 1);
+  previewMonster("zombie1");
+});
+$("#mon-remove").addEventListener("click", () => { if (monSel < 0) return; monData.monsters[monSel].removed = true; monSel = -1; renderMonsters(); });
+$("#mon-save").addEventListener("click", async () => {
+  formToMonster();
+  const r = await postJSON("monsters", {}, { monsters: monData.monsters });
+  if (!r.ok) return setStatus(tr("Monsters not saved: {0}").replace("{0}", r.data.error));
+  monData.monsters = r.data.monsters;
+  renderMonsters();
+  setStatus(tr("Monsters saved; place them with Add game object (NPC / monster), then export"));
+  if (presetPath) loadGameObjects();  // the add list gets them
 });

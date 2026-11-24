@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>D2R Level Editor</title>
-<link rel="stylesheet" href="/web/editor.css?v=50">
+<link rel="stylesheet" href="/web/editor.css?v=51">
 <script type="importmap">
 { "imports": { "three": "/three/build/three.module.js", "three/addons/": "/three/examples/jsm/" } }
 </script>
@@ -116,6 +116,19 @@
           <button id="npc-stage-add">Add a stage text</button>
         </details>
         <div><button id="npc-save">Save NPCs</button> <button id="npc-remove">Remove</button></div>
+      </div>
+      <h4 class="pane-head">Own monsters</h4>
+      <div class="npc-help">A game monster's look and behaviour with an own name, level, life and loot. Save, then place them with "Add game object".</div>
+      <ul id="mon-list" class="list"></ul>
+      <button id="mon-new">New monster</button>
+      <datalist id="mon-ids"></datalist>
+      <div id="mon-form" class="hidden">
+        <label>Name <input id="mon-name" maxlength="40"></label>
+        <label>Look and behaviour of <input id="mon-look" list="mon-ids" title="A game monster, e.g. zombie1, fallen1, skeleton1"></label>
+        <label>Level (normal, nightmare, hell) <span class="tool-row"><input id="mon-l1" type="number" min="1" max="99"><input id="mon-l2" type="number" min="1" max="99"><input id="mon-l3" type="number" min="1" max="99"></span></label>
+        <label>Life (% of the game monster) <input id="mon-hp" type="number" min="10" max="5000" step="10"></label>
+        <label>Loot like <input id="mon-tc" list="mon-ids" title="Drops like this game monster"></label>
+        <div><button id="mon-save">Save monsters</button> <button id="mon-remove">Remove</button></div>
       </div>
     </div>
     <div class="pane hidden" id="pane-models">
@@ -260,6 +273,6 @@
 </div></div>
 <div id="statusbar"><span id="proj-info" title="Open project"></span><span id="status"></span><span id="hover-info" title="Object under the mouse"></span><span id="sel-info"></span><span id="cursor-pos"></span></div>
 <div id="modal" class="hidden"><div class="modal-box"><div class="modal-head"><span id="modal-title"></span><button id="modal-close">Close</button></div><pre id="modal-body"></pre></div></div>
-<script type="module" src="/web/editor.js?v=86"></script>
+<script type="module" src="/web/editor.js?v=88"></script>
 </body>
 </html>

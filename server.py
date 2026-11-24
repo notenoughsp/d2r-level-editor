@@ -99,6 +99,66 @@ _size_cache = {}
 
 NPC_FILE = PROJECT.parent / "editor_state" / "npcs.json"
 NPC_INI = PROJECT.parent / "editor_state" / "d2r-npc.ini"
+MONSTER_FILE = PROJECT.parent / "editor_state" / "monsters.json"
+
+
+def all_monster_ids():
+    rows = read_asset("data/global/excel/monstats.txt", original=True).decode("latin1").splitlines()
+    c = rows[0].split("\t").index("Id")
+    return [r.split("\t")[c] for r in rows[1:] if len(r.split("\t")) > c and r.split("\t")[c] not in ("", "Expansion")]
+
+
+def load_monsters():
+    return json.loads(MONSTER_FILE.read_text(encoding="utf-8")) if MONSTER_FILE.exists() else []
+
+
+def monsters_payload():
+    return {"monsters": load_monsters(), "ids": all_monster_ids()}
+
+
+def save_monsters(monsters):
+    """Own monsters: a game monster's look with own name, level, life and loot. Like NPCs they keep
+    their place in the list (removed ones stay hidden), so class ids do not shift."""
+    old = {m["id"]: m for m in load_monsters()}
+    known = set(all_monster_ids())
+    clean, used = [], set()
+    for m in monsters:
+        name = str(m.get("name", "")).strip()[:40]
+        if not name:
+            raise ValueError("Every monster needs a name.")
+        look = str(m.get("look", "")).strip()
+        if look not in known:
+            raise ValueError(f"{name}: unknown game monster {look}")
+        tc = str(m.get("tc") or look).strip()
+        if tc not in known:
+            raise ValueError(f"{name}: unknown game monster {tc} (loot)")
+        mid = m.get("id") if m.get("id") in old else "cm" + npc_creator.safe_id(name)[3:]
+        base, k = mid, 2
+        while mid in used or (mid in old and mid != m.get("id")) or mid in known:
+            mid, k = f"{base}{k}", k + 1
+        used.add(mid)
+        level = [max(1, min(99, int(v))) for v in (m.get("level") or [10, 40, 70])][:3]
+        clean.append({"id": mid, "name": name, "look": look, "tc": tc, "level": level,
+                      "hp": max(10, min(5000, int(m.get("hp", 100)))), "removed": bool(m.get("removed"))})
+    for mid, m in old.items():
+        if mid not in used:
+            clean.append({**m, "removed": True})
+    MONSTER_FILE.parent.mkdir(parents=True, exist_ok=True)
+    MONSTER_FILE.write_text(json.dumps(clean, indent=2, ensure_ascii=False), encoding="utf-8")
+    npcs = json.loads(NPC_FILE.read_text(encoding="utf-8")) if NPC_FILE.exists() else []
+    _, classes = rebuild_creatures(npcs, clean)
+    return {"monsters": clean, "classes": classes}
+
+
+def rebuild_creatures(npcs, monsters):
+    """NPC and monster rows of the project's tables, and the NPC plugin's config."""
+    ini, classes = npc_creator.build(npcs, read_asset, PROJECT, monsters)
+    _object_names.clear()  # the "Add game object" lists come from monpreset.txt
+    if npcs:
+        NPC_INI.write_text("; written by the editor's NPC creator\n" + "\n".join(ini) + "\n", encoding="utf-8")
+    else:
+        NPC_INI.unlink(missing_ok=True)
+    return ini, classes
 
 
 def npcs_payload():
@@ -140,11 +200,7 @@ def save_npcs(npcs):
             clean.append({**n, "removed": True})
     NPC_FILE.parent.mkdir(parents=True, exist_ok=True)
     NPC_FILE.write_text(json.dumps(clean, indent=2, ensure_ascii=False), encoding="utf-8")
-    ini, classes = npc_creator.build(clean, read_asset, PROJECT)
-    if clean:
-        NPC_INI.write_text("; written by the editor's NPC creator\n" + "\n".join(ini) + "\n", encoding="utf-8")
-    else:
-        NPC_INI.unlink(missing_ok=True)
+    _, classes = rebuild_creatures(clean, load_monsters())
     return {"npcs": clean, "classes": classes}
 
 
@@ -1423,6 +1479,8 @@ class Handler(BaseHTTPRequestHandler):
                           if (PROJECT / "data/hd/env/preset").exists() else [])
             elif u.path == "/api/npcs":
                 self.send(200, npcs_payload())
+            elif u.path == "/api/monsters":
+                self.send(200, monsters_payload())
             elif u.path == "/api/version":
                 self.send(200, {"version": updater.current_version()})
             elif u.path == "/api/update":
@@ -1511,6 +1569,11 @@ class Handler(BaseHTTPRequestHandler):
                 body = self.body_json()
                 try:
                     self.send(200, (make_retexture if u.path.endswith("retexture") else make_import)(body))
+                except ValueError as e:
+                    self.send(400, {"error": str(e)})
+            elif u.path == "/api/monsters":
+                try:
+                    self.send(200, save_monsters(self.body_json().get("monsters", [])))
                 except ValueError as e:
                     self.send(400, {"error": str(e)})
             elif u.path == "/api/npcs":

@@ -269,3 +269,8 @@ button:focus:not(:focus-visible), select:focus:not(:focus-visible) { outline: no
 #proj-info:empty { display: none; }
 
 #object-kind { flex: 1; min-width: 0; margin: 0; } #object-sort { margin: 0; }
+
+.pane-head { color: #c7a35a; margin: 14px 0 4px; border-top: 1px solid #3a3326; padding-top: 8px; }
+#mon-list { max-height: 20vh; }
+#pane-npcs { overflow-y: auto; }
+#pane-npcs .tool-row { display: flex; gap: 4px; } #pane-npcs .tool-row input { width: 33%; }
