@@ -6,7 +6,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/addons/utils/SkeletonUtils.js";
-import { initI18n, locale, tr } from "./i18n.js?v=42";
+import { initI18n, locale, tr } from "./i18n.js?v=43";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -1857,6 +1857,8 @@ window.addEventListener("keydown", (e) => {
   else if (e.key === "Escape" && !$("#export-dialog").classList.contains("hidden")) $("#export-dialog").classList.add("hidden");
   else if (e.key === "Escape" && !$("#acts-dialog").classList.contains("hidden")) $("#acts-dialog").classList.add("hidden");
   else if (e.key === "Escape" && !$("#options-dialog").classList.contains("hidden")) $("#options-dialog").classList.add("hidden");
+  else if (e.key === "Escape" && !$("#items-dialog").classList.contains("hidden")) $("#items-dialog").classList.add("hidden");
+  else if (e.key === "Escape" && !$("#loot-dialog").classList.contains("hidden")) $("#loot-dialog").classList.add("hidden");
   else if (e.key === "Escape" && !$("#ctx-menu").classList.contains("hidden")) $("#ctx-menu").classList.add("hidden");
   else if (e.key === "Escape" && !$("#view-pop").classList.contains("hidden")) $("#view-pop").classList.add("hidden");
   else if (e.key === "Escape") { selectGameObject(null); select([]); $("#modal").classList.add("hidden"); }
@@ -4304,4 +4306,74 @@ $("#mon-save").addEventListener("click", async () => {
   renderMonsters();
   setStatus(tr("Monsters saved; place them with Add game object (NPC / monster), then export"));
   if (presetPath) loadGameObjects();  // the add list gets them
+});
+
+// ---------- own unique items ----------
+let itemData = null, itemSel = -1;
+async function openItems() {
+  itemData = await (await fetch(api("items"))).json();
+  $("#it-bases").innerHTML = itemData.bases.map((b) => `<option value="${b.code}">${b.name.replace(/"/g, "&quot;")}</option>`).join("");
+  $("#it-props").innerHTML = itemData.props.map((p) => `<option value="${p}">`).join("");
+  itemSel = itemData.items.length ? 0 : -1;
+  renderItems();
+  $("#items-dialog").classList.remove("hidden");
+}
+function renderItems() {
+  const ul = $("#it-list");
+  ul.textContent = "";
+  itemData.items.forEach((it, i) => {
+    const li = document.createElement("li");
+    li.textContent = `${it.name} · ${it.code}`;
+    li.classList.toggle("active", i === itemSel);
+    li.onclick = () => { formToItem(); itemSel = i; renderItems(); };
+    ul.append(li);
+  });
+  const f = $("#it-form");
+  f.classList.toggle("hidden", itemSel < 0);
+  if (itemSel < 0) return;
+  const it = itemData.items[itemSel];
+  $("#it-name").value = it.name; $("#it-code").value = it.code;
+  $("#it-lvl").value = it.lvl; $("#it-lvlreq").value = it.lvlreq; $("#it-rarity").value = it.rarity;
+  const tb = $("#it-proptable");
+  tb.innerHTML = `<tr><th>${tr("Property")}</th><th>${tr("Parameter")}</th><th>${tr("Min")}</th><th>${tr("Max")}</th></tr>`;
+  for (let k = 0; k < 12; k++) {
+    const p = it.props[k] || {};
+    tb.insertAdjacentHTML("beforeend", `<tr><td><input data-p="prop" data-k="${k}" list="it-props" value="${p.prop || ""}"></td>` +
+      `<td><input data-p="par" data-k="${k}" value="${p.par || ""}"></td><td><input type="number" data-p="min" data-k="${k}" value="${p.min ?? ""}"></td>` +
+      `<td><input type="number" data-p="max" data-k="${k}" value="${p.max ?? ""}"></td></tr>`);
+  }
+}
+function formToItem() {
+  if (!itemData || itemSel < 0) return;
+  const it = itemData.items[itemSel];
+  Object.assign(it, { name: $("#it-name").value, code: $("#it-code").value.trim(), lvl: +$("#it-lvl").value || 1,
+    lvlreq: +$("#it-lvlreq").value || 1, rarity: +$("#it-rarity").value || 1 });
+  const props = [];
+  for (let k = 0; k < 12; k++) {
+    const g = (p) => $(`[data-p="${p}"][data-k="${k}"]`)?.value ?? "";
+    if (g("prop").trim()) props.push({ prop: g("prop").trim(), par: g("par"), min: g("min"), max: g("max") });
+  }
+  it.props = props;
+}
+$("#btn-items").addEventListener("click", openItems);
+$("#it-close").addEventListener("click", () => $("#items-dialog").classList.add("hidden"));
+$("#it-new").addEventListener("click", () => {
+  formToItem();
+  itemData.items.push({ name: tr("New item"), code: "wax", lvl: 30, lvlreq: 25, rarity: 1, props: [{ prop: "dmg%", par: "", min: 100, max: 150 }] });
+  itemSel = itemData.items.length - 1;
+  renderItems();
+});
+$("#it-del").addEventListener("click", () => {
+  if (itemSel < 0 || !confirm(tr("Delete this item?"))) return;
+  itemData.items.splice(itemSel, 1);
+  itemSel = Math.min(itemSel, itemData.items.length - 1);
+  renderItems();
+});
+$("#it-save").addEventListener("click", async () => {
+  formToItem();
+  const r = await postJSON("items", {}, { items: itemData.items });
+  if (!r.ok) return ($("#it-msg").textContent = tr("Not saved: {0}").replace("{0}", r.data.error));
+  itemData.items = r.data.items;
+  renderItems();
+  $("#it-msg").textContent = tr("Saved: {0} item(s). They drop as unique items of their base item; with the export they go into the mod.").replace("{0}", r.data.items.length);
 });

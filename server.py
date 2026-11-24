@@ -100,6 +100,93 @@ _size_cache = {}
 NPC_FILE = PROJECT.parent / "editor_state" / "npcs.json"
 NPC_INI = PROJECT.parent / "editor_state" / "d2r-npc.ini"
 MONSTER_FILE = PROJECT.parent / "editor_state" / "monsters.json"
+ITEM_FILE = PROJECT.parent / "editor_state" / "items.json"
+UNIQUE_BANKS = ("data/global/excel/uniqueitems.txt", "data/global/excel/base/uniqueitems.txt")
+ITEM_PREFIX = "ui"  # index of own unique items: ui<Name>, so they are found again
+
+
+def item_catalog():
+    """Base items (code, name) from weapons, armor and misc, and the item properties."""
+    bases = []
+    for t in ("weapons", "armor", "misc"):
+        for r in _excel(t):
+            if r.get("code") and r.get("name") and r.get("code") != "xxx":
+                bases.append({"code": r["code"], "name": r["name"], "level": r.get("level", "")})
+    props = [r["code"] for r in _excel("properties") if r.get("code") and not r["code"].startswith("*")]
+    return {"bases": bases, "props": props}
+
+
+def items_payload():
+    items = json.loads(ITEM_FILE.read_text(encoding="utf-8")) if ITEM_FILE.exists() else []
+    return {"items": items, **item_catalog()}
+
+
+def save_items(items):
+    """Own unique items: rows in uniqueitems.txt (both table sets) and their names."""
+    cat = item_catalog()
+    codes, props = {b["code"] for b in cat["bases"]}, set(cat["props"])
+    clean, keys = [], set()
+    for it in items:
+        name = str(it.get("name", "")).strip()[:40]
+        if not name:
+            raise ValueError("Every item needs a name.")
+        code = str(it.get("code", "")).strip()
+        if code not in codes:
+            raise ValueError(f"{name}: unknown base item {code}")
+        key = ITEM_PREFIX + re.sub(r"[^A-Za-z0-9]", "", name)[:30]
+        while key in keys:
+            key += "x"
+        keys.add(key)
+        plist = []
+        for p in (it.get("props") or [])[:12]:
+            pc = str(p.get("prop", "")).strip()
+            if not pc:
+                continue
+            if pc not in props:
+                raise ValueError(f"{name}: unknown property {pc}")
+            lo, hi = int(p.get("min") or 0), int(p.get("max") or p.get("min") or 0)
+            plist.append({"prop": pc, "par": str(p.get("par", "")).strip()[:20], "min": min(lo, hi), "max": max(lo, hi)})
+        clean.append({"key": key, "name": name, "code": code, "lvl": max(1, min(99, int(it.get("lvl") or 1))),
+                      "lvlreq": max(1, min(99, int(it.get("lvlreq") or 1))), "rarity": max(1, min(100, int(it.get("rarity") or 1))),
+                      "props": plist})
+    for bank in UNIQUE_BANKS:
+        try:
+            raw = read_asset(bank, original=True).decode("latin1")
+        except FileNotFoundError:
+            continue
+        nl = "\r\n" if "\r\n" in raw else "\n"
+        rows = [r.split("\t") for r in raw.split(nl)]
+        while rows and rows[-1] == [""]:
+            rows.pop()
+        h = rows[0]
+        c = {k: i for i, k in enumerate(h)}
+        for it in clean:
+            row = [""] * len(h)
+            row[c["index"]] = it["key"]
+            for k, v in (("version", "100"), ("spawnable", "1"), ("rarity", it["rarity"]), ("lvl", it["lvl"]), ("lvl req", it["lvlreq"]),
+                         ("code", it["code"]), ("*ItemName", it["name"]), ("cost mult", "5"), ("cost add", "5000"), ("*eol", "0")):
+                if k in c:
+                    row[c[k]] = str(v)
+            for i, p in enumerate(it["props"], start=1):
+                for k, v in ((f"prop{i}", p["prop"]), (f"par{i}", p["par"]), (f"min{i}", p["min"]), (f"max{i}", p["max"])):
+                    if k in c:
+                        row[c[k]] = str(v)
+            rows.append(row)
+        if clean:
+            write_project(bank, (nl.join("\t".join(r) for r in rows) + nl).encode("latin1"))
+        else:
+            (PROJECT / bank).unlink(missing_ok=True)
+    # names (the unique's index is its string key)
+    strings = {it["key"]: it["name"] for it in clean}
+    ids = dict(zip(strings, npc_creator.free_string_ids(read_asset, len(strings), start=61000))) if strings else {}
+    for path in ("data/local/lng/strings/item-names.json", "data/local/lng/strings-legacy/item-names.json"):
+        if strings:
+            npc_creator.add_strings(read_asset, PROJECT, path, strings, ids)
+        else:
+            (PROJECT / path).unlink(missing_ok=True)
+    ITEM_FILE.parent.mkdir(parents=True, exist_ok=True)
+    ITEM_FILE.write_text(json.dumps(clean, indent=2, ensure_ascii=False), encoding="utf-8")
+    return {"items": clean}
 
 
 def all_monster_ids():
@@ -1481,6 +1568,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send(200, npcs_payload())
             elif u.path == "/api/monsters":
                 self.send(200, monsters_payload())
+            elif u.path == "/api/items":
+                self.send(200, items_payload())
             elif u.path == "/api/version":
                 self.send(200, {"version": updater.current_version()})
             elif u.path == "/api/update":
@@ -1569,6 +1658,11 @@ class Handler(BaseHTTPRequestHandler):
                 body = self.body_json()
                 try:
                     self.send(200, (make_retexture if u.path.endswith("retexture") else make_import)(body))
+                except ValueError as e:
+                    self.send(400, {"error": str(e)})
+            elif u.path == "/api/items":
+                try:
+                    self.send(200, save_items(self.body_json().get("items", [])))
                 except ValueError as e:
                     self.send(400, {"error": str(e)})
             elif u.path == "/api/monsters":
