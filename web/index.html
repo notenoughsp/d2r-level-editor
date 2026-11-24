@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>D2R Level Editor</title>
-<link rel="stylesheet" href="/web/editor.css?v=48">
+<link rel="stylesheet" href="/web/editor.css?v=50">
 <script type="importmap">
 { "imports": { "three": "/three/build/three.module.js", "three/addons/": "/three/examples/jsm/" } }
 </script>
@@ -90,6 +90,7 @@
     <div class="pane hidden" id="pane-objects">
       <input id="object-filter" placeholder="Search objects of the map, e.g. palisade, light" title="Click: select · double-click: fly to the object">
       <div class="row-line"><select id="group-select" title="Groups of this map: choose one to select its objects"></select><button id="group-save" title="Ctrl+G: save the selection as a group">Save as group</button><button id="group-del" title="Delete the group (the objects stay)" disabled>✕</button></div>
+      <div class="row-line"><select id="object-kind" title="Only objects of this kind"></select><select id="object-sort" title="Order of the list"><option value="map">Map order</option><option value="name">By name</option><option value="kind">By kind</option></select></div>
       <div class="row-line"><span id="object-count"></span><button id="object-select-all" title="Select every object in the list (use the search to narrow it down, e.g. tree)">Select all in the list</button></div>
       <ul id="object-list" class="list" translate="no"></ul>
     </div>
@@ -257,8 +258,8 @@
   </div>
   <div class="dialog-foot"><button id="ex-open" class="hidden">Open the zip folder</button><span class="spacer"></span><button id="ex-cancel">Cancel</button><button id="ex-go" class="primary">Export</button></div>
 </div></div>
-<div id="statusbar"><span id="status"></span><span id="hover-info" title="Object under the mouse"></span><span id="sel-info"></span><span id="cursor-pos"></span></div>
+<div id="statusbar"><span id="proj-info" title="Open project"></span><span id="status"></span><span id="hover-info" title="Object under the mouse"></span><span id="sel-info"></span><span id="cursor-pos"></span></div>
 <div id="modal" class="hidden"><div class="modal-box"><div class="modal-head"><span id="modal-title"></span><button id="modal-close">Close</button></div><pre id="modal-body"></pre></div></div>
-<script type="module" src="/web/editor.js?v=79"></script>
+<script type="module" src="/web/editor.js?v=84"></script>
 </body>
 </html>

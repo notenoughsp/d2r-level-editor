@@ -533,6 +533,13 @@ const DE = {
   "{0} object(s) rotated": "{0} Objekt(e) gedreht",
   "{0} object(s) scaled": "{0} Objekt(e) skaliert",
   "{0} object(s) moved": "{0} Objekt(e) verschoben",
+  "Open project": "Offenes Projekt",
+  "All kinds ({0})": "Alle Arten ({0})",
+  "Only objects of this kind": "Nur Objekte dieser Art",
+  "Order of the list": "Reihenfolge der Liste",
+  "Map order": "Wie in der Karte",
+  "By name": "Nach Name",
+  "By kind": "Nach Art",
   // messages from the editor server
   "Size does not match: {0} instead of {1} tiles": "Größe passt nicht: {0} statt {1} Kacheln",
   "The game objects of this DS1 file cannot be edited.": "Die Objekte dieser DS1-Datei können nicht bearbeitet werden.",

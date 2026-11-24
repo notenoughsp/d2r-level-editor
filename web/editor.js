@@ -6,7 +6,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/addons/utils/SkeletonUtils.js";
-import { initI18n, locale, tr } from "./i18n.js?v=39";
+import { initI18n, locale, tr } from "./i18n.js?v=41";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -481,9 +481,20 @@ function updateSceneInfo() {
     `Biome: ${doc.biomeFilename || "-"}<br>${dirty ? "<span style='color:#c7a35a'>unsaved</span>" : "saved"}`;
 }
 
+// a text with the search hit marked (case ignored)
+function marked(text, q) {
+  const frag = document.createDocumentFragment();
+  const i = q ? text.toLowerCase().indexOf(q.toLowerCase()) : -1;
+  if (i < 0) { frag.append(document.createTextNode(text)); return frag; }
+  const mk = document.createElement("mark");
+  mk.textContent = text.slice(i, i + q.length);
+  frag.append(document.createTextNode(text.slice(0, i)), mk, document.createTextNode(text.slice(i + q.length)));
+  return frag;
+}
 function updateTitle() {
   const name = presetPath ? presetPath.replace("data/hd/env/preset/", "") : "";
-  document.title = `${dirty ? "● " : ""}${name ? name + " – " : ""}D2R Level Editor`;
+  const proj = window.projectName && window.projectName !== "Default" ? ` [${window.projectName}]` : "";
+  document.title = `${dirty ? "● " : ""}${name ? name + " – " : ""}D2R Level Editor${proj}`;
   $("#btn-save").classList.toggle("dirty", dirty);
   updateUndoButtons();
 }
@@ -1264,7 +1275,19 @@ function renderObjectList() {
   const ul = $("#object-list");
   ul.innerHTML = "";
   let shown = 0;
-  for (const ent of doc.entities) {
+  // kinds with their counts, and the chosen kind and order
+  const kinds = new Map();
+  for (const ent of doc.entities) { const k = kindOf(ent)[1]; kinds.set(k, (kinds.get(k) || 0) + 1); }
+  const ks = $("#object-kind"), want = ks.value;
+  ks.textContent = "";
+  ks.append(new Option(tr("All kinds ({0})").replace("{0}", doc.entities.length), ""));
+  for (const [k, n] of [...kinds].sort((a, b) => b[1] - a[1])) ks.append(new Option(`${tr(k)} (${n})`, k));
+  ks.value = kinds.has(want) ? want : "";
+  const order = $("#object-sort").value;
+  let list = doc.entities.filter((e) => !ks.value || kindOf(e)[1] === ks.value);
+  if (order === "name") list = [...list].sort((a, b) => a.name.localeCompare(b.name));
+  else if (order === "kind") list = [...list].sort((a, b) => kindOf(a)[1].localeCompare(kindOf(b)[1]) || a.name.localeCompare(b.name));
+  for (const ent of list) {
     const [icon, kind] = kindOf(ent);
     // the kind can be searched in the shown language too (e.g. "Licht" for lights)
     if (f && !ent.name.toLowerCase().includes(f) && !kind.toLowerCase().includes(f) && !tr(kind).toLowerCase().includes(f)) continue;
@@ -1272,7 +1295,7 @@ function renderObjectList() {
     shown += 1;
     const li = document.createElement("li");
     li.innerHTML = `<span class="kind" title="${kind}">${icon}</span>`;
-    li.appendChild(document.createTextNode(ent.name));
+    li.appendChild(marked(ent.name, f));
     li.dataset.id = ent.id;
     if (hiddenIds.has(ent.id)) li.classList.add("hidden-obj");
     li.onclick = (e) => {
@@ -1293,7 +1316,7 @@ function renderObjectList() {
     };
     ul.appendChild(li);
   }
-  $("#object-count").textContent = f ? `${doc.entities.length} objects, ${shown} matching` : `${doc.entities.length} objects`;
+  $("#object-count").textContent = f || ks.value ? `${doc.entities.length} objects, ${shown} matching` : `${doc.entities.length} objects`;
   markListSelection();
 }
 function markListSelection() {
@@ -1307,6 +1330,9 @@ function markListSelection() {
   if (first && !$("#pane-objects").classList.contains("hidden")) first.scrollIntoView({ block: "nearest" });
 }
 $("#object-filter").addEventListener("input", scheduleObjectList);
+$("#object-kind").addEventListener("change", renderObjectList);
+$("#object-sort").addEventListener("change", () => { localStorage.setItem("objectSort", $("#object-sort").value); renderObjectList(); });
+$("#object-sort").value = localStorage.getItem("objectSort") || "map";
 $("#object-select-all").addEventListener("click", () => {
   const ids = [...document.querySelectorAll("#object-list li")].map((li) => +li.dataset.id);
   const objs = ids.map((id) => entityObjects.get(id)).filter((o) => o && o.visible && !o.userData.terrain);
@@ -1344,6 +1370,9 @@ async function showPresetInfo(path) {
         (variants > 1 ? ` – one of ${variants} variants; the game picks one by seed (always the same with a fixed seed).` : ".");
     }
     banner.querySelector(".close").onclick = () => banner.classList.add("hidden");
+    // plain information goes away by itself after a while; warnings stay until closed
+    clearTimeout(showPresetInfo.timer);
+    if (banner.className === "info") showPresetInfo.timer = setTimeout(() => banner.classList.add("hidden"), 9000);
   } catch { /* info is optional */ }
 }
 
@@ -1870,7 +1899,7 @@ function renderPresets() {
     if (f && !short.includes(f)) continue;
     if (onlyEdited && !editedMaps.has(p)) continue;
     const li = document.createElement("li");
-    li.textContent = short;
+    li.append(marked(short, f));
     li.dataset.path = p;
     li.title = p;
     if (editedMaps.has(p)) li.classList.add("edited");
@@ -1927,7 +1956,7 @@ async function searchModels() {
       li.append(img);
       thumbObserver.observe(img);
     }
-    li.append(document.createTextNode(m.replace("data/hd/", "")));
+    li.append(marked(m.replace("data/hd/", ""), q));
     li.onclick = () => {
       ul.querySelectorAll("li.active").forEach((x) => x.classList.remove("active"));
       li.classList.add("active");
@@ -2721,6 +2750,8 @@ async function loadProjects() {
   for (const p of r.projects) sel.append(new Option(p, p));
   sel.value = r.current;
   window.projectName = r.current;
+  $("#proj-info").textContent = r.current;
+  updateTitle();
 }
 async function switchProject(name) {
   if (dirty && !confirm("Discard unsaved changes?")) { $("#project-select").value = window.projectName; return; }
@@ -3612,7 +3643,7 @@ async function addMapArea() {
 // ---------- effects shown as simple particles (fire, smoke and fog, flies, water, magic) ----------
 const FX_KINDS = [
   [/fire|torch|flame|ember|brazier|burn|lava|candle/i, { color: 0xff8a2a, count: 26, size: 0.9, rise: 2.4, spread: 0.6, life: 1.1, blend: true }],
-  [/smoke|fog|mist|haze|dust|cloud|steam/i, { color: 0x9a948a, count: 22, size: 3.2, rise: 0.25, spread: 5, life: 5, blend: false, opacity: 0.18 }],
+  [/smoke|fog|mist|haze|dust|cloud|steam/i, { color: 0x8a857c, count: 10, size: 2.2, rise: 0.2, spread: 4, life: 6, blend: false, opacity: 0.06 }],
   [/fl(y|ies)|insect|bug|moth|bat/i, { color: 0x222018, count: 10, size: 0.35, rise: 0, spread: 2.5, life: 3, blend: false, buzz: true }],
   [/water|drip|splash|rain|fountain|wave/i, { color: 0x6fb7ff, count: 18, size: 0.5, rise: -1.5, spread: 1.5, life: 1.4, blend: true }],
   [/magic|glow|spark|portal|light|aura|rune|holy|soul/i, { color: 0xc77dff, count: 18, size: 0.6, rise: 0.8, spread: 1.2, life: 2, blend: true }],
@@ -3719,9 +3750,10 @@ function stampMaterial(sc) {
     vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
     fragmentShader: `uniform sampler2D mask, aR, aG, aB; uniform float rep; varying vec2 vUv;
       void main(){ vec4 m = texture2D(mask, vUv); vec2 t = vUv * rep;
-        vec3 c = texture2D(aR, t).rgb * m.r + texture2D(aG, t).rgb * m.g + texture2D(aB, t).rgb * m.b;
-        float a = clamp(m.r + m.g + m.b, 0.0, 1.0);
-        gl_FragColor = vec4(c / max(a, 0.001), a * 0.95); }`,
+        float sum = m.r + m.g + m.b;
+        vec3 c = (texture2D(aR, t).rgb * m.r + texture2D(aG, t).rgb * m.g + texture2D(aB, t).rgb * m.b) / max(sum, 0.001);
+        float a = clamp(max(m.r, max(m.g, m.b)), 0.0, 1.0);
+        gl_FragColor = vec4(c * 0.85, a * 0.9); }`,
   });
 }
 function stampPlane(ent) {
@@ -3859,6 +3891,7 @@ function setPanelWidth(side, w, keep = true) {
   w = Math.max(200, Math.min(max, Math.round(w)));
   $("#" + side).style.width = w + "px";
   // the model preview grows with the panel
+  if (side === "left") document.documentElement.style.setProperty("--thumb", w >= 420 ? "60px" : w >= 340 ? "50px" : "40px");
   if (side === "left") $("#preview").style.height = Math.round(Math.min(480, innerHeight * 0.32, Math.max(180, w * 0.72))) + "px";
   resize();
 }
