@@ -222,7 +222,18 @@ async function searchAll(q) {
   const ql = q.toLowerCase(), out = [];
   if (!ql) return out;
   for (const p of presets) if (p.includes(ql)) out.push({ kind: "Map", label: p.replace("data/hd/env/preset/", ""), run: () => openPreset(p) });
-  if (doc) for (const e of doc.entities) if (e.name.toLowerCase().includes(ql)) out.push({ kind: "Object", label: e.name, run: () => { const o = entityObjects.get(e.id); if (o) { select([o]); orbit.target.copy(o.position); } } });
+  if (doc) for (const e of doc.entities) if (e.name.toLowerCase().includes(ql)) out.push({ kind: "Object", label: e.name, run: () => { const o = entityObjects.get(e.id); if (o) { select([o]); flyTo(o.getWorldPosition(new THREE.Vector3())); } } });
+  // game objects of the map: NPCs, monsters, chests, waypoints
+  (gameObjects?.objects || []).forEach((ob, i) => {
+    if (!(ob.name || "").toLowerCase().includes(ql)) return;
+    out.push({ kind: ob.type === 1 ? "NPC" : "Game object", label: `${ob.name} (${ob.x}, ${ob.y})`, run: () => {
+      const g = gameRoot?.children[i];
+      if (!g) return;
+      $("#show-objs").checked = gameRoot.visible = true;
+      selectGameObject(g);
+      flyTo(g.position);
+    } });
+  });
   for (const k of await (await fetch(api("kits"))).json()) if (k.name.toLowerCase().includes(ql)) out.push({ kind: "Kit", label: k.name, run: () => placeKit(k.name) });
   for (const [, items] of OPTION_FORM) for (const [key, label] of items) if (tr(label).toLowerCase().includes(ql) || label.toLowerCase().includes(ql)) out.push({ kind: "Option", label: tr(label), run: () => { renderOptions(); $("#options-dialog").classList.remove("hidden"); $(`[data-opt="${key}"]`)?.focus(); } });
   const models = await (await fetch(api("models", { q: ql, limit: 25 }))).json();
@@ -233,6 +244,12 @@ let paletteToken = 0, paletteItems = [], paletteSel = 0;
 function renderPalette() {
   const ul = $("#palette-list");
   ul.textContent = "";
+  if (!paletteItems.length && $("#palette-input").value.trim()) {
+    const li = document.createElement("li");
+    li.className = "palette-empty";
+    li.textContent = tr("Nothing found");
+    ul.append(li);
+  }
   paletteItems.forEach((it, i) => {
     const li = document.createElement("li");
     const kind = document.createElement("span");

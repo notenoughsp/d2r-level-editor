@@ -1557,7 +1557,7 @@ class Handler(BaseHTTPRequestHandler):
                     self.send(400, {"error": str(e)})
             elif u.path == "/api/character":
                 ref, lod = q["ref"], int(q.get("lod", "1"))
-                self.send(200, cached("char", f"{ref}|{lod}|2", lambda: character_glb(ref, lod), "glb"), "model/gltf-binary")
+                self.send(200, cached("char", f"{ref}|{lod}|3", lambda: character_glb(ref, lod), "glb"), "model/gltf-binary")
             elif u.path == "/api/thumb":
                 f = thumb_file(q["path"])
                 if f.exists():
@@ -1660,7 +1660,7 @@ class Handler(BaseHTTPRequestHandler):
             elif u.path == "/api/model":
                 lod = int(q.get("lod", "1"))
                 f = model_file(q["path"], lod)
-                self.send(200, cached("glb", f + version_key(f), lambda: model_export.convert(read_asset(f)), "glb"), "model/gltf-binary")
+                self.send(200, cached("glb", f + "|t2" + version_key(f), lambda: model_export.convert(read_asset(f)), "glb"), "model/gltf-binary")
             elif u.path == "/api/texture":
                 mip = int(q.get("mip", "1"))
                 p = q["path"]

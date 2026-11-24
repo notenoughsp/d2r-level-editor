@@ -279,6 +279,7 @@ button:focus:not(:focus-visible), select:focus:not(:focus-visible) { outline: no
 .palette-box { width: min(640px, 92vw); background: #16140f; border: 1px solid #c7a35a; border-radius: 6px; box-shadow: 0 10px 30px rgba(0,0,0,.6); padding: 8px; }
 #palette-input { width: 100%; font-size: 16px; padding: 8px; box-sizing: border-box; }
 #palette-list { max-height: 50vh; margin-top: 6px; }
+#palette-list .palette-empty { color: #888; cursor: default; }
 #palette-list .pk { display: inline-block; min-width: 70px; color: #888; font-size: 11px; text-transform: uppercase; }
 .change-row { display: flex; gap: 10px; align-items: center; padding: 3px 0; border-bottom: 1px solid #221f19; font-size: 12px; }
 .change-row > span:first-child { width: 80px; } .change-row .cn { flex: 1; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

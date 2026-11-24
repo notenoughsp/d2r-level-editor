@@ -131,7 +131,8 @@ class GLB:
                "alphaMode": "MASK", "alphaCutoff": 0.4, "doubleSided": True}
         if tex_path:
             # relative URI: resolved against /api/model -> /api/texture
-            self.j["images"].append({"uri": "texture?path=" + urllib.parse.quote(tex_path)})
+            # lower case: game files name the same texture in different cases, the browser loads it once
+            self.j["images"].append({"uri": "texture?path=" + urllib.parse.quote(tex_path.replace("\\", "/").lower())})
             self.j["textures"].append({"sampler": 0, "source": len(self.j["images"]) - 1})
             mat["pbrMetallicRoughness"]["baseColorTexture"] = {"index": len(self.j["textures"]) - 1}
         elif water:

@@ -596,6 +596,8 @@ const DE = {
   "Map": "Karte",
   "Kit": "Bausatz",
   "Option": "Option",
+  "Nothing found": "Nichts gefunden",
+  "Game object": "Spielobjekt",
   // messages from the editor server
   "Size does not match: {0} instead of {1} tiles": "Größe passt nicht: {0} statt {1} Kacheln",
   "The game objects of this DS1 file cannot be edited.": "Die Objekte dieser DS1-Datei können nicht bearbeitet werden.",

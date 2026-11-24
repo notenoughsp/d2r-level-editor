@@ -1,7 +1,12 @@
 // ---------- asset loading ----------
+// Many models share textures: three.js's file cache keeps each texture once (one request, one decode).
+// Only textures are kept there; models are kept as scenes in modelCache, their bytes are not needed again.
+THREE.Cache.enabled = true;
+const cacheAdd = THREE.Cache.add.bind(THREE.Cache);
+THREE.Cache.add = (key, file) => { if (String(key).includes("/api/texture")) cacheAdd(key, file); };
 const loader = new GLTFLoader();
 const modelCache = new Map();
-const ASSET_VERSION = 4; // bump when the server-side model conversion changes (busts browser caches)
+const ASSET_VERSION = 5; // bump when the server-side model conversion changes (busts browser caches)
 let lod = 1;
 
 let loadsPending = 0, loadsDone = 0;

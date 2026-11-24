@@ -2,7 +2,7 @@
 const charCache = new Map();
 function loadCharacter(ref) {
   if (!charCache.has(ref)) {
-    charCache.set(ref, trackLoad(new Promise((ok) => loader.load(api("character", { ref, lod: 1, v: 1 }), (g) => {
+    charCache.set(ref, trackLoad(new Promise((ok) => loader.load(api("character", { ref, lod: 1, v: 2 }), (g) => {
       g.scene.traverse((o) => { if (o.isMesh && o.material && o.material.map) o.material.map.colorSpace = THREE.SRGBColorSpace; });
       ok(g);
     }, undefined, () => ok(null)))));
@@ -284,10 +284,13 @@ renderer.domElement.addEventListener("dblclick", (e) => {
     if (o && o.parent === root && !o.userData.terrain && o.visible) { hit = h; break; }
   }
   const target = hit ? hit.point : cursorGround;
-  if (!target) return;
+  if (target) flyTo(target);
+});
+// the camera looks at a point from the same direction, at most 40 units away
+function flyTo(target) {
   const dir = camera.position.clone().sub(orbit.target).normalize();
   const dist = Math.min(camera.position.distanceTo(orbit.target), 40);
   orbit.target.copy(target);
   camera.position.copy(target).addScaledVector(dir, dist);
   orbit.update();
-});
+}
