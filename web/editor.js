@@ -6,7 +6,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/addons/utils/SkeletonUtils.js";
-import { initI18n, locale, tr } from "./i18n.js?v=37";
+import { initI18n, locale, tr } from "./i18n.js?v=38";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -78,6 +78,7 @@ renderer.setAnimationLoop(() => {
   renderer.render(scene, camera);
   updateFx();
   updateMixers();
+  if (gameSelBox) gameSelBox.update();
   if (typeof drawMinimap === "function") drawMinimap();
 });
 
@@ -532,6 +533,7 @@ function updateSelInfo() {
     : hiddenIds.size ? tr("{0} hidden").replace("{0}", hiddenIds.size) : "";
 }
 function select(objs) {
+  if (objs.length && gameSelBox) markFigure(null);
   if (objs.length && gameSel) { gameSel.userData.mesh.material = gameObjects.objects[gameSel.userData.gameIndex].type === 1 ? npcMaterial : objMaterial; gameSel = null; gizmo.showY = true; applySnap(); }
   selection = objs.filter(Boolean);
   for (const b of selectionBoxes.splice(0)) { scene.remove(b); b.geometry.dispose(); }
@@ -845,7 +847,7 @@ async function save() {
     if (tab) { tab.draft = false; saveTabs(); }
     renderTabs();
     updateSceneInfo();
-    setStatus("Saved: " + r.data.saved);
+    setStatus("Saved: " + presetPath.replace("data/hd/env/preset/", ""));
     const li = document.querySelector(`#preset-list li[data-path="${presetPath}"]`);
     if (li) li.classList.add("edited");
     editedMaps.add(presetPath);
@@ -1402,6 +1404,8 @@ function buildGameObjects() {
         m.material = m.material.clone();
         m.material.opacity = 0.25;
         m.material.transparent = true;
+        g.userData.baseMat = m.material;
+        if (gameSel === g) { m.material = selMaterial; markFigure(g); }
       });
     }
     const label = textSprite(ob.name, ob.type === 1 ? "#ff9a80" : "#8ff0e6");
@@ -1429,7 +1433,8 @@ async function loadGameObjects() {
 
 function selectGameObject(g) {
   select([]);
-  if (gameSel) gameSel.userData.mesh.material = gameObjects.objects[gameSel.userData.gameIndex].type === 1 ? npcMaterial : objMaterial;
+  if (gameSel) gameSel.userData.mesh.material = gameSel.userData.baseMat || (gameObjects.objects[gameSel.userData.gameIndex].type === 1 ? npcMaterial : objMaterial);
+  markFigure(g);
   gameSel = g;
   if (g) {
     g.userData.mesh.material = selMaterial;
@@ -1442,6 +1447,7 @@ function selectGameObject(g) {
     applySnap();
   }
   showGameProps();
+  if (g) figureProps(g);
 }
 
 function showGameProps() {
@@ -2244,7 +2250,7 @@ for (const id of ["sc-count", "sc-radius", "sc-smin", "sc-smax", "sc-rot", "sc-g
 $("#sc-go").addEventListener("click", () => scatter(null));
 
 // ---------- keyboard help ----------
-const HELP_TEXT = "Mouse\n  Left click: select · Shift+click: add/remove · drag: box selection\n  Right mouse: turn the view · middle mouse: pan · wheel: zoom\n\nObjects\n  W / E / R: move / rotate / scale        Del: delete\n  Ctrl+C / Ctrl+V: copy / paste at the mouse cursor (also into other maps)\n  Ctrl+D: duplicate                        G: drop to the ground\n  Ctrl+A: select all\n  Arrow keys: move one snap step (Shift ×10), Page Up/Down: height\n  H: hide the selection                    Shift+H: show all hidden objects\n  F: focus the selection                   Esc: deselect\n\nPlacing\n  P: place the preview model at the mouse cursor\n  Shift+P: scatter the preview model around the mouse cursor (settings in the Models tab)\n  O: add a game object at the mouse cursor\n\nView and files\n  T: top view                              Ctrl+S: save\n  Ctrl+1..4: store the view, 1..4: go back to it\n  Ctrl+Z / Ctrl+Y: undo / redo             ? or F1: this help\n\nCollision\n  Q: objects tool    B: block (Shift+B: block + teleport)    X: clear    [ / ]: brush size\n\nGizmo\n  L: axes of the world or of the selected object\n  (every map opens again with the view you left it with)\n\nTools\n  M: ruler (click two points)    Mirror, circle and row copies: buttons under Selection\n  N: minimap    Ctrl+G: save the selection as a group (Objects tab)\n  C: compare with the game's original map\n  Game objects: NPCs can get a walking path (Draw a walking path), \"Add a group\" places several at once";
+const HELP_TEXT = "Mouse\n  Left click: select · Shift+click: add/remove · drag: box selection\n  Right mouse: turn the view · middle mouse: pan · wheel: zoom\n\nObjects\n  W / E / R: move / rotate / scale        Del: delete\n  Ctrl+C / Ctrl+V: copy / paste at the mouse cursor (also into other maps)\n  Ctrl+D: duplicate                        G: drop to the ground\n  Ctrl+A: select all\n  Arrow keys: move one snap step (Shift ×10), Page Up/Down: height\n  H: hide the selection                    Shift+H: show all hidden objects\n  F: focus the selection                   Esc: deselect\n\nPlacing\n  P: place the preview model at the mouse cursor\n  Shift+P: scatter the preview model around the mouse cursor (settings in the Models tab)\n  O: add a game object at the mouse cursor\n\nView and files\n  T: top view                              Ctrl+S: save\n  Ctrl+1..4: store the view, 1..4: go back to it\n  Ctrl+Z / Ctrl+Y: undo / redo             ? or F1: this help\n\nCollision\n  Q: objects tool    B: block (Shift+B: block + teleport)    X: clear    [ / ]: brush size\n\nGizmo\n  L: axes of the world or of the selected object\n  (every map opens again with the view you left it with)\n\nTools\n  M: ruler (click two points)    Mirror, circle and row copies: buttons under Selection\n  N: minimap    Ctrl+G: save the selection as a group (Objects tab)\n  C: compare with the game's original map\n  Game objects: NPCs can get a walking path (Draw a walking path), \"Add a group\" places several at once\n\nMaps and ground\n  Models tab: \"Decorate like the map\" fills an area with the map's own plants and rocks; \"Draw a path\" lays ground stamps along clicked points (Enter)\n  Maps tab: ⤓ saves the project as one file, ⤒ loads one as a new project";
 function showHelp() { modalShow(tr("Keyboard and mouse"), tr(HELP_TEXT)); }
 $("#btn-help").addEventListener("click", showHelp);
 $("#btn-help2").addEventListener("click", showHelp);
@@ -3126,7 +3132,7 @@ const OPTION_DEFAULTS = {
   uiScale: 100, fov: 45, rotateSpeed: 1, zoomSpeed: 1, panSpeed: 1, damping: false, showGrid: true, gridStep: 5,
   autosave: 60, undoSteps: 100, labels: true, labelScale: 0.6, hoverInfo: true, previewSpin: true, statusFade: 8,
   confirmDelete: 20, dupOffset: 2, minimapSize: 220, renderScale: 100, selColor: "#ffd400", bg: "", checkUpdates: true,
-  maxListEntries: 1500, tooltips: true, thumbs: true, effects: true, stamps: true, animations: true, figures: true, figureScale: 1, walkPaths: true,
+  maxListEntries: 1500, tooltips: true, thumbs: true, effects: true, stamps: true, animations: true, figures: true, figureScale: 1, walkPaths: true, reopen: true,
 };
 let options = { ...OPTION_DEFAULTS, ...JSON.parse(localStorage.getItem("options") || "{}") };
 if (!options.v2) { options.damping = false; options.v2 = true; localStorage.setItem("options", JSON.stringify(options)); }  // smoothing off since 0.5.1
@@ -3139,6 +3145,7 @@ const OPTION_FORM = [
     ["hoverInfo", "Name of the object under the mouse in the status bar", "check"],
     ["maxListEntries", "Entries shown in the objects list", "number", 100, 20000, 100],
     ["checkUpdates", "Look for updates at start", "check"],
+    ["reopen", "Open the last map at start", "check"],
     ["thumbs", "Pictures in the model list", "check"],
   ]],
   ["Camera and view", [
@@ -3984,7 +3991,7 @@ function updateWalkers(dt) {
     while (top.parent) top = top.parent;
     if (top !== scene) { walkers.delete(fig); continue; }
     const w = fig.userData.walk;
-    if (!options.walkPaths) continue;
+    if (!options.walkPaths || w.paused) continue;
     if (w.wait > 0) {  // standing at a point
       w.wait -= dt;
       if (w.aIdle && !w.aIdle.isRunning()) { w.aWalk.stop(); w.aIdle.play(); }
@@ -4128,3 +4135,48 @@ $("#project-file").addEventListener("change", async () => {
   dirty = false;
   location.reload();
 });
+
+// ---------- start where you left off: the last map and the last tab on the left ----------
+document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => localStorage.setItem("leftTab", b.dataset.tab)));
+(async () => {
+  const tab = localStorage.getItem("leftTab");
+  const btn = tab && document.querySelector(`.tab[data-tab="${tab}"]`);
+  if (btn && tab !== "presets") btn.click();
+  if (!options.reopen) return;
+  for (let i = 0; i < 50 && !presets.length; i++) await new Promise((r) => setTimeout(r, 200));
+  const last = recentMaps()[0];
+  if (last && presets.includes(last) && !presetPath) openPreset(last);
+})();
+
+// ---------- a selected NPC figure: a box around it, and its animations ----------
+let gameSelBox = null;
+function figureOf(g) { return g ? g.children.find((c) => c.userData.figure) : null; }
+function markFigure(g) {
+  if (gameSelBox) { scene.remove(gameSelBox); gameSelBox.geometry.dispose(); gameSelBox = null; }
+  const fig = figureOf(g);
+  if (!fig) return;
+  gameSelBox = new THREE.BoxHelper(fig, options.selColor);
+  scene.add(gameSelBox);
+}
+function figureProps(g) {
+  const fig = figureOf(g);
+  if (!fig || !(fig.userData.clips || []).length) return;
+  const row = document.createElement("div");
+  row.className = "prop-row light-row";
+  const lab = document.createElement("span");
+  lab.textContent = tr("Animation");
+  const sel = document.createElement("select");
+  sel.append(new Option(tr("(walks its path / stands)"), ""));
+  for (const c of fig.userData.clips) sel.append(new Option(c.name, c.name));
+  sel.value = fig.userData.chosen || "";
+  sel.addEventListener("change", () => {
+    const mixer = fig.userData.mixer;
+    mixer.stopAllAction();
+    fig.userData.chosen = sel.value;
+    if (fig.userData.walk) fig.userData.walk.paused = !!sel.value;
+    const clip = fig.userData.clips.find((c) => c.name === sel.value) || fig.userData.clips.find((c) => c.name === "neutral") || fig.userData.clips[0];
+    mixer.clipAction(clip).play();
+  });
+  row.append(lab, sel);
+  $("#props").insertBefore(row, $("#props").querySelector(".prop-buttons"));
+}
