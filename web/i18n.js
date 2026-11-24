@@ -498,6 +498,12 @@ const DE = {
   "Unknown entry {0}: a treasure class name or an item code (e.g. gld, r33, cap)": "Unbekannter Eintrag {0}: ein Schatzklassen-Name oder ein Gegenstandscode (z. B. gld, r33, cap)",
   "{0}: a whole number": "{0}: eine ganze Zahl",
   "No treasure class {0}": "Keine Schatzklasse {0}",
+  "What the view shows": "Was die Ansicht zeigt",
+  "View ▾": "Ansicht ▾",
+  "Light": "Licht",
+  "Level of detail of the models": "Detailstufe der Modelle",
+  "Drag to change the width; double-click: default width": "Ziehen ändert die Breite; Doppelklick: Standardbreite",
+  "Click: fold away or open": "Klick: ein- oder ausklappen",
   // messages from the editor server
   "Size does not match: {0} instead of {1} tiles": "Größe passt nicht: {0} statt {1} Kacheln",
   "The game objects of this DS1 file cannot be edited.": "Die Objekte dieser DS1-Datei können nicht bearbeitet werden.",

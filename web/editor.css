@@ -18,8 +18,8 @@ button:hover { background: #3a3326; }
 button.active { background: #6b5527; border-color: #c7a35a; color: #fff; }
 select, input { background: #1a1815; color: #ddd; border: 1px solid #4a4130; padding: 4px; border-radius: 3px; }
 #main { display: flex; flex: 1; min-height: 0; }
-#left { width: 300px; display: flex; flex-direction: column; border-right: 1px solid #3a3326; background: #16140f; }
-#right { width: 280px; padding: 8px 10px; border-left: 1px solid #3a3326; background: #16140f; overflow-y: auto; }
+#left { width: 300px; flex: none; display: flex; flex-direction: column; background: #16140f; }
+#right { width: 280px; flex: none; padding: 6px 10px; background: #16140f; overflow-y: auto; }
 #viewport { flex: 1; position: relative; }
 .tabs { display: flex; }
 .tab { flex: 1; border-radius: 0; }
@@ -45,7 +45,7 @@ h3 { color: #c7a35a; margin: 10px 0 6px; font-size: 13px; }
 #toolbar label { white-space: nowrap; }
 input.num { width: 52px; }
 #preview-box { border-top: 1px solid #3a3326; padding-top: 6px; }
-#preview { width: 100%; height: 200px; display: block; background: #0c0b09; border: 1px solid #3a3326; }
+#preview { width: 100%; height: 216px; display: block; background: #0c0b09; border: 1px solid #3a3326; border-radius: 3px; }
 #preview-info { color: #999; font-size: 11px; margin-top: 4px; word-break: break-all; min-height: 28px; }
 #banner { position: absolute; left: 10px; right: 10px; top: 10px; padding: 6px 10px; background: rgba(107, 85, 39, 0.92);
   border: 1px solid #c7a35a; color: #fff; z-index: 5; border-radius: 3px; }
@@ -220,3 +220,40 @@ body.no-tips [title] { pointer-events: auto; }
 .tc-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 10px; margin: 6px 0; }
 .tc-grid label { display: flex; flex-direction: column; color: #bbb; font-size: 12px; }
 .changed { color: #c7a35a; font-size: 12px; }
+
+/* ---- panels and splitters ---- */
+.splitter { width: 6px; flex: none; cursor: col-resize; background: #1c1a17; border-left: 1px solid #3a3326; border-right: 1px solid #3a3326; position: relative; z-index: 6; }
+.splitter:hover, .splitter.dragging { background: #6b5527; }
+.splitter::after { content: ""; position: absolute; left: 1px; right: 1px; top: 50%; height: 30px; margin-top: -15px; border-left: 1px dotted #777; border-right: 1px dotted #777; }
+/* ---- toolbar ---- */
+#toolbar { gap: 8px; padding: 5px 8px; align-items: center; }
+#toolbar .sep { display: none; }
+.tb-group { display: inline-flex; align-items: center; gap: 3px; padding: 2px; border: 1px solid #2e2a22; border-radius: 5px; background: #191713; flex-wrap: nowrap; }
+.tb-group > button, .tb-group > select, .tb-group > label { margin: 0; }
+.tb-group button { padding: 4px 8px; }
+#btn-undo-list { padding: 4px 4px; margin-left: -3px; }
+.tb-menu { position: relative; }
+.tb-pop { position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; min-width: 220px; display: flex; flex-direction: column; gap: 4px;
+  padding: 8px; background: #16140f; border: 1px solid #c7a35a; border-radius: 4px; box-shadow: 0 6px 18px rgba(0,0,0,.6); }
+.tb-pop label { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.tb-pop label select { margin-left: auto; }
+.tb-pop button { text-align: left; }
+.tb-pop hr { border: none; border-top: 1px solid #3a3326; margin: 2px 0; width: 100%; }
+/* ---- right panel sections ---- */
+section.fold { border-bottom: 1px solid #2a261f; padding-bottom: 6px; }
+section.fold > h3 { cursor: pointer; user-select: none; margin: 8px 0 6px; display: flex; justify-content: space-between; }
+section.fold > h3::after { content: "▾"; color: #888; }
+section.fold.closed > h3::after { content: "▸"; }
+section.fold.closed > .fold-body { display: none; }
+/* ---- lists: a bit more air, full names on hover ---- */
+.list li { padding: 4px 6px; }
+.list li:hover { background: #2a261f; color: #fff; }
+button { transition: background .1s, border-color .1s; }
+button:disabled { opacity: .45; }
+
+/* tabs of the left panel: all fit, also in a narrow panel */
+.tabs { flex-wrap: wrap; }
+.tab { flex: 1 1 auto; padding: 5px 6px; min-width: 0; }
+/* the view gives way when a panel gets wider (the canvas must not keep it wide) */
+#viewport { min-width: 0; overflow: hidden; }
+#viewport > canvas { display: block; position: absolute; inset: 0; }

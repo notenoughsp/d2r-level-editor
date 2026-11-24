@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { initI18n, locale, tr } from "./i18n.js?v=33";
+import { initI18n, locale, tr } from "./i18n.js?v=34";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -47,7 +47,7 @@ const camera = new THREE.PerspectiveCamera(45, 1, 0.5, 5000);
 camera.position.set(0, 120, 120);
 const orbit = new OrbitControls(camera, renderer.domElement);
 orbit.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE };
-orbit.enableDamping = true;
+orbit.enableDamping = false;  // no mouse smoothing (can be switched on in the options)
 
 const grid = new THREE.GridHelper(1000, 200, 0x3a3326, 0x221f19);
 grid.position.y = -0.05; // below the terrain to avoid z-fighting
@@ -3101,12 +3101,13 @@ $("#acts-export").addEventListener("click", () => buildAct(true));
 
 // ---------- options window (stored in the browser, applied at once) ----------
 const OPTION_DEFAULTS = {
-  uiScale: 100, fov: 45, rotateSpeed: 1, zoomSpeed: 1, panSpeed: 1, damping: true, showGrid: true, gridStep: 5,
+  uiScale: 100, fov: 45, rotateSpeed: 1, zoomSpeed: 1, panSpeed: 1, damping: false, showGrid: true, gridStep: 5,
   autosave: 60, undoSteps: 100, labels: true, labelScale: 1, hoverInfo: true, previewSpin: true, statusFade: 8,
   confirmDelete: 20, dupOffset: 2, minimapSize: 220, renderScale: 100, selColor: "#ffd400", bg: "", checkUpdates: true,
   maxListEntries: 1500, tooltips: true, thumbs: true, effects: true, stamps: true,
 };
 let options = { ...OPTION_DEFAULTS, ...JSON.parse(localStorage.getItem("options") || "{}") };
+if (!options.v2) { options.damping = false; options.v2 = true; localStorage.setItem("options", JSON.stringify(options)); }  // smoothing off since 0.5.1
 const OPTION_FORM = [
   ["Interface", [
     ["uiScale", "Size of the interface (%)", "number", 70, 160, 5],
@@ -3806,3 +3807,58 @@ $("#btn-loot").addEventListener("click", async () => {
   lootSearch();
 });
 $("#lt-close").addEventListener("click", () => $("#loot-dialog").classList.add("hidden"));
+
+// ---------- panels: drag the left and right panel wider or narrower ----------
+const PANEL_DEFAULT = { left: 300, right: 280 };
+function setPanelWidth(side, w, keep = true) {
+  if (keep) localStorage.setItem("panel-" + side, Math.round(w));  // the wish; small windows only show less
+  const max = Math.max(200, Math.floor(innerWidth * 0.45));
+  w = Math.max(200, Math.min(max, Math.round(w)));
+  $("#" + side).style.width = w + "px";
+  // the model preview grows with the panel
+  if (side === "left") $("#preview").style.height = Math.round(Math.min(480, innerHeight * 0.32, Math.max(180, w * 0.72))) + "px";
+  resize();
+}
+for (const side of ["left", "right"]) {
+  const saved = +localStorage.getItem("panel-" + side);
+  setPanelWidth(side, saved || PANEL_DEFAULT[side], false);
+}
+document.querySelectorAll(".splitter").forEach((sp) => {
+  const side = sp.dataset.side;
+  sp.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    try { sp.setPointerCapture(e.pointerId); } catch { /* synthetic events */ }
+    sp.classList.add("dragging");
+    const startX = e.clientX, startW = $("#" + side).getBoundingClientRect().width;
+    const move = (ev) => setPanelWidth(side, side === "left" ? startW + (ev.clientX - startX) : startW - (ev.clientX - startX));
+    const up = () => { sp.classList.remove("dragging"); sp.removeEventListener("pointermove", move); sp.removeEventListener("pointerup", up); };
+    sp.addEventListener("pointermove", move);
+    sp.addEventListener("pointerup", up);
+  });
+  sp.addEventListener("dblclick", () => setPanelWidth(side, PANEL_DEFAULT[side]));
+});
+window.addEventListener("resize", () => { for (const side of ["left", "right"]) setPanelWidth(side, +localStorage.getItem("panel-" + side) || PANEL_DEFAULT[side], false); });
+
+// ---------- toolbar: the View menu ----------
+$("#btn-view").addEventListener("click", (e) => { e.stopPropagation(); $("#view-pop").classList.toggle("hidden"); });
+window.addEventListener("pointerdown", (e) => { if (!e.target.closest(".tb-menu")) $("#view-pop").classList.add("hidden"); }, true);
+
+// ---------- right panel: sections fold away with a click on their heading ----------
+(() => {
+  const right = $("#right");
+  const heads = [...right.querySelectorAll(":scope > h3")];
+  for (const h of heads) {
+    const sec = document.createElement("section");
+    sec.className = "fold";
+    h.before(sec);
+    const body = document.createElement("div");
+    body.className = "fold-body";
+    let n = h.nextSibling;
+    sec.append(h, body);
+    while (n && !(n.nodeType === 1 && n.tagName === "H3")) { const next = n.nextSibling; body.append(n); n = next; }
+    const key = "fold-" + (h.textContent || "").trim();
+    if (localStorage.getItem(key) === "1") sec.classList.add("closed");
+    h.addEventListener("click", () => { sec.classList.toggle("closed"); localStorage.setItem(key, sec.classList.contains("closed") ? "1" : "0"); });
+    h.title = "Click: fold away or open";
+  }
+})();
