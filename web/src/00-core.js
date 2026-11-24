@@ -71,7 +71,10 @@ function resize() {
 window.addEventListener("resize", resize);
 new ResizeObserver(resize).observe(viewport); // the toolbar may wrap and change the viewport height
 resize();
+let frameLast = performance.now();
 renderer.setAnimationLoop(() => {
+  const now = performance.now(), frameDt = Math.min(0.1, (now - frameLast) / 1000);  // seconds, any refresh rate
+  frameLast = now;
   orbit.update();
   for (const b of selectionBoxes) b.update();
   keepMarkersUnscaled();
@@ -79,7 +82,7 @@ renderer.setAnimationLoop(() => {
   updateFx();
   updateMixers();
   updateMapLights();
-  updateFlight(1 / 60);
+  updateFlight(frameDt);
   if (gameSelBox) gameSelBox.update();
   drawMinimap();
 });

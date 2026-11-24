@@ -104,6 +104,8 @@ $("#ex-go").addEventListener("click", async () => {
 
 window.addEventListener("keydown", (e) => {
   const t = e.target;
+  // Esc in a field of a dialog closes the dialog
+  if (e.key === "Escape" && t?.closest?.(".dialog:not(.hidden)")) { t.closest(".dialog").classList.add("hidden"); return; }
   if (t && (["INPUT", "SELECT", "TEXTAREA", "BUTTON"].includes(t.tagName) || t.isContentEditable)) return;
   if (e.altKey || e.metaKey) return;
   if (document.querySelector(".dialog:not(.hidden), #modal:not(.hidden)") && e.key !== "Escape") return;  // a dialog is open
@@ -143,14 +145,11 @@ window.addEventListener("keydown", (e) => {
   else if (e.key === "Escape" && measuring) toggleRuler();
   else if (e.key === "Escape" && brushOn) toggleScatterBrush();
   else if (e.key === "Escape" && stampOn) toggleStampBrush();
-  else if (e.key === "Escape" && !$("#export-dialog").classList.contains("hidden")) $("#export-dialog").classList.add("hidden");
-  else if (e.key === "Escape" && !$("#acts-dialog").classList.contains("hidden")) $("#acts-dialog").classList.add("hidden");
-  else if (e.key === "Escape" && !$("#options-dialog").classList.contains("hidden")) $("#options-dialog").classList.add("hidden");
-  else if (e.key === "Escape" && !$("#items-dialog").classList.contains("hidden")) $("#items-dialog").classList.add("hidden");
-  else if (e.key === "Escape" && !$("#loot-dialog").classList.contains("hidden")) $("#loot-dialog").classList.add("hidden");
+  else if (e.key === "Escape" && !$("#modal").classList.contains("hidden")) $("#modal").classList.add("hidden");
+  else if (e.key === "Escape" && document.querySelector(".dialog:not(.hidden)")) [...document.querySelectorAll(".dialog:not(.hidden)")].pop().classList.add("hidden");
   else if (e.key === "Escape" && !$("#ctx-menu").classList.contains("hidden")) $("#ctx-menu").classList.add("hidden");
   else if (e.key === "Escape" && !$("#view-pop").classList.contains("hidden")) $("#view-pop").classList.add("hidden");
-  else if (e.key === "Escape") { selectGameObject(null); select([]); $("#modal").classList.add("hidden"); }
+  else if (e.key === "Escape") { selectGameObject(null); select([]); }
   else if (e.ctrlKey && e.key === "c") { e.preventDefault(); copySelection(); }
   else if (e.ctrlKey && e.key === "v") { e.preventDefault(); paste(); }
   else if (e.key === "g") dropToGround();

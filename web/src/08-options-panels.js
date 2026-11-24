@@ -424,7 +424,7 @@ $("#mm-close").addEventListener("click", () => $("#mods-dialog").classList.add("
 // ---------- new map: a copy of a game map under a new name, optionally empty ----------
 async function newMap() {
   const template = presetPath;
-  if (!template) return alert("Open the map to copy first (its size and ground are used).");
+  if (!template) return setStatus(tr("Open the map to copy first (its size and ground are used)."));
   const name = prompt("Name of the new map (small letters, digits, _). It is a copy of the open map:", "my_map");
   if (!name) return;
   const empty = confirm(tr("Remove all models and game objects from the copy (keep only the ground)?"));
@@ -537,7 +537,7 @@ function updateFx() {
 
 // ---------- into the game: start right at the view centre of this map ----------
 async function playHere() {
-  if (!presetPath) return alert("Open a map first.");
+  if (!presetPath) return setStatus(tr("Open a map first."));
   if (dirty) await save();
   const at = orbit.target;
   if (!confirm(tr("Export the mod and start the game at the view centre of this map? (The game must be closed.)"))) return;

@@ -130,7 +130,7 @@ function mapDecor() {
   return [...count.entries()].sort((a, b) => b[1] - a[1]).slice(0, 24);
 }
 async function decorate(center) {
-  if (!doc) return alert("Open a map first.");
+  if (!doc) return setStatus(tr("Open a map first."));
   const pool = mapDecor();
   if (!pool.length) return setStatus(tr("This map has no plants or rocks to take as decoration; use Scatter with a model instead"));
   const o = scatterSettings(), c = center || orbit.target;

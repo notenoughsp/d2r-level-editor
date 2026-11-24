@@ -300,7 +300,7 @@ function modelEntity(modelPath, pos, quat = null, scale = 1, suffix = "") {
 }
 
 async function placeModel(modelPath, at = null) {
-  if (!doc) return alert("Open a map first.");
+  if (!doc) return setStatus(tr("Open a map first."));
   beginEdit();
   const base = modelPath.split("/").pop().replace(/\.model$/, "");
   const tgt = at || orbit.target;

@@ -52,14 +52,17 @@ previewCanvas.addEventListener("wheel", (e) => {
   previewCamera.position.multiplyScalar(f);
   previewTouched = performance.now();
 }, { passive: false });
+let previewLast = performance.now();
 function renderPreview() {
+  const now = performance.now(), dt = Math.min(0.1, (now - previewLast) / 1000);
+  previewLast = now;
   const w = previewCanvas.clientWidth, h = previewCanvas.clientHeight;
   if (w && (previewCanvas.width !== w || previewCanvas.height !== h)) {
     previewRenderer.setSize(w, h, false);
     previewCamera.aspect = w / h;
     previewCamera.updateProjectionMatrix();
   }
-  if (previewObj && !previewDrag && options.previewSpin && performance.now() - previewTouched > 3000) previewObj.rotation.y += 0.01;
+  if (previewObj && !previewDrag && options.previewSpin && now - previewTouched > 3000) previewObj.rotation.y += 0.6 * dt;
   if (w) previewRenderer.render(previewScene, previewCamera);
   requestAnimationFrame(renderPreview);
 }

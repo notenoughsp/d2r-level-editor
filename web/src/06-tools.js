@@ -95,7 +95,7 @@ function scatterSettings() {
            smin: Math.max(0.05, Math.min(smin, smax)), smax: Math.max(0.05, smin, smax), rotate: $("#sc-rot").checked, ground: $("#sc-ground").checked };
 }
 async function scatter(center, inStroke = false) {
-  if (!doc) return alert("Open a map first.");
+  if (!doc) return setStatus(tr("Open a map first."));
   if (!previewPath) return setStatus(tr("Choose a model in the list first"));
   const o = scatterSettings();
   const c = center || orbit.target;

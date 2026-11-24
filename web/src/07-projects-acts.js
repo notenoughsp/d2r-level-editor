@@ -166,7 +166,7 @@ function wireLightProps(o) {
   }));
 }
 async function addLight() {
-  if (!doc) return alert("Open a map first.");
+  if (!doc) return setStatus(tr("Open a map first."));
   beginEdit();
   const p = cursorGround || orbit.target;
   const name = `pointlight_${Date.now() % 100000}`;
@@ -224,7 +224,7 @@ async function saveKit() {
   setStatus(tr("Kit {0} saved ({1} objects)").replace("{0}", name).replace("{1}", items.length + gameObjs.length));
 }
 async function placeKit(name) {
-  if (!doc) return alert("Open a map first.");
+  if (!doc) return setStatus(tr("Open a map first."));
   const kit = await (await fetch(api("kit", { name }))).json();
   if (!kit.items) return setStatus(tr("Kit not found"));
   const [dx, dz] = await paste(kit);
