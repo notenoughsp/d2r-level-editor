@@ -60,6 +60,21 @@ class GameData(unittest.TestCase):
     def test_check_runs(self):
         self.assertIn("problems", self.server.project_check())
 
+    def test_export_never_replaces_another_mod(self):
+        mods = pathlib.Path(TMP.name) / "mods"
+        ok = self.server.export_target_ok
+        self.assertTrue(ok(mods / "New"))
+        (mods / "Empty").mkdir(parents=True)
+        self.assertTrue(ok(mods / "Empty"))
+        (mods / "Other" / "Other.mpq").mkdir(parents=True)
+        self.assertFalse(ok(mods / "Other"))
+        (mods / "Mine").mkdir()
+        (mods / "Mine" / self.server.EXPORT_MARK).write_text("{}")
+        self.assertTrue(ok(mods / "Mine"))
+        (mods / "Old" / "d2rloader" / "plugins").mkdir(parents=True)
+        (mods / "Old" / "d2rloader" / "plugins" / "d2r-fixed-seed.dll").write_bytes(b"")
+        self.assertTrue(ok(mods / "Old"))
+
     def test_project_import_stays_in_its_folder(self):
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w") as z:

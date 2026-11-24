@@ -1439,6 +1439,17 @@ def make_upload_zip(name, mod, info):
     return out
 
 
+EXPORT_MARK = "d2r-level-editor.json"  # in mods/<name>/: this folder is an editor export
+
+
+def export_target_ok(mod):
+    """An export replaces the mod folder's files: only into a new or empty folder, or an earlier
+    export (the mark, or for exports before the mark the fixed-seed plugin every export carries)."""
+    if not mod.exists() or not any(mod.iterdir()):
+        return True
+    return (mod / EXPORT_MARK).exists() or (mod / "d2rloader" / "plugins" / "d2r-fixed-seed.dll").exists()
+
+
 def export_mod(name, info=None, make_zip=False):
     """Copy every edited file from project/ into <game>/mods/<name>/<name>.mpq/ as loose files.
 
@@ -1448,6 +1459,9 @@ def export_mod(name, info=None, make_zip=False):
 
     mod = pathlib.Path(casc.GAME) / "mods" / name
     data_root = mod / f"{name}.mpq"
+    if not export_target_ok(mod):
+        raise ValueError(f"mods/{name} is another mod, not one the editor made; its files would be replaced. "
+                         "Choose another mod name.")
     files = [p for p in PROJECT.rglob("*") if p.is_file()]
     if data_root.exists():
         # Move the old export aside first: if the game has the files open the rename fails and
@@ -1483,6 +1497,7 @@ def export_mod(name, info=None, make_zip=False):
         dst.parent.mkdir(parents=True, exist_ok=True)
         dst.write_bytes(rebuilt)
     data_root.mkdir(parents=True, exist_ok=True)  # also for an empty project
+    (mod / EXPORT_MARK).write_text(json.dumps({"editor": updater.current_version()}), encoding="utf-8")
     (data_root / "modinfo.json").write_text(json.dumps({"name": name, "savepath": f"{name}/"}, indent=2))
     # mod-scoped fixed-seed plugin: active only while this mod runs, never for other mods
     # NPCs from the NPC creator: the d2r-npc plugin gives them their behaviour and speech
