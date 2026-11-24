@@ -98,6 +98,8 @@ Windows, Visual Studio 2022 Build Tools (x64), Python 3.14 with numpy and Pillow
 | Package | `python -I tools/build_app.py` (own copy) or `--release` (zip) |
 
 `start_editor.cmd` runs the editor from the source folder at http://127.0.0.1:8765/.
+`python -I -m unittest discover -s tests -v` runs the automatic tests (the game data tests are skipped
+without the game).
 How it works inside (file formats, collision, the in-game test, game functions):
 [docs/technical.md](docs/technical.md).
 

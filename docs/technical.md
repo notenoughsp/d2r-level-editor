@@ -50,7 +50,8 @@ Releases: raise `VERSION`, run `python -I tools/build_app.py --release` (zip
 | Presets | game JSON | entities with TransformDefinitionComponent and ModelDefinitionComponent |
 | Legacy view | `tools/sd_render.py` | SD tiles from the DS1 and its DT1 files, act palette |
 | Server | `server.py` | serves the editor, converts models and textures on demand, caches them in `assets/cache/` |
-| Editor | `web/` | three.js (npm): OrbitControls, TransformControls, GLTFLoader |
+| Editor | `web/` | three.js (npm): OrbitControls, TransformControls, GLTFLoader; the script is kept in parts in `web/src/` (one ES module, joined in name order by the server and by `build_app.py`) |
+| Tests | `tests/` | `python -I -m unittest discover -s tests`: animation curves, mod merging, and (with the game) DS1, collision, figures, export check |
 | Fixed seed | `plugin/fixed_seed.cpp` | hooks DUNGEON_AllocAct (RVA 0x2EF1C0) and replaces the map seed |
 | Test plugin | `plugin/test_harness.cpp` | automatic in-game test (below) |
 

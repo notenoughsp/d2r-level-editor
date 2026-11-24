@@ -1176,12 +1176,16 @@ def act_test():
     def done(log):
         got = [int(m) for m in re.findall(r"after warp: player \(-?\d+,-?\d+\) in level (-?\d+)", log)]
         lines = []
+        dead = re.search(r"skipped: the player is dead in level (-?\d+)", log)
+        if dead:
+            lines.append(f"FAIL the character died in level {dead.group(1)}; the areas after it were not visited")
         for k, i in enumerate(ids):
             ok = k < len(got) and got[k] == i
             z = spec["zones"][k]
             lines.append(f"{'PASS' if ok else 'FAIL'} {z['name']} (level {i})" + ("" if ok else f": arrived in {got[k] if k < len(got) else 'nothing'}"))
         act_test_state.update(running=False, report="\n".join(lines) or "FAIL no log")
-    harness_run(name, "runs=1\nvary_game_seed=0\nradius=8\nsettle_ticks=60\n", moves, done)
+    # god=1: the test character takes no damage, so a weak character can visit every area
+    harness_run(name, "runs=1\nvary_game_seed=0\nradius=8\nsettle_ticks=60\ngod=1\n", moves, done)
     return {"started": True, "areas": len(ids), "mod": name}
 
 
@@ -1506,6 +1510,11 @@ def export_mod(name, info=None, make_zip=False):
     return result
 
 
+def editor_js():
+    """The editor script: the parts in web/src joined in name order (the packaged program ships them joined)."""
+    return "\n".join(p.read_text(encoding="utf-8") for p in sorted((WEB / "src").glob("*.js"))).encode("utf-8")
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass
@@ -1530,7 +1539,9 @@ class Handler(BaseHTTPRequestHandler):
         if (self.headers.get("Host") or "").split(":")[0] not in ("127.0.0.1", "localhost"):
             return self.send(403, {"error": "forbidden"})  # DNS rebinding: only local host names
         try:
-            if u.path == "/" or u.path.startswith("/web/"):
+            if u.path == "/web/editor.js" and (WEB / "src").is_dir():
+                self.send(200, editor_js(), "text/javascript; charset=utf-8")
+            elif u.path == "/" or u.path.startswith("/web/"):
                 rel = "index.html" if u.path == "/" else u.path[len("/web/"):]
                 self.static(WEB / rel)
             elif u.path.startswith("/three/"):

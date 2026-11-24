@@ -71,6 +71,9 @@ def copy_app(dst):
     for f in (ROOT / "web").iterdir():
         if f.suffix in (".html", ".css", ".js"):
             shutil.copy2(f, web / f.name)
+    # the editor script is kept in parts (web/src); the program gets them joined, as the dev server serves them
+    parts = sorted((ROOT / "web" / "src").glob("*.js"))
+    (web / "editor.js").write_text("\n".join(p.read_text(encoding="utf-8") for p in parts), encoding="utf-8", newline="\n")
     three = ROOT / "web" / "node_modules" / "three"
     for part in ("build", "examples/jsm", "LICENSE", "package.json"):
         src, out = three / part, web / "node_modules" / "three" / part
