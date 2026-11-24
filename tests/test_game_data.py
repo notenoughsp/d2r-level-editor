@@ -60,6 +60,18 @@ class GameData(unittest.TestCase):
     def test_check_runs(self):
         self.assertIn("problems", self.server.project_check())
 
+    def test_request_paths_and_names_are_checked(self):
+        s = self.server
+        self.assertEqual(s.preset_key("Data\\HD\\env\\preset\\act1\\town\\townn1.json"), "data/hd/env/preset/act1/town/townn1.json")
+        for bad in ("c:\\x", "data/hd/env/preset/../../x.json", "data/hd/env/preset/a.json:ads", "data/global/x.json"):
+            with self.assertRaises(ValueError, msg=bad):
+                s.preset_key(bad)
+        for name in ("CON", "nul", "com1", "LPT9.x"):
+            self.assertTrue(s.reserved_name(name), name)
+            with self.assertRaises(ValueError):
+                s.kit_file(name)
+        self.assertFalse(s.reserved_name("console"))
+
     def test_export_never_replaces_another_mod(self):
         mods = pathlib.Path(TMP.name) / "mods"
         ok = self.server.export_target_ok

@@ -635,8 +635,16 @@ def redo_collision(ds1_path):
 
 # Links between placed objects and the collision tiles blocked for them ("Collision under object"),
 # so moving or deleting the object can move or remove its collision. Editor-only sidecar file.
-def links_file(preset_path):
+def preset_key(preset_path):
+    """A map path from a request, checked: data/hd/env/preset/....json, nothing that leads elsewhere."""
     key = preset_path.replace("\\", "/").lower().lstrip("/")
+    if not re.fullmatch(r"data/hd/env/preset/[a-z0-9_./ -]+\.json", key) or ".." in key.split("/"):
+        raise ValueError(f"bad map path {preset_path}")
+    return key
+
+
+def links_file(preset_path):
+    key = preset_key(preset_path)
     return PROJECT.parent / "editor_state" / "links" / (key.replace("/", "__") + ".json")
 
 
@@ -653,7 +661,7 @@ def write_links(preset_path, links):
 
 # Autosaved drafts of unsaved editor work, so a crash or closed tab loses nothing.
 def draft_file(preset_path):
-    key = preset_path.replace("\\", "/").lower().lstrip("/")
+    key = preset_key(preset_path)
     return PROJECT.parent / "editor_state" / "drafts" / (key.replace("/", "__") + ".json")
 
 
@@ -823,8 +831,8 @@ def make_import(body):
     """A new game model from an OBJ or glTF (.glb) mesh (tools/meshimport.py)."""
     import meshimport
     name = str(body.get("name", "")).lower()
-    if not re.fullmatch(r"[a-z0-9_]{2,40}", name):
-        raise ValueError("Model name: 2-40 small letters, digits or _")
+    if not re.fullmatch(r"[a-z0-9_]{2,40}", name) or reserved_name(name):
+        raise ValueError("Model name: 2-40 small letters, digits or _, not a Windows device name such as con")
     fname = str(body.get("filename", "")).lower()
     ext = ".glb" if fname.endswith(".glb") else ".obj" if fname.endswith(".obj") else None
     if not ext:
@@ -941,9 +949,16 @@ project_lock = threading.Lock()
 KITS = PROJECT.parent / "kits"  # building kits: shared by all projects
 
 
+def reserved_name(name):
+    """Windows device names (CON, NUL, COM1 ...) cannot be file or folder names."""
+    return bool(re.fullmatch(r"(con|prn|aux|nul|com\d|lpt\d)(\..*)?", name.strip(), re.I))
+
+
 def kit_file(name):
     if not re.fullmatch(r"[^\\/:*?\"<>|]{1,60}", name or "") or name.strip() != name or name.startswith("."):
         raise ValueError("Kit name: up to 60 characters, no \\ / : * ? \" < > |")
+    if reserved_name(name):
+        raise ValueError(f"{name} is a reserved name in Windows; choose another one.")
     return KITS / f"{name}.json"
 
 
@@ -1026,8 +1041,8 @@ def new_map(template, name, empty):
     template = template.replace("\\", "/").lower()
     if not re.fullmatch(r"data/hd/env/preset/[a-z0-9_/]+\.json", template):
         raise ValueError("Choose a map as template.")
-    if not re.fullmatch(r"[a-z0-9_]{2,40}", name):
-        raise ValueError("Map name: 2-40 small letters, digits or _")
+    if not re.fullmatch(r"[a-z0-9_]{2,40}", name) or reserved_name(name):
+        raise ValueError("Map name: 2-40 small letters, digits or _, not a Windows device name such as con")
     dst = template.rsplit("/", 1)[0] + f"/{name}.json"
     if known_file(dst):
         raise ValueError(f"{dst} exists already.")
@@ -1281,8 +1296,8 @@ def project_file():
 
 def project_import(raw, name):
     """A shared project zip becomes a new project (parked in projects/<name>, then opened)."""
-    if not re.fullmatch(r"[A-Za-z0-9 _-]{1,40}", name):
-        raise ValueError("Project name: letters, digits, space, _ and -")
+    if not re.fullmatch(r"[A-Za-z0-9 _-]{1,40}", name) or reserved_name(name):
+        raise ValueError("Project name: letters, digits, space, _ and -, not a Windows device name such as CON")
     if name.lower() in (p.lower() for p in list_projects()["projects"]):  # folder names ignore case
         raise ValueError(f"A project {name} exists already.")
     z = zipfile.ZipFile(io.BytesIO(raw))
@@ -1319,8 +1334,8 @@ def list_projects():
 def switch_project(name):
     """The open project lives in project/ and editor_state/ (every tool uses these paths); the
     others wait in projects/<name>/. Switching moves the folders (a rename, nothing is copied)."""
-    if not re.fullmatch(r"[A-Za-z0-9 _-]{1,40}", name):
-        raise ValueError("Project name: letters, digits, space, _ and -")
+    if not re.fullmatch(r"[A-Za-z0-9 _-]{1,40}", name) or reserved_name(name):
+        raise ValueError("Project name: letters, digits, space, _ and -, not a Windows device name such as CON")
     with project_lock:
         cur = current_project()
         if name == cur:
@@ -1457,6 +1472,8 @@ def export_mod(name, info=None, make_zip=False):
     A d2rloader/metadata.json lets D2RLoader list the mod as well.
     """
 
+    if reserved_name(name):
+        raise ValueError(f"{name} is a reserved name in Windows; choose another mod name.")
     mod = pathlib.Path(casc.GAME) / "mods" / name
     data_root = mod / f"{name}.mpq"
     if not export_target_ok(mod):
@@ -1688,6 +1705,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.send(404, {"error": "not found"})
         except FileNotFoundError as e:
             self.send(404, {"error": f"missing: {e}"})
+        except KeyError as e:
+            if e.args and e.args[0] in q or e.args and not isinstance(e.args[0], str):
+                traceback.print_exc()  # not a missing request parameter: a fault inside
+                return self.send(500, {"error": f"KeyError {e}"})
+            self.send(400, {"error": f"missing parameter {e}"})
+        except ValueError as e:
+            self.send(400, {"error": str(e)})
         except Exception as e:
             traceback.print_exc()
             self.send(500, {"error": str(e)})
@@ -1895,8 +1919,10 @@ class Handler(BaseHTTPRequestHandler):
                 except ValueError as e:
                     self.send(400, {"error": str(e)})
             elif u.path == "/api/preset":
-                key = q["path"].replace("\\", "/").lower().lstrip("/")
-                if not key.startswith("data/hd/env/preset/") or ".." in key:
+                try:
+                    key = preset_key(q["path"])
+                except ValueError:
+                    self.drain()
                     return self.send(400, {"error": "bad path"})
                 body = self.rfile.read(int(self.headers["Content-Length"]))
                 json.loads(body)  # must be valid JSON
@@ -1908,13 +1934,17 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self.drain()
                 self.send(404, {"error": "not found"})
+        except FileNotFoundError as e:
+            self.send(404, {"error": f"missing: {e}"})
+        except (KeyError, ValueError) as e:  # a missing parameter, bad JSON or a refused value
+            self.send(400, {"error": f"missing parameter {e}" if isinstance(e, KeyError) else str(e)})
         except Exception as e:
             traceback.print_exc()
             self.send(500, {"error": str(e)})
 
     def static(self, p):
         p = p.resolve()
-        if not str(p).startswith(str(WEB.resolve())) or not p.is_file():
+        if not p.is_relative_to(WEB.resolve()) or not p.is_file():
             return self.send(404, {"error": "not found"})
         ctype = mimetypes.guess_type(p.name)[0] or "application/octet-stream"
         if p.suffix == ".js":
