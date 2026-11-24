@@ -83,6 +83,8 @@ Unsaved work is autosaved every 60 seconds and offered again when you reopen the
 - The ground shows one main layer per map, not the game's full blend of several layers.
 - Characters (NPCs, monsters) are shown animated as their figures; the animations play the spline control points as keyframes, so the motion is close to, not exactly, the game's.
 - New NPCs show the game's default menu (Talk, Trade, Cancel), also when they only talk.
+- Search fields take several words in any order: `town e1` finds `act1/town/towne1`.
+- If the editor program is closed while the page is open, the page says so and reconnects by itself.
 
 ## Building from source
 
