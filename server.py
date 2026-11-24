@@ -13,6 +13,7 @@ import os
 import pathlib
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import threading
@@ -1906,5 +1907,19 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
+    # On Windows "reuse address" lets a second server take the same port without an error; requests
+    # then go to either of them. Off, so a second start fails and says so.
+    ThreadingHTTPServer.allow_reuse_address = os.name != "nt"
+
+    class EditorServer(ThreadingHTTPServer):
+        def server_bind(self):
+            if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):  # Windows: no other program can take the port over
+                self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            super().server_bind()
+    try:
+        httpd = EditorServer(("127.0.0.1", port), Handler)
+    except OSError:
+        sys.exit(f"Port {port} is in use: the editor may already run at http://127.0.0.1:{port}/ "
+                 f"(or start it on another port: server.py <port>)")
     print(f"D2R editor on http://127.0.0.1:{port}/  ({len(names)} assets)")
-    ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
+    httpd.serve_forever()
