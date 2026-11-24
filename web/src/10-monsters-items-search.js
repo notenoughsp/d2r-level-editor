@@ -221,11 +221,11 @@ $("#btn-flight").addEventListener("click", startFlight);
 async function searchAll(q) {
   const ql = q.toLowerCase(), out = [];
   if (!ql) return out;
-  for (const p of presets) if (p.includes(ql)) out.push({ kind: "Map", label: p.replace("data/hd/env/preset/", ""), run: () => openPreset(p) });
-  if (doc) for (const e of doc.entities) if (e.name.toLowerCase().includes(ql)) out.push({ kind: "Object", label: e.name, run: () => { const o = entityObjects.get(e.id); if (o) { select([o]); flyTo(o.getWorldPosition(new THREE.Vector3())); } } });
+  for (const p of presets) if (matches(p.replace("data/hd/env/preset/", ""), ql)) out.push({ kind: "Map", label: p.replace("data/hd/env/preset/", ""), run: () => openPreset(p) });
+  if (doc) for (const e of doc.entities) if (matches(e.name, ql)) out.push({ kind: "Object", label: e.name, run: () => { const o = entityObjects.get(e.id); if (o) { select([o]); flyTo(o.getWorldPosition(new THREE.Vector3())); } } });
   // game objects of the map: NPCs, monsters, chests, waypoints
   (gameObjects?.objects || []).forEach((ob, i) => {
-    if (!(ob.name || "").toLowerCase().includes(ql)) return;
+    if (!matches(ob.name, ql)) return;
     out.push({ kind: ob.type === 1 ? "NPC" : "Game object", label: `${ob.name} (${ob.x}, ${ob.y})`, run: () => {
       const g = gameRoot?.children[i];
       if (!g) return;
@@ -234,8 +234,8 @@ async function searchAll(q) {
       flyTo(g.position);
     } });
   });
-  for (const k of await (await fetch(api("kits"))).json()) if (k.name.toLowerCase().includes(ql)) out.push({ kind: "Kit", label: k.name, run: () => placeKit(k.name) });
-  for (const [, items] of OPTION_FORM) for (const [key, label] of items) if (tr(label).toLowerCase().includes(ql) || label.toLowerCase().includes(ql)) out.push({ kind: "Option", label: tr(label), run: () => { renderOptions(); $("#options-dialog").classList.remove("hidden"); $(`[data-opt="${key}"]`)?.focus(); } });
+  for (const k of await (await fetch(api("kits"))).json()) if (matches(k.name, ql)) out.push({ kind: "Kit", label: k.name, run: () => placeKit(k.name) });
+  for (const [, items] of OPTION_FORM) for (const [key, label] of items) if (matches(`${tr(label)} ${label}`, ql)) out.push({ kind: "Option", label: tr(label), run: () => { renderOptions(); $("#options-dialog").classList.remove("hidden"); $(`[data-opt="${key}"]`)?.focus(); } });
   const models = await (await fetch(api("models", { q: ql, limit: 25 }))).json();
   for (const m of models.items) out.push({ kind: "Model", label: m.replace("data/hd/", ""), run: () => { document.querySelector('.tab[data-tab="models"]').click(); previewPath = m; showPreview(m); } });
   return out.slice(0, 60);

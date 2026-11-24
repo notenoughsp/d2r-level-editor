@@ -196,7 +196,7 @@ function renderObjectList() {
   for (const ent of list) {
     const [icon, kind] = kindOf(ent);
     // the kind can be searched in the shown language too (e.g. "Licht" for lights)
-    if (f && !ent.name.toLowerCase().includes(f) && !kind.toLowerCase().includes(f) && !tr(kind).toLowerCase().includes(f)) continue;
+    if (f && !matches(`${ent.name} ${kind} ${tr(kind)}`, f)) continue;
     if (shown >= options.maxListEntries) { shown += 1; continue; }  // the list is capped, the count stays right
     shown += 1;
     const li = document.createElement("li");

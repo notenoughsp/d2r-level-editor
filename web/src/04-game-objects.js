@@ -178,7 +178,7 @@ function fillAddObjectList() {
   const all = +$("#add-obj-type").value === 1 ? gameObjects.catalog.npc : gameObjects.catalog.obj;
   const f = $("#add-obj-filter").value.trim().toLowerCase();
   const keep = sel.value;
-  const list = f ? all.filter((e) => `${e.id}: ${e.name}`.toLowerCase().includes(f)) : all;
+  const list = f ? all.filter((e) => matches(`${e.id}: ${e.name}`, f)) : all;
   const esc = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;");
   sel.innerHTML = list.map((e) => `<option value="${e.id}">${e.id}: ${esc(e.name)}</option>`).join("");
   if (list.some((e) => String(e.id) === keep)) sel.value = keep;

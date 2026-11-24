@@ -922,7 +922,7 @@ def list_models(q, limit, own_only=False):
         if not k.endswith(".model") or "/hd/" not in k:
             continue
         base = re.sub(r"_lod\d\.model$", ".model", k)
-        if ql and ql not in base:
+        if ql and not all(w in base for w in ql.split()):  # every word somewhere in the path
             continue
         if base.endswith("terrain.model") or "/preset/" in base:
             continue

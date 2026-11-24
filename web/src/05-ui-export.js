@@ -192,7 +192,7 @@ function renderPresets() {
   const onlyEdited = $("#preset-edited").checked;
   for (const p of presets) {
     const short = p.replace("data/hd/env/preset/", "");
-    if (f && !short.includes(f)) continue;
+    if (f && !matches(short, f)) continue;
     if (onlyEdited && !editedMaps.has(p)) continue;
     const li = document.createElement("li");
     li.append(marked(short, f));
@@ -223,10 +223,10 @@ async function searchModels() {
   const cat = $("#model-cat").value;
   let r;
   if (cat === "__recent") {
-    const items = recentModels().filter((m) => !q || m.includes(q));
+    const items = recentModels().filter((m) => matches(m, q));
     r = { items, total: items.length };
   } else if (cat === "__fav") {
-    const items = favModels().filter((m) => !q || m.includes(q));
+    const items = favModels().filter((m) => matches(m, q));
     r = { items, total: items.length };
   } else if (cat === "__own") {
     r = await (await fetch(api("models", { limit: 2000, q, own: 1 }))).json();

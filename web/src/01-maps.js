@@ -403,13 +403,22 @@ function updateSceneInfo() {
 }
 
 // a text with the search hit marked (case ignored)
+// search fields: every word must appear somewhere ("town e1" finds act1/town/towne1)
+const words = (q) => (q || "").toLowerCase().split(/\s+/).filter(Boolean);
+const matches = (text, q) => { const t = (text || "").toLowerCase(); return words(q).every((w) => t.includes(w)); };
+// the text with each search word marked
 function marked(text, q) {
   const frag = document.createDocumentFragment();
-  const i = q ? text.toLowerCase().indexOf(q.toLowerCase()) : -1;
-  if (i < 0) { frag.append(document.createTextNode(text)); return frag; }
-  const mk = document.createElement("mark");
-  mk.textContent = text.slice(i, i + q.length);
-  frag.append(document.createTextNode(text.slice(0, i)), mk, document.createTextNode(text.slice(i + q.length)));
+  const lower = text.toLowerCase(), hit = new Array(text.length).fill(false);
+  for (const w of words(q)) for (let i = lower.indexOf(w); i >= 0; i = lower.indexOf(w, i + 1)) hit.fill(true, i, i + w.length);
+  let i = 0;
+  while (i < text.length) {
+    let j = i;
+    while (j < text.length && hit[j] === hit[i]) j++;
+    if (hit[i]) { const mk = document.createElement("mark"); mk.textContent = text.slice(i, j); frag.append(mk); }
+    else frag.append(document.createTextNode(text.slice(i, j)));
+    i = j;
+  }
   return frag;
 }
 function updateTitle() {
