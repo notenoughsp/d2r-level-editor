@@ -1092,6 +1092,46 @@ def loot_save(name, fields, reset=False):
     return loot_get(name)
 
 
+def project_file():
+    """The open project as one zip (project/ and editor_state/, without drafts), to share or move."""
+    import zipfile
+    buf = io.BytesIO()
+    state = PROJECT.parent / "editor_state"
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("d2r-editor-project.json", json.dumps({"format": 1, "name": current_project(), "editor": updater.current_version()}))
+        for folder, arc in ((PROJECT, "project"), (state, "editor_state")):
+            for f in sorted(folder.rglob("*")) if folder.exists() else []:
+                rel = f.relative_to(folder).as_posix()
+                if f.is_file() and not rel.startswith(("drafts/", "replaced/")):
+                    z.write(f, f"{arc}/{rel}")
+    return buf.getvalue()
+
+
+def project_import(raw, name):
+    """A shared project zip becomes a new project (parked in projects/<name>, then opened)."""
+    import zipfile
+    if not re.fullmatch(r"[A-Za-z0-9 _-]{1,40}", name):
+        raise ValueError("Project name: letters, digits, space, _ and -")
+    if name in list_projects()["projects"]:
+        raise ValueError(f"A project {name} exists already.")
+    z = zipfile.ZipFile(io.BytesIO(raw))
+    if "d2r-editor-project.json" not in z.namelist():
+        raise ValueError("This is not a project file of the D2R Level Editor.")
+    dst = PROJECTS / name
+    for info in z.infolist():
+        n = info.filename
+        if info.is_dir() or n == "d2r-editor-project.json":
+            continue
+        parts = pathlib.PurePosixPath(n).parts
+        if parts[0] not in ("project", "editor_state") or ".." in parts or ":" in n:
+            continue
+        out = dst.joinpath(*parts)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(z.read(info))
+    dst.mkdir(parents=True, exist_ok=True)
+    return switch_project(name)
+
+
 def current_project():
     return CURRENT_PROJECT.read_text(encoding="utf-8").strip() if CURRENT_PROJECT.exists() else "Default"
 
@@ -1382,6 +1422,14 @@ class Handler(BaseHTTPRequestHandler):
                 self.send(200, {**play_state, "test": act_test_state})
             elif u.path == "/api/world":
                 self.send(200, world_state())
+            elif u.path == "/api/project/file":
+                data = project_file()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/zip")
+                self.send_header("Content-Disposition", f'attachment; filename="{re.sub(r"[^A-Za-z0-9_-]", "_", current_project())}.d2rproject.zip"')
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
             elif u.path == "/api/projects":
                 self.send(200, list_projects())
             elif u.path == "/api/modinfo":
@@ -1570,6 +1618,13 @@ class Handler(BaseHTTPRequestHandler):
                             return self.send(400, {"error": "Mod name: only letters, digits, _ and -"})
                         self.send(200, build_act(name))
                 except ValueError as e:
+                    self.send(400, {"error": str(e)})
+            elif u.path == "/api/project/import":
+                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                try:
+                    raw = base64.b64decode(str(body.get("data", "")).split(",", 1)[-1])
+                    self.send(200, project_import(raw, str(body.get("name", "")).strip()))
+                except (ValueError, OSError) as e:
                     self.send(400, {"error": str(e)})
             elif u.path == "/api/project":
                 self.rfile.read(int(self.headers.get("Content-Length") or 0))

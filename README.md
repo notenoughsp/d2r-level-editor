@@ -32,7 +32,7 @@ The language (English or Deutsch) can be switched in the toolbar.
 | **Layout tools** | Mirror a selection, copies in a circle or arc, a ruler (M), a scatter brush, groups of objects per map (Ctrl+G), building kits that work in every map and project. |
 | **View** | Minimap (N), "Collision only" for painting, compare with the game's original map (C), day/dusk/night light, an undo list to jump back several steps. |
 | **Game objects** | Draw NPC walking paths, add groups of monsters, edit and add HD point lights. |
-| **Projects** | Separate projects, each with its own maps, NPCs, mod info and drafts. |
+| **Projects** | Separate projects, each with its own maps, NPCs, mod info and drafts; save a project as one file to share it or move it to another PC, and load such a file as a new project. |
 | **Acts** | With the d2r-world-mods tools next to the editor: new dungeon areas, bosses with their loot and the quest chain with Quest Log texts, built and exported from the editor. |
 | **Ground** | Paint the ground with terrain stamps (a mask and up to three ground layers of the biome); stamps and effects (fire, fog, flies) are drawn in the view. |
 | **Loot** | Edit treasure classes: what the chests of an act, bosses and monsters drop. |
@@ -40,6 +40,7 @@ The language (English or Deutsch) can be switched in the toolbar.
 | **Play here** | Export and start the game right at the view centre of a map (maps of their own level); in the act editor, a test visits every area of the act. |
 | **Mods** | Check two exported mods for files both change and merge them into a new mod (data tables and texts row by row). |
 | **Options** | Camera, grid, autosave, undo steps, labels, previews, minimap, own keyboard shortcuts; a right-click menu on objects and a short tour at the first start. |
+| **Decorate and paths** | "Decorate like the map" fills an area with the plants and rocks the map already uses; "Draw a path" lays ground stamps along a line (paths, rivers). |
 | **Animated figures** | NPCs and monsters of a map stand there as their animated figures; the model preview plays a character's animations (choose walk, attack, ...). |
 | **Legacy graphics** | View the map in the old SD graphics. |
 | **Screenshots** | Save a picture of the view as PNG (toolbar button), without the gizmo and grid. |

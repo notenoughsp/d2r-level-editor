@@ -520,6 +520,13 @@ const DE = {
   "Path: click points on the ground · Backspace: remove the last · Enter: lay the stamps · Esc: cancel": "Weg: Punkte auf den Boden klicken · Rücktaste: letzten entfernen · Enter: Stempel legen · Esc: abbrechen",
   "Path cancelled": "Weg abgebrochen",
   "Path laid: {0} ground stamps": "Weg gelegt: {0} Boden-Stempel",
+  "Save the project as one file, to share it or to move it to another PC": "Projekt als eine Datei speichern, zum Teilen oder für einen anderen PC",
+  "Load a project file as a new project": "Eine Projektdatei als neues Projekt laden",
+  "Project file saved (downloads folder)": "Projektdatei gespeichert (Download-Ordner)",
+  "Name of the loaded project:": "Name des geladenen Projekts:",
+  "Project not loaded: {0}": "Projekt nicht geladen: {0}",
+  "This is not a project file of the D2R Level Editor.": "Das ist keine Projektdatei des D2R Level Editors.",
+  "A project {0} exists already.": "Ein Projekt {0} gibt es schon.",
   // messages from the editor server
   "Size does not match: {0} instead of {1} tiles": "Größe passt nicht: {0} statt {1} Kacheln",
   "The game objects of this DS1 file cannot be edited.": "Die Objekte dieser DS1-Datei können nicht bearbeitet werden.",

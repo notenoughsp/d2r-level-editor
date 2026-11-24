@@ -6,7 +6,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/addons/utils/SkeletonUtils.js";
-import { initI18n, locale, tr } from "./i18n.js?v=36";
+import { initI18n, locale, tr } from "./i18n.js?v=37";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -4108,3 +4108,23 @@ window.addEventListener("keydown", (e) => {
   else if (e.key === "Backspace") { e.preventDefault(); e.stopImmediatePropagation(); stampPath.pts.pop(); drawStampPath(); }
 }, true);
 $("#st-path").addEventListener("click", toggleStampPath);
+
+// ---------- projects as one file: save to share or move, load as a new project ----------
+$("#project-save").addEventListener("click", () => {
+  const a = Object.assign(document.createElement("a"), { href: api("project/file"), download: "" });
+  document.body.append(a); a.click(); a.remove();
+  setStatus(tr("Project file saved (downloads folder)"));
+});
+$("#project-load").addEventListener("click", () => $("#project-file").click());
+$("#project-file").addEventListener("change", async () => {
+  const f = await readFile($("#project-file"));
+  $("#project-file").value = "";
+  if (!f) return;
+  const name = prompt("Name of the loaded project:", f.name.replace(/\.d2rproject\.zip$|\.zip$/i, "").replace(/[^A-Za-z0-9 _-]/g, "").slice(0, 40) || "Shared");
+  if (!name) return;
+  if (dirty && !confirm("Discard unsaved changes?")) return;
+  const r = await postJSON("project/import", {}, { name, data: f.data });
+  if (!r.ok) return setStatus(tr("Project not loaded: {0}").replace("{0}", r.data.error));
+  dirty = false;
+  location.reload();
+});
