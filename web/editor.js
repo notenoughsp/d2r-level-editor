@@ -79,7 +79,7 @@ renderer.setAnimationLoop(() => {
   updateFx();
   updateMixers();
   if (gameSelBox) gameSelBox.update();
-  if (typeof drawMinimap === "function") drawMinimap();
+  drawMinimap();
 });
 
 // ---------- asset loading ----------
@@ -785,24 +785,31 @@ function addDependency(modelPath) {
   if (!list.some((m) => m.path.toLowerCase() === modelPath.toLowerCase())) list.push({ path: modelPath });
 }
 
-async function placeModel(modelPath, at = null) {
-  if (!doc) return alert("Open a map first.");
-  beginEdit();
+// A new model entity as the game's presets have them: transform, platform tier and model.
+// quat: THREE.Quaternion or null; scale: a number.
+function modelEntity(modelPath, pos, quat = null, scale = 1, suffix = "") {
   const base = modelPath.split("/").pop().replace(/\.model$/, "");
-  const name = `${base}_${Date.now() % 100000}`;
-  const tgt = at || orbit.target;
-  const ent = {
+  const name = `${base}_${Date.now() % 100000}${suffix}`;
+  const q = quat || { x: 0, y: 0, z: 0, w: 1 };
+  addDependency(modelPath);
+  return {
     type: "Entity", name, id: newId(), components: [
-      { type: "TransformDefinitionComponent", name: `${name}_TransformDefinitionComponent`,
-        position: { x: Math.round(tgt.x * 2) / 2, y: 0, z: Math.round(tgt.z * 2) / 2 },
-        orientation: { x: 0, y: 0, z: 0, w: 1 }, scale: { x: 1, y: 1, z: 1 }, inheritOnlyPosition: false },
+      { type: "TransformDefinitionComponent", name: `${name}_TransformDefinitionComponent`, position: { x: pos.x, y: pos.y, z: pos.z },
+        orientation: { x: q.x, y: q.y, z: q.z, w: q.w }, scale: { x: scale, y: scale, z: scale }, inheritOnlyPosition: false },
       { type: "ModelPlatformTierComponent", name: `${name}_ModelPlatformTierComponent`, visibilityTier: 0, shadowTier: 0 },
       { type: "ModelDefinitionComponent", name: `${name}_ModelDefinitionComponent`, filename: modelPath,
         visibleLayers: 1, lightMask: 19, shadowMask: 3, ghostShadows: false, floorModel: false,
         terrainBlendEnableYUpBlend: false, terrainBlendMode: 1 },
     ],
   };
-  addDependency(modelPath);
+}
+
+async function placeModel(modelPath, at = null) {
+  if (!doc) return alert("Open a map first.");
+  beginEdit();
+  const base = modelPath.split("/").pop().replace(/\.model$/, "");
+  const tgt = at || orbit.target;
+  const ent = modelEntity(modelPath, { x: Math.round(tgt.x * 2) / 2, y: 0, z: Math.round(tgt.z * 2) / 2 });
   rememberModel(modelPath);
   doc.entities.push(ent);
   select([await addObjectFor(ent)]);
@@ -1009,7 +1016,7 @@ function tileAt(e) {
   const tx = Math.floor(hit.x / unit), ty = Math.floor(hit.z / unit);
   return tx >= 0 && ty >= 0 && tx < coll.width * per && ty < coll.height * per ? [tx, ty] : null;
 }
-const cellSize = () => (tool.startsWith("sub_") ? 2 : tool.startsWith("q_") ? 5 : 10);
+const cellSize = () => 10;  // collision is painted per tile (finer does not work in the game)
 
 let painting = null;
 // cells painted in the current stroke, shown at once (the server answers on release)
@@ -1072,8 +1079,7 @@ window.addEventListener("pointerup", () => {
         const x = tx + dx, y = ty + dy, per = 10 / cellSize();
         if (coll && x >= 0 && y >= 0 && x < coll.width * per && y < coll.height * per) cells.set(`${x},${y}`, [x, y]);
       }
-  const ops = [...cells.values()].map(([x, y]) => (tool.startsWith("sub_") ? { sx: x, sy: y, mode: tool }
-    : tool.startsWith("q_") ? { qx: x, qy: y, mode: tool } : { tx: x, ty: y, mode: tool }));
+  const ops = [...cells.values()].map(([x, y]) => ({ tx: x, ty: y, mode: tool }));
   painting = null;
   if (ops.length) sendCollisionOps(ops, beginEdit()).finally(clearStroke);
   else clearStroke();
@@ -1173,16 +1179,16 @@ function modalShow(title, text) {
 $("#modal-close").onclick = () => $("#modal").classList.add("hidden");
 $("#modal").addEventListener("click", (e) => { if (e.target.id === "modal") $("#modal").classList.add("hidden"); });
 
-function askModName() {
-  const name = prompt("Mod name (folder under mods\\):", localStorage.getItem("modName") || "D2REditor");
-  if (name) localStorage.setItem("modName", name);
-  return name;
+// the mod's folder name: the one of the export dialog (mod info), asked once more
+async function askModName() {
+  const info = await (await fetch(api("modinfo"))).json();
+  return prompt("Mod name (folder under mods\\):", info.name || "D2REditor");
 }
 
 async function startTest() {
   if (dirty && !confirm("The current map has unsaved changes. Save first?")) return;
   if (dirty) await save();
-  const name = askModName();
+  const name = await askModName();
   if (!name) return;
   const r = await postJSON("test", { name });
   if (!r.ok) return setStatus("Test: " + r.data.error);
@@ -2256,17 +2262,7 @@ async function scatter(center, inStroke = false) {
     const y = o.ground ? groundHeight(x, z) : 0;
     const s = o.smin + Math.random() * (o.smax - o.smin);
     const q = o.rotate ? new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.random() * Math.PI * 2) : new THREE.Quaternion();
-    const name = `${base}_${Date.now() % 100000}_${i}`;
-    const ent = {
-      type: "Entity", name, id: newId(), components: [
-        { type: "TransformDefinitionComponent", name: `${name}_TransformDefinitionComponent`,
-          position: { x, y, z }, orientation: { x: q.x, y: q.y, z: q.z, w: q.w }, scale: { x: s, y: s, z: s }, inheritOnlyPosition: false },
-        { type: "ModelPlatformTierComponent", name: `${name}_ModelPlatformTierComponent`, visibilityTier: 0, shadowTier: 0 },
-        { type: "ModelDefinitionComponent", name: `${name}_ModelDefinitionComponent`, filename: previewPath,
-          visibleLayers: 1, lightMask: 19, shadowMask: 3, ghostShadows: false, floorModel: false,
-          terrainBlendEnableYUpBlend: false, terrainBlendMode: 1 },
-      ],
-    };
+    const ent = modelEntity(previewPath, { x, y, z }, q, s, `_${i}`);
     doc.entities.push(ent);
     made.push(addObjectFor(ent));
   }
@@ -4053,7 +4049,6 @@ function updateWalkers(dt) {
       fig.position.x += d.x; fig.position.z += d.z;
       fig.rotation.y = Math.atan2(d.x, d.z);
     }
-    fig.position.y = w.base + (to.y - 0) * 0;  // the figure keeps its ground offset
     if (w.label) { w.label.position.x = fig.position.x; w.label.position.z = fig.position.z; }
   }
 }
@@ -4086,16 +4081,7 @@ async function decorate(center) {
     const x = c.x + Math.cos(a) * d, z = c.z + Math.sin(a) * d;
     const s = o.smin + Math.random() * (o.smax - o.smin);
     const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.random() * Math.PI * 2);
-    const base = model.split("/").pop().replace(/\.model$/, "");
-    const name = `${base}_${Date.now() % 100000}_${i}`;
-    addDependency(model);
-    const ent = { type: "Entity", name, id: newId(), components: [
-      { type: "TransformDefinitionComponent", name: `${name}_TransformDefinitionComponent`, position: { x, y: groundHeight(x, z), z },
-        orientation: { x: q.x, y: q.y, z: q.z, w: q.w }, scale: { x: s, y: s, z: s }, inheritOnlyPosition: false },
-      { type: "ModelPlatformTierComponent", name: `${name}_ModelPlatformTierComponent`, visibilityTier: 0, shadowTier: 0 },
-      { type: "ModelDefinitionComponent", name: `${name}_ModelDefinitionComponent`, filename: model, visibleLayers: 1, lightMask: 19,
-        shadowMask: 3, ghostShadows: false, floorModel: false, terrainBlendEnableYUpBlend: false, terrainBlendMode: 1 },
-    ] };
+    const ent = modelEntity(model, { x, y: groundHeight(x, z), z }, q, s, `_${i}`);
     doc.entities.push(ent);
     made.push(addObjectFor(ent));
   }

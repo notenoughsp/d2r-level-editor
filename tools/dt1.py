@@ -38,34 +38,3 @@ class DT1:
             if k not in out or t["rarity"] > out[k]["rarity"]:
                 out[k] = t
         return out
-
-
-def add_tiles(raw, template_index, new_tiles):
-    """Copy of a .dt1 with extra tiles: new_tiles = [(orientation, main, sub, flags25)].
-
-    Every new tile is a copy of tile template_index (sharing its graphics blocks: block offsets
-    in a tile header are absolute file offsets and are moved by the inserted headers)."""
-    count, off = struct.unpack_from("<ii", raw, 268)
-    end = off + count * 96
-    delta = 96 * len(new_tiles)
-    headers = bytearray(raw[off:end])
-    for i in range(count):  # existing tiles: their blocks move back by the new headers
-        o = i * 96 + 72
-        struct.pack_into("<i", headers, o, struct.unpack_from("<i", headers, o)[0] + delta)
-    tpl = bytes(headers[template_index * 96:(template_index + 1) * 96])
-    for orient, main, sub, flags in new_tiles:
-        h = bytearray(tpl)
-        struct.pack_into("<iii", h, 20, orient, main, sub)
-        h[40:65] = bytes(flags)
-        headers += h
-    out = bytearray(raw[:off]) + headers + raw[end:]
-    struct.pack_into("<i", out, 268, count + len(new_tiles))
-    return bytes(out)
-
-
-if __name__ == "__main__":
-    d = DT1(open(sys.argv[2], "rb").read())
-    print(len(d.tiles), "tiles")
-    for t in d.tiles[:40]:
-        print(f"orient {t['orientation']:2} main {t['main']:2} sub {t['sub']:2} rarity {t['rarity']:3} "
-              f"flags {t['flags'].hex(' ')}")

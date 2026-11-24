@@ -27,74 +27,17 @@ ALWAYS_LOADED = ["data/global/tiles/act1/outdoors/blank.dt1",
 BLOCK_MAIN = 30
 BLOCK_SUB = {"block": 1, "blockall": 0}
 
-# Subtile collision (experimental, not offered in the editor): invisible tiles with any 5x5
-# pattern, added to the project's copy of Blank.dt1 (loaded for every level). Test of 2026-11-22:
-# the game reads Blank.dt1 from the mod (changed flags of existing tiles work), but tiles added
-# to the file come out fully blocked whatever their flags, so new patterns cannot be made this way. Main indices 43 and 44 (orientation 0) are used by no
-# floor tile of the game, so they cannot clash: 128 patterns per project.
-BLANK_DT1 = "data/global/tiles/act1/outdoors/blank.dt1"
-CUSTOM_MAINS = (44, 43)
-SUBTILE_FLAG = {"sub_block": 0x01, "sub_blockall": 0x05}
-
-
-# Quarter-tile collision: the game's own invisible tiles in Act1\Barracks\InvisWal.dt1 (loaded
-# for every level) block parts of a tile: orientation 0, main 49, sub 0..13. Their blocked 2x2
-# subtile corners ("quarters") give every combination of 1 to 3 quarters of a tile; 4 quarters is
-# the full blocking tile. In-game test of 2026-11-23 (act 1 town): the game blocks the whole tile
-# for every one of them, also with InvisWal.dt1 added to the town's level type in lvltypes.txt;
-# like the subtile patterns above, the game only honours partial flags of tiles the area loads by
-# itself. Not offered in the editor.
-INVIS_DT1 = "data/global/tiles/act1/barracks/inviswal.dt1"
-QUARTER_MAIN = 49
-
-
-def quarter_tiles(read_asset):
-    """{frozenset of quarters (qx, qy) in 0..1: sub} from InvisWal's floor tiles."""
-    out = {}
-    for t in DT1(read_asset(INVIS_DT1)).tiles:
-        if t["orientation"] != 0 or t["main"] != QUARTER_MAIN:
-            continue
-        flags = bytes(t["flags"])
-        q = set()
-        for qx in (0, 1):
-            for qy in (0, 1):
-                xs, ys = ((0, 1) if qx == 0 else (3, 4)), ((0, 1) if qy == 0 else (3, 4))
-                if all(flags[flag_index(x, y)] & 1 for x in xs for y in ys):
-                    q.add((qx, qy))
-        if q and frozenset(q) not in out:
-            out[frozenset(q)] = t["sub"]
-    return out
+# Finer collision than a whole tile does not work in the game (tests of 2026-11-22/23): tiles added
+# to Blank.dt1 block the whole tile whatever their flags, and the partial blockers of InvisWal.dt1
+# (orientation 0, main 49) block the whole tile too, also with InvisWal added to the level type in
+# lvltypes.txt. The game honours partial flags only of tiles the area loads by itself, so the
+# editor paints whole tiles. See docs/technical.md.
 
 
 def flag_index(x, y):
     """Index in the 25 subtile flags of subtile (x, y) inside a tile (ORDER flipy)."""
     return (4 - y) * 5 + x
 
-
-class SubtileTiles:
-    """The project's subtile patterns: (main, sub) <-> 25 flag bytes, stored in Blank.dt1."""
-
-    def __init__(self, read_asset, write_asset):
-        self.read_asset, self.write_asset = read_asset, write_asset
-        self.raw = read_asset(BLANK_DT1)
-        self.by_key = {(t["main"], t["sub"]): t["flags"] for t in DT1(self.raw).tiles
-                       if t["orientation"] == 0 and t["main"] in CUSTOM_MAINS}
-        self.by_flags = {f: k for k, f in self.by_key.items()}
-
-    def key_for(self, flags):
-        flags = bytes(flags)
-        if flags in self.by_flags:
-            return self.by_flags[flags]
-        free = [(m, s) for m in CUSTOM_MAINS for s in range(64) if (m, s) not in self.by_key]
-        if not free:
-            raise ValueError("All 128 subtile patterns are in use.")
-        key = free[0]
-        from dt1 import add_tiles  # noqa: PLC0415
-        self.raw = add_tiles(self.raw, 0, [(0, key[0], key[1], flags)])
-        self.write_asset(BLANK_DT1, self.raw)
-        self.by_key[key] = flags
-        self.by_flags[flags] = key
-        return key
 
 # Subtile flag index -> (x, y) inside the tile: x = i % 5, y = 4 - i // 5 ("flipy").
 # Chosen with verify_order() on the act 1 town: it yields continuous walls and corners and
@@ -170,83 +113,10 @@ def blocking_floor_layer(ds1):
     return 0
 
 
-def apply_quarters(ds1, ops, quarters):
-    """ops: {"qx", "qy", "mode": q_block|q_clear}, quarter coordinates (2 per tile and axis)."""
-    by_q = {v: k for k, v in quarters.items()}
-    floor = ds1.layers[("floor", 0)]
-    orig = getattr(ds1, "original", None)
-    by_tile = {}
-    for op in ops:
-        qx, qy = int(op["qx"]), int(op["qy"])
-        if 0 <= qx < ds1.width * 2 and 0 <= qy < ds1.height * 2:
-            by_tile.setdefault((qx // 2, qy // 2), []).append(((qx % 2, qy % 2), op["mode"]))
-    for (tx, ty), changes in by_tile.items():
-        n = ty * ds1.width + tx
-        v = floor[n]
-        main, sub = (v >> 20) & 0x3F, (v >> 8) & 0x3F
-        if v and main == QUARTER_MAIN and sub in by_q:
-            have = set(by_q[sub])
-        elif v and main == BLOCK_MAIN:
-            have = {(0, 0), (0, 1), (1, 0), (1, 1)}
-        else:
-            have = set()
-        for q, mode in changes:
-            # quarters are in DS1 subtile directions (flag_index maps them to the flag rows)
-            if mode == "q_clear":
-                have.discard(q)
-            else:
-                have.add(q)
-        if len(have) == 4:
-            floor[n] = encode_cell(BLOCK_MAIN, BLOCK_SUB["block"])
-        elif have and frozenset(have) in quarters:
-            floor[n] = encode_cell(QUARTER_MAIN, quarters[frozenset(have)])
-        elif have:  # two opposite corners: no tile has them alone, block three quarters instead
-            best = next(k for k in quarters if have < k)
-            floor[n] = encode_cell(QUARTER_MAIN, quarters[best])
-        elif not have:
-            src = orig.layers.get(("floor", 0)) if orig else None
-            keep = src[n] if src else 0
-            floor[n] = keep if ((keep >> 20) & 0x3F) not in (BLOCK_MAIN,) else 0
-
-
-def apply_ops(ds1, ops, subtiles=None):
-    """ops: [{"tx", "ty", "mode": block|blockall|clear|reset}] ; reset needs ds1.original.
-    Subtile ops: {"sx", "sy", "mode": sub_block|sub_blockall|sub_clear} (subtile coordinates in the
-    DS1) need subtiles (a SubtileTiles). They only change the editor's own blocking, never walls."""
+def apply_ops(ds1, ops):
+    """ops: [{"tx", "ty", "mode": block|blockall|clear|reset}] in tiles; reset needs ds1.original."""
     layer = None
-    by_tile = {}
     for op in ops:
-        if op["mode"].startswith("sub_"):
-            sx, sy = int(op["sx"]), int(op["sy"])
-            if 0 <= sx < ds1.width * 5 and 0 <= sy < ds1.height * 5:
-                by_tile.setdefault((sx // 5, sy // 5), []).append((sx % 5, sy % 5, op["mode"]))
-    if by_tile:
-        if subtiles is None:
-            raise ValueError("subtile edits need the project's tile set")
-        floor = ds1.layers[("floor", 0)]
-        orig = getattr(ds1, "original", None)
-        for (tx, ty), changes in by_tile.items():
-            n = ty * ds1.width + tx
-            v = floor[n]
-            main, sub = (v >> 20) & 0x3F, (v >> 8) & 0x3F
-            if main in CUSTOM_MAINS and (main, sub) in subtiles.by_key:
-                flags = bytearray(subtiles.by_key[(main, sub)])
-            elif main == BLOCK_MAIN and v:
-                flags = bytearray([0x01 if sub == 1 else 0x05] * 25)
-            else:
-                flags = bytearray(25)
-            for x, y, mode in changes:
-                flags[flag_index(x, y)] = 0 if mode == "sub_clear" else SUBTILE_FLAG[mode]
-            if not any(flags):
-                src = orig.layers.get(("floor", 0)) if orig else None
-                keep = src[n] if src else 0
-                floor[n] = 0 if ((keep >> 20) & 0x3F) in CUSTOM_MAINS + (BLOCK_MAIN,) else keep
-            else:
-                m, s_ = subtiles.key_for(flags)
-                floor[n] = encode_cell(m, s_)
-    for op in ops:
-        if op["mode"].startswith("sub_"):
-            continue
         tx, ty, mode = int(op["tx"]), int(op["ty"]), op["mode"]
         if not (0 <= tx < ds1.width and 0 <= ty < ds1.height):
             continue

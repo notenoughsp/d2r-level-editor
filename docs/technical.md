@@ -69,8 +69,14 @@ D2R does not read loose `.ds1` files: it preloads every DS1 of an act from
 `data/global/tiles/<act>/combined_ds1.bin`. The export rebuilds that file with the edited DS1s
 (`tools/combined_ds1.py`; format: u32 count, count × {u32 offset, u32 size, char name[40]}, data).
 
-Finer collision was tried with extra tiles in the mod's Blank.dt1 (`collision.SubtileTiles`):
-the game reads the file from the mod, but added tiles always come out fully blocked.
+Finer collision than a whole tile does not work in the game, so the editor paints whole tiles:
+- extra tiles in the mod's Blank.dt1 with any 5 × 5 pattern: the game reads the file from the
+  mod, but added tiles always come out fully blocked;
+- the game's own partial blockers in Act1\Barracks\InvisWal.dt1 (orientation 0, main 49, sub
+  0-13, blocked 2 × 2 corners): in the act 1 town every one blocks the whole tile, also with
+  InvisWal.dt1 added to the level type in lvltypes.txt (in-game test of 2026-11-23).
+The game honours partial flags only of tiles the area loads by itself. The code for both
+attempts was removed; it is in the git history (commits before 0.6.1).
 
 ## Automatic in-game test
 

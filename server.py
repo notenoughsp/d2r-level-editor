@@ -13,10 +13,13 @@ import os
 import pathlib
 import re
 import shutil
+import subprocess
 import sys
 import threading
 import traceback
 import urllib.parse
+import zipfile
+from collections import Counter
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = pathlib.Path(__file__).resolve().parent
@@ -27,7 +30,7 @@ import time  # noqa: E402
 import casc  # noqa: E402
 import collision  # noqa: E402
 import model_export  # noqa: E402
-from ds1 import DS1  # noqa: E402
+from ds1 import DS1, Ds1Objects  # noqa: E402
 import texture  # noqa: E402
 import updater  # noqa: E402
 import npc_creator  # noqa: E402
@@ -322,7 +325,6 @@ def object_catalog(act):
 
 
 def objects_payload(ds1_path):
-    from ds1 import Ds1Objects
     d = DS1(read_asset(ds1_path))
     o = Ds1Objects(d)
     cat = object_catalog(d.act)
@@ -337,7 +339,6 @@ def objects_payload(ds1_path):
 def edit_objects(ds1_path, new_objects):
     """Replace the object list. Each object may carry "from": [x, y] (its old position) so its NPC
     path moves along; paths of removed NPCs are dropped."""
-    from ds1 import Ds1Objects
     dst = PROJECT / ds1_path
     before = dst.read_bytes() if dst.exists() else None
     d = DS1(read_asset(ds1_path))
@@ -410,16 +411,7 @@ def edit_collision(ds1_path, ops):
     if d.to_bytes() != d.raw:
         raise ValueError("This DS1 file cannot be written back without loss; edit refused.")
     d.original = DS1(read_asset(ds1_path, original=True))
-    def write_asset(rel, data):
-        f = PROJECT / rel
-        f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_bytes(data)
-
-    subtiles = collision.SubtileTiles(read_asset, write_asset) if any(o["mode"].startswith("sub_") for o in ops) else None
-    quarter_ops = [o for o in ops if o["mode"].startswith("q_")]
-    if quarter_ops:
-        collision.apply_quarters(d, quarter_ops, collision.quarter_tiles(read_asset))
-    collision.apply_ops(d, [o for o in ops if not o["mode"].startswith("q_")], subtiles)
+    collision.apply_ops(d, ops)
     same = (d.tail == d.original.tail and d.floor_layers == d.original.floor_layers
             and all(cells == (d.original.layers.get(key) or [0] * len(cells)) for key, cells in d.layers.items()))
     # everything (tiles and game objects) back to the original: drop the override instead of
@@ -492,12 +484,10 @@ def start_ingame_test(name):
     if game_running():
         return {"error": "The game is running; close it first."}
     export = export_mod(name)
-    import time as _t
     # mark as running before the thread starts, so the first status poll cannot see a finished test
-    test_state.update(running=True, report="", started=_t.time(), mod=name)
+    test_state.update(running=True, report="", started=time.time(), mod=name)
 
     def worker():
-        import subprocess
         try:
             r = subprocess.run([sys.executable, "-I", str(ROOT / "tools" / "ingame_test.py"), name, "2"], creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                                capture_output=True, text=True, timeout=20 * 60)
@@ -850,7 +840,6 @@ def free_offset(w, h, act=4, taken=()):
 def new_map(template, name, empty):
     """A new map in the project: a copy of a game map (preset JSON and DS1 tiles) under a new name,
     optionally without its models and game objects. The terrain stays at the template's paths."""
-    from ds1 import Ds1Objects
     template = template.replace("\\", "/").lower()
     if not re.fullmatch(r"data/hd/env/preset/[a-z0-9_/]+\.json", template):
         raise ValueError("Choose a map as template.")
@@ -902,7 +891,6 @@ def save_act_spec(spec):
 
 def build_act(export_name=None):
     """Run the act build into this editor's project; optionally export the mod and install d2r-world."""
-    import subprocess
     env = dict(os.environ, D2R_EDITOR_DATA=str(PROJECT.parent), D2R_GAME=str(casc.GAME),
                D2R_EDITOR_TOOLS=str(ROOT / "tools"), ACT_SPEC=str(act_spec_file()))
     out = []
@@ -925,7 +913,6 @@ def build_act(export_name=None):
 # ---------------------------------------------------------------- into the game
 def game_running():
     """D2RLoader runs its own copy of the game, so both process names count."""
-    import subprocess
     r = subprocess.run(["tasklist", "/NH", "/FO", "CSV"], capture_output=True, text=True)
     names = {line.split(",")[0].strip('"').lower() for line in r.stdout.splitlines() if line}
     return bool(names & {"d2r.exe", "d2rloader.exe"})
@@ -949,7 +936,6 @@ play_state = {"running": False, "message": ""}
 def harness_run(name, ini, moves, on_exit=None):
     """Start the game with the test harness in mod <name> (exported before). The harness files are
     removed again when the game ends."""
-    import subprocess
     pdir = pathlib.Path(casc.GAME) / "mods" / name / "d2rloader" / "plugins"
     pdir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(ROOT / "plugin" / "d2r-test-harness.dll", pdir / "d2r-test-harness.dll")
@@ -1094,7 +1080,6 @@ def loot_save(name, fields, reset=False):
 
 def project_file():
     """The open project as one zip (project/ and editor_state/, without drafts), to share or move."""
-    import zipfile
     buf = io.BytesIO()
     state = PROJECT.parent / "editor_state"
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
@@ -1109,7 +1094,6 @@ def project_file():
 
 def project_import(raw, name):
     """A shared project zip becomes a new project (parked in projects/<name>, then opened)."""
-    import zipfile
     if not re.fullmatch(r"[A-Za-z0-9 _-]{1,40}", name):
         raise ValueError("Project name: letters, digits, space, _ and -")
     if name in list_projects()["projects"]:
@@ -1197,7 +1181,6 @@ def write_modinfo(body):
 
 def project_check():
     """Problems that would make the exported mod break or look wrong, found before the export."""
-    from collections import Counter
     probs = []
     pdir = PROJECT / "data/hd/env/preset"
     files = sorted(pdir.rglob("*.json")) if pdir.exists() else []
@@ -1250,7 +1233,6 @@ def project_check():
 
 def make_upload_zip(name, mod, info):
     """A zip with mods/<name>/ and a README, ready to upload (e.g. to Nexus Mods)."""
-    import zipfile
     EXPORTS.mkdir(parents=True, exist_ok=True)
     out = EXPORTS / f"{name}-{info.get('version') or '0.1.0'}.zip"
     readme = "\n".join(x for x in [
@@ -1456,8 +1438,7 @@ class Handler(BaseHTTPRequestHandler):
             elif u.path == "/api/draft":
                 f = draft_file(q["path"])
                 if f.exists():
-                    import os as _os
-                    self.send(200, {"time": _os.path.getmtime(f), "doc": json.loads(f.read_text(encoding="utf-8"))})
+                    self.send(200, {"time": os.path.getmtime(f), "doc": json.loads(f.read_text(encoding="utf-8"))})
                 else:
                     self.send(200, {})
             elif u.path == "/api/objects":
@@ -1473,8 +1454,7 @@ class Handler(BaseHTTPRequestHandler):
             elif u.path == "/api/presetinfo":
                 self.send(200, preset_info(q["path"]))
             elif u.path == "/api/test":
-                import time as _t
-                self.send(200, {**test_state, "elapsed": _t.time() - test_state["started"] if test_state["started"] else 0})
+                self.send(200, {**test_state, "elapsed": time.time() - test_state["started"] if test_state["started"] else 0})
             elif u.path == "/api/models":
                 items, total = list_models(q.get("q", ""), int(q.get("limit", "300")), q.get("own") == "1")
                 self.send(200, {"items": items, "total": total})
@@ -1495,6 +1475,16 @@ class Handler(BaseHTTPRequestHandler):
             traceback.print_exc()
             self.send(500, {"error": str(e)})
 
+    def body_json(self):
+        """The request's JSON body ({} when there is none)."""
+        n = int(self.headers.get("Content-Length") or 0)
+        raw = self.rfile.read(n) if n else b""
+        return json.loads(raw) if raw else {}
+
+    def drain(self):
+        """Read and drop the request body (keeps the connection usable)."""
+        self.rfile.read(int(self.headers.get("Content-Length") or 0))
+
     def trusted(self):
         """Changing requests must come from the editor page: other web pages could otherwise send
         them to this local server (cross-site requests). The custom header cannot be sent cross-site
@@ -1506,32 +1496,31 @@ class Handler(BaseHTTPRequestHandler):
         u = urllib.parse.urlparse(self.path)
         q = {k: v[0] for k, v in urllib.parse.parse_qs(u.query).items()}
         if not self.trusted():
-            self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            self.drain()
             return self.send(403, {"error": "forbidden"})
         try:
             if u.path == "/api/update/download":
-                self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                self.drain()
                 r = updater.download()
                 self.send(409 if r["phase"] == "error" else 200, r)
             elif u.path == "/api/update/apply":
-                self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                self.drain()
                 ok = updater.apply_and_exit()  # the launcher restarts the server with the new version
                 self.send(200 if ok else 409, {"restarting": ok})
             elif u.path in ("/api/retexture", "/api/import"):
-                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                body = self.body_json()
                 try:
                     self.send(200, (make_retexture if u.path.endswith("retexture") else make_import)(body))
                 except ValueError as e:
                     self.send(400, {"error": str(e)})
             elif u.path == "/api/npcs":
-                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                body = self.body_json()
                 try:
                     self.send(200, save_npcs(body.get("npcs", [])))
                 except ValueError as e:
                     self.send(400, {"error": str(e)})
             elif u.path == "/api/export":
-                length = int(self.headers.get("Content-Length") or 0)
-                body = json.loads(self.rfile.read(length)) if length else {}
+                body = self.body_json()
                 if body.get("info"):
                     try:
                         info = write_modinfo(body["info"])
@@ -1560,7 +1549,7 @@ class Handler(BaseHTTPRequestHandler):
                     f.write_text(json.dumps(kit, ensure_ascii=False), encoding="utf-8")
                 self.send(200, list_kits())
             elif u.path == "/api/thumb":
-                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                body = self.body_json()
                 raw = base64.b64decode(body["data"].split(",", 1)[-1])
                 if len(raw) > 200_000:
                     return self.send(400, {"error": "too large"})
@@ -1570,7 +1559,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send(200, {"saved": True})
             elif u.path == "/api/mods/merge":
                 import modmerge
-                self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                self.drain()
                 mods = pathlib.Path(casc.GAME) / "mods"
                 a, b, out = q.get("a", ""), q.get("b", ""), q.get("out", "")
                 if not all(re.fullmatch(r"[A-Za-z0-9 _.-]{1,60}", x) and (mods / x).is_dir() for x in (a, b)):
@@ -1582,7 +1571,7 @@ class Handler(BaseHTTPRequestHandler):
                 except ValueError as e:
                     self.send(400, {"error": str(e)})
             elif u.path in ("/api/play", "/api/world/test"):
-                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+                body = self.body_json()
                 try:
                     if u.path.endswith("test"):
                         if not world_available():
@@ -1593,20 +1582,19 @@ class Handler(BaseHTTPRequestHandler):
                 except ValueError as e:
                     self.send(400, {"error": str(e)})
             elif u.path == "/api/loot":
-                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                body = self.body_json()
                 try:
                     self.send(200, loot_save(body["name"], body.get("fields", {}), bool(body.get("reset"))))
                 except ValueError as e:
                     self.send(400, {"error": str(e)})
             elif u.path == "/api/newmap":
-                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                body = self.body_json()
                 try:
                     self.send(200, new_map(body.get("template", ""), str(body.get("name", "")).lower(), bool(body.get("empty"))))
                 except ValueError as e:
                     self.send(400, {"error": str(e)})
             elif u.path in ("/api/world/spec", "/api/world/build"):
-                length = int(self.headers.get("Content-Length") or 0)
-                body = json.loads(self.rfile.read(length)) if length else {}
+                body = self.body_json()
                 if not world_available():
                     return self.send(409, {"error": f"d2r-world-mods not found ({WORLD})"})
                 try:
@@ -1620,26 +1608,25 @@ class Handler(BaseHTTPRequestHandler):
                 except ValueError as e:
                     self.send(400, {"error": str(e)})
             elif u.path == "/api/project/import":
-                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                body = self.body_json()
                 try:
                     raw = base64.b64decode(str(body.get("data", "")).split(",", 1)[-1])
                     self.send(200, project_import(raw, str(body.get("name", "")).strip()))
                 except (ValueError, OSError) as e:
                     self.send(400, {"error": str(e)})
             elif u.path == "/api/project":
-                self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                self.drain()
                 try:
                     self.send(200, switch_project(q.get("name", "")))
                 except ValueError as e:
                     self.send(400, {"error": str(e)})
             elif u.path == "/api/reveal":
-                self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                self.drain()
                 EXPORTS.mkdir(parents=True, exist_ok=True)
-                import os as _os
-                _os.startfile(str(EXPORTS))  # noqa: S606 (fixed local folder)
+                os.startfile(str(EXPORTS))  # noqa: S606 (fixed local folder)
                 self.send(200, {"opened": str(EXPORTS)})
             elif u.path == "/api/collision":
-                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                body = self.body_json()
                 self.send(200, edit_collision(ds1_for_preset(q["path"]), body.get("ops", [])))
             elif u.path == "/api/draft":
                 f = draft_file(q["path"])
@@ -1652,14 +1639,14 @@ class Handler(BaseHTTPRequestHandler):
                     f.unlink()  # empty body: discard the draft
                 self.send(200, {"ok": True})
             elif u.path == "/api/objects":
-                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                body = self.body_json()
                 self.send(200, edit_objects(ds1_for_preset(q["path"]), body.get("objects", [])))
             elif u.path in ("/api/collision/undo", "/api/collision/redo"):
                 fn = undo_collision if u.path.endswith("undo") else redo_collision
                 r = fn(ds1_for_preset(q["path"]))
                 self.send(200, r) if r else self.send(409, {"error": "nothing to undo/redo"})
             elif u.path == "/api/links":
-                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                body = self.body_json()
                 write_links(q["path"], body)
                 self.send(200, {"saved": True})
             elif u.path == "/api/test":
@@ -1669,7 +1656,7 @@ class Handler(BaseHTTPRequestHandler):
                 r = start_ingame_test(name)
                 self.send(409 if "error" in r else 200, r)
             elif u.path == "/api/replace":
-                self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                self.drain()
                 try:
                     self.send(200, replace_preset(q["path"], q["source"]))
                 except ValueError as e:
@@ -1686,7 +1673,7 @@ class Handler(BaseHTTPRequestHandler):
                 draft_file(key).unlink(missing_ok=True)  # saved: the draft is no longer needed
                 self.send(200, {"saved": str(dst)})
             else:
-                self.rfile.read(int(self.headers.get("Content-Length") or 0))  # drain, keep the connection sane
+                self.drain()
                 self.send(404, {"error": "not found"})
         except Exception as e:
             traceback.print_exc()
