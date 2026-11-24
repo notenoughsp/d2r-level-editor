@@ -504,6 +504,12 @@ const DE = {
   "Level of detail of the models": "Detailstufe der Modelle",
   "Drag to change the width; double-click: default width": "Ziehen ändert die Breite; Doppelklick: Standardbreite",
   "Click: fold away or open": "Klick: ein- oder ausklappen",
+  "animated": "animiert",
+  "high": "hoch",
+  "Animation of the character": "Animation der Figur",
+  "Play character animations": "Animationen der Figuren abspielen",
+  "Show NPCs and monsters as their figures (needs reopening the map)": "NPCs und Monster als ihre Figuren zeigen (Karte neu öffnen)",
+  "Size of the figures": "Größe der Figuren",
   // messages from the editor server
   "Size does not match: {0} instead of {1} tiles": "Größe passt nicht: {0} statt {1} Kacheln",
   "The game objects of this DS1 file cannot be edited.": "Die Objekte dieser DS1-Datei können nicht bearbeitet werden.",

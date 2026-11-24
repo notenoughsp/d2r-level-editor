@@ -536,6 +536,65 @@ def model_file(vpath, lod):
     raise FileNotFoundError(vpath)
 
 
+CHARACTER_GROUPS = ("npc", "enemy", "monsters", "player")
+_base_ids = None
+
+
+def monster_base(mid):
+    """monstats BaseId of a monster (zombie2 -> zombie1): variants share their base's look."""
+    global _base_ids
+    if _base_ids is None:
+        rows = read_asset("data/global/excel/monstats.txt").decode("latin1").splitlines()
+        h = rows[0].split("	")
+        c = {k: i for i, k in enumerate(h)}
+        _base_ids = {f[c["Id"]].lower(): f[c["BaseId"]].lower() for f in (r.split("	") for r in rows[1:]) if len(f) > c["BaseId"]}
+    return _base_ids.get(mid.lower())
+
+
+def character_path(ref):
+    """A character JSON from its path or its monstats id (data/hd/character/<group>/<id>.json)."""
+    ref = ref.replace("\\", "/").lower()
+    if ref.endswith(".json") and known_file(ref):
+        return ref
+    for name in (ref, monster_base(ref)):
+        for g in CHARACTER_GROUPS:
+            p = f"data/hd/character/{g}/{name}.json"
+            if name and known_file(p):
+                return p
+    raise FileNotFoundError(ref)
+
+
+def character_glb(ref, lod=1):
+    """A character as GLB with skeleton, skinning and its animations (tools/anim_export.py)."""
+    import anim_export
+    path = character_path(ref)
+    doc = json.loads(read_asset(path))
+    deps = doc.get("dependencies", {})
+    # composite characters list alternatives per slot (lhand_lbw / lhand_sbw, special1_lit / _med):
+    # one part per slot, the first that exists
+    models, slots = [], set()
+    for m in deps.get("models", []):
+        p = (m.get("path") or "").lower()
+        slot = p.rsplit("/", 1)[-1].split("_")[0].split(".")[0]
+        if not p or slot in slots:
+            continue
+        try:
+            models.append(read_asset(model_file(p, lod)))
+            slots.add(slot)
+        except FileNotFoundError:
+            continue
+    skels = [s["path"] for s in deps.get("skeletons", []) if s.get("path")]
+    if not models or not skels:
+        raise FileNotFoundError(f"{path}: no model or skeleton")
+    # animations next to the character, or next to the skeleton it shares (rogue1 uses navi's)
+    anims = None
+    for folder in (path[:-len(".json")], skels[0].lower().rsplit("/skeleton/", 1)[0]):
+        if known_file(f"{folder}/animation/combined.animations"):
+            anims = read_asset(f"{folder}/animation/combined.animations")
+            break
+    return anim_export.build(models, read_asset(skels[0]), anims)
+
+
 def write_project(path, data):
     key = path.replace("\\", "/").lower().lstrip("/")
     if ".." in key.split("/") or ":" in key or not key.startswith("data/"):
@@ -1281,6 +1340,9 @@ class Handler(BaseHTTPRequestHandler):
                     self.send(200, json.loads(kit_file(q.get("name", "")).read_text(encoding="utf-8")))
                 except ValueError as e:
                     self.send(400, {"error": str(e)})
+            elif u.path == "/api/character":
+                ref, lod = q["ref"], int(q.get("lod", "1"))
+                self.send(200, cached("char", f"{ref}|{lod}|2", lambda: character_glb(ref, lod), "glb"), "model/gltf-binary")
             elif u.path == "/api/thumb":
                 f = thumb_file(q["path"])
                 if f.exists():

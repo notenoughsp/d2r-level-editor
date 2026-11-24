@@ -5,7 +5,8 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { initI18n, locale, tr } from "./i18n.js?v=34";
+import { clone as cloneSkinned } from "three/addons/utils/SkeletonUtils.js";
+import { initI18n, locale, tr } from "./i18n.js?v=35";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -76,6 +77,7 @@ renderer.setAnimationLoop(() => {
   keepMarkersUnscaled();
   renderer.render(scene, camera);
   updateFx();
+  updateMixers();
   if (typeof drawMinimap === "function") drawMinimap();
 });
 
@@ -1095,6 +1097,7 @@ async function showPreview(path) {
   const token = ++previewToken;
   $("#preview-info").textContent = `Loading ${path.replace("data/hd/", "")} …`;
   updateFavButton();
+  if (options.animations && await previewCharacter(path, token)) return;
   const m = await loadModel(path);
   if (token !== previewToken) return;
   if (previewObj) previewScene.remove(previewObj);
@@ -1382,6 +1385,24 @@ function buildGameObjects() {
     g.position.set(ob.x * 2 + 1, groundHeight(ob.x * 2 + 1, ob.y * 2 + 1), ob.y * 2 + 1);
     const m = new THREE.Mesh(ob.type === 1 ? npcGeometry : objGeometry, ob.type === 1 ? npcMaterial : objMaterial);
     g.add(m);
+    if (ob.type === 1 && options.figures) {
+      loadCharacter(ob.name).then((gl) => {
+        if (!gl || !g.parent) return;
+        const fig = animate(gl);
+        fig.scale.setScalar(options.figureScale);
+        fig.userData.figure = true;
+        g.add(fig);
+        // stand on the ground: the model's placement lifts it (feet at its lowest point in the first pose)
+        fig.userData.mixer.update(0);
+        fig.updateMatrixWorld(true);
+        const box = new THREE.Box3().setFromObject(fig, true);
+        fig.position.y -= box.min.y - g.position.y;
+        label.position.y = (box.max.y - box.min.y) + 1.5;  // the name above the head
+        m.material = m.material.clone();
+        m.material.opacity = 0.25;
+        m.material.transparent = true;
+      });
+    }
     const label = textSprite(ob.name, ob.type === 1 ? "#ff9a80" : "#8ff0e6");
     label.position.y = ob.type === 1 ? 6 : 4;
     g.add(label);
@@ -3104,7 +3125,7 @@ const OPTION_DEFAULTS = {
   uiScale: 100, fov: 45, rotateSpeed: 1, zoomSpeed: 1, panSpeed: 1, damping: false, showGrid: true, gridStep: 5,
   autosave: 60, undoSteps: 100, labels: true, labelScale: 1, hoverInfo: true, previewSpin: true, statusFade: 8,
   confirmDelete: 20, dupOffset: 2, minimapSize: 220, renderScale: 100, selColor: "#ffd400", bg: "", checkUpdates: true,
-  maxListEntries: 1500, tooltips: true, thumbs: true, effects: true, stamps: true,
+  maxListEntries: 1500, tooltips: true, thumbs: true, effects: true, stamps: true, animations: true, figures: true, figureScale: 1,
 };
 let options = { ...OPTION_DEFAULTS, ...JSON.parse(localStorage.getItem("options") || "{}") };
 if (!options.v2) { options.damping = false; options.v2 = true; localStorage.setItem("options", JSON.stringify(options)); }  // smoothing off since 0.5.1
@@ -3139,6 +3160,9 @@ const OPTION_FORM = [
     ["labelScale", "Size of the names", "number", 0.3, 3, 0.1],
     ["effects", "Show effects (fire, smoke, fog, flies) as particles", "check"],
     ["stamps", "Show ground stamps with their ground layers (needs reopening the map)", "check"],
+    ["animations", "Play character animations", "check"],
+    ["figures", "Show NPCs and monsters as their figures (needs reopening the map)", "check"],
+    ["figureScale", "Size of the figures", "number", 0.1, 5, 0.1],
   ]],
   ["Saving and undo", [
     ["autosave", "Autosave a draft every (s, 0 = off)", "number", 0, 3600, 10],
@@ -3862,3 +3886,74 @@ window.addEventListener("pointerdown", (e) => { if (!e.target.closest(".tb-menu"
     h.title = "Click: fold away or open";
   }
 })();
+
+// ---------- animated characters (tools/anim_export.py: skeleton, skinning, animations) ----------
+const charCache = new Map();
+function loadCharacter(ref) {
+  if (!charCache.has(ref)) {
+    charCache.set(ref, new Promise((ok) => loader.load(api("character", { ref, lod: 1, v: 1 }), (g) => {
+      g.scene.traverse((o) => { if (o.isMesh && o.material && o.material.map) o.material.map.colorSpace = THREE.SRGBColorSpace; });
+      ok(g);
+    }, undefined, () => ok(null))));
+  }
+  return charCache.get(ref);
+}
+const mixers = new Set();
+const animClock = new THREE.Clock();
+function animate(gltf, wanted) {
+  const obj = cloneSkinned(gltf.scene);
+  obj.traverse((o) => { if (o.isMesh) o.frustumCulled = false; });
+  const mixer = new THREE.AnimationMixer(obj);
+  const clips = gltf.animations || [];
+  const pick = (name) => clips.find((c) => c.name === name);
+  const clip = pick(wanted) || pick("neutral") || clips.find((c) => /idle|neutral|stand/i.test(c.name)) || clips[0];
+  if (clip) mixer.clipAction(clip).play();
+  obj.userData.mixer = mixer;
+  obj.userData.clips = clips;
+  mixers.add(mixer);
+  return obj;
+}
+function charRefOf(path) {
+  const m = /data\/hd\/character\/[^/]+\/([^/]+)\//.exec(path || "");
+  return m ? m[1] : null;
+}
+function updateMixers() {
+  const dt = Math.min(0.1, animClock.getDelta());
+  for (const m of mixers) {
+    let top = m.getRoot();
+    while (top.parent) top = top.parent;
+    if (top !== scene && top !== previewScene) { mixers.delete(m); continue; }
+    if (options.animations) m.update(dt);
+  }
+}
+// the preview plays the character's animations; a list chooses which
+async function previewCharacter(path, token) {
+  const ref = charRefOf(path);
+  const sel = $("#anim-select");
+  sel.classList.add("hidden");
+  if (!ref) return false;
+  const g = await loadCharacter(ref);
+  if (!g || token !== previewToken || !(g.animations || []).length) return false;
+  const show = (name) => {
+    if (previewObj) previewScene.remove(previewObj);
+    previewObj = new THREE.Group();
+    const inner = animate(g, name);
+    previewObj.add(inner);
+    inner.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(inner);
+    const size = box.getSize(new THREE.Vector3());
+    inner.position.sub(box.getCenter(new THREE.Vector3()));
+    previewScene.add(previewObj);
+    const r = Math.max(size.x, size.y, size.z) || 1;
+    previewCamera.position.set(0, r * 0.4, r * 1.8).multiplyScalar(previewZoom);
+    previewCamera.lookAt(0, 0, 0);
+    $("#preview-info").textContent = `${ref} · ${tr("animated")} · ${size.y.toFixed(1)} ${tr("high")}`;
+  };
+  sel.textContent = "";
+  for (const c of g.animations) sel.append(new Option(c.name, c.name));
+  sel.value = (g.animations.find((c) => c.name === "neutral") || g.animations[0]).name;
+  sel.onchange = () => show(sel.value);
+  sel.classList.remove("hidden");
+  show(sel.value);
+  return true;
+}

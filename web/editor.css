@@ -257,3 +257,5 @@ button:disabled { opacity: .45; }
 /* the view gives way when a panel gets wider (the canvas must not keep it wide) */
 #viewport { min-width: 0; overflow: hidden; }
 #viewport > canvas { display: block; position: absolute; inset: 0; }
+
+#anim-select { position: absolute; left: 4px; top: 10px; max-width: 60%; font-size: 12px; background: rgba(0,0,0,.6); }

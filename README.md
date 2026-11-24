@@ -40,6 +40,7 @@ The language (English or Deutsch) can be switched in the toolbar.
 | **Play here** | Export and start the game right at the view centre of a map (maps of their own level); in the act editor, a test visits every area of the act. |
 | **Mods** | Check two exported mods for files both change and merge them into a new mod (data tables and texts row by row). |
 | **Options** | Camera, grid, autosave, undo steps, labels, previews, minimap, own keyboard shortcuts; a right-click menu on objects and a short tour at the first start. |
+| **Animated figures** | NPCs and monsters of a map stand there as their animated figures; the model preview plays a character's animations (choose walk, attack, ...). |
 | **Legacy graphics** | View the map in the old SD graphics. |
 | **Screenshots** | Save a picture of the view as PNG (toolbar button), without the gizmo and grid. |
 | **Export** | Writes the mod into `<game>/mods/<Name>/`. Your edits never touch the game's own files. The export dialog checks the project first (missing models, objects outside the map, unsaved drafts), takes the mod's title, version and description, and can make a zip with an install README for uploading. |
@@ -79,7 +80,7 @@ Unsaved work is autosaved every 60 seconds and offered again when you reopen the
 - **Collision** works per tile (1 tile = 10 × 10 units), not finer.
 - **Prefabs** are shared too. Use "Explode prefab" to edit one on a single map.
 - The ground shows one main layer per map, not the game's full blend of several layers.
-- Character models are shown without animation.
+- Characters (NPCs, monsters) are shown animated as their figures; the animations play the spline control points as keyframes, so the motion is close to, not exactly, the game's.
 - New NPCs show the game's default menu (Talk, Trade, Cancel), also when they only talk.
 
 ## Building from source
