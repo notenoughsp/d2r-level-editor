@@ -598,6 +598,9 @@ const DE = {
   "Nothing found": "Nichts gefunden",
   "Game object": "Spielobjekt",
   "Scale on all axes at once": "Skalierung auf allen Achsen zugleich",
+  "No connection to the editor program. Start it again; this page reconnects by itself.": "Keine Verbindung zum Editor-Programm. Starte es neu; diese Seite verbindet sich von selbst wieder.",
+  "Connected to the editor program again": "Wieder mit dem Editor-Programm verbunden",
+  "No connection to the editor program": "Keine Verbindung zum Editor-Programm",
   // messages from the editor server
   "Size does not match: {0} instead of {1} tiles": "Größe passt nicht: {0} statt {1} Kacheln",
   "The game objects of this DS1 file cannot be edited.": "Die Objekte dieser DS1-Datei können nicht bearbeitet werden.",

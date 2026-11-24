@@ -284,3 +284,4 @@ button:focus:not(:focus-visible), select:focus:not(:focus-visible) { outline: no
 .change-row { display: flex; gap: 10px; align-items: center; padding: 3px 0; border-bottom: 1px solid #221f19; font-size: 12px; }
 .change-row > span:first-child { width: 80px; } .change-row .cn { flex: 1; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .change-row.added > span:first-child { color: #7fd17f; } .change-row.removed > span:first-child { color: #ff7a6a; } .change-row.changed > span:first-child { color: #e5c55a; }
+#offline { position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 6; padding: 8px 12px; background: rgba(120, 40, 30, 0.95); border: 1px solid #ff7a5c; color: #fff; }

@@ -347,3 +347,24 @@ async function openChanges() {
 }
 $("#btn-changes").addEventListener("click", openChanges);
 $("#changes-close").addEventListener("click", () => $("#changes-dialog").classList.add("hidden"));
+
+// ---------- the editor program was closed: say so instead of failing quietly ----------
+let offlineTimer = null;
+function serverLost() {
+  if (offlineTimer) return;
+  const bar = $("#offline");
+  bar.textContent = tr("No connection to the editor program. Start it again; this page reconnects by itself.");
+  bar.classList.remove("hidden");
+  offlineTimer = setInterval(async () => {
+    try {
+      await fetch("/", { method: "HEAD", cache: "no-store" });
+      clearInterval(offlineTimer);
+      offlineTimer = null;
+      bar.classList.add("hidden");
+      setStatus(tr("Connected to the editor program again"));
+    } catch { /* still closed */ }
+  }, 3000);
+}
+window.addEventListener("unhandledrejection", (e) => {
+  if (e.reason instanceof TypeError && /fetch/i.test(e.reason.message)) { e.preventDefault(); serverLost(); }
+});

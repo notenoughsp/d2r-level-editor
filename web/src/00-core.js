@@ -6,7 +6,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/addons/utils/SkeletonUtils.js";
-import { initI18n, locale, tr } from "./i18n.js?v=48";
+import { initI18n, locale, tr } from "./i18n.js?v=49";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -23,11 +23,17 @@ const setStatus = (t) => {
 };
 const api = (path, params = {}) => `/api/${path}?` + new URLSearchParams(params).toString();
 async function postJSON(path, params, body) {
-  const res = await fetch(api(path, params), {
-    method: "POST", headers: { "Content-Type": "application/json", "X-D2R-Editor": "1" },
-    body: body === undefined ? "" : JSON.stringify(body),
-  });
-  return { ok: res.ok, data: await res.json() };
+  let res;
+  try {
+    res = await fetch(api(path, params), {
+      method: "POST", headers: { "Content-Type": "application/json", "X-D2R-Editor": "1" },
+      body: body === undefined ? "" : JSON.stringify(body),
+    });
+  } catch {
+    serverLost();
+    return { ok: false, data: { error: tr("No connection to the editor program") } };
+  }
+  return { ok: res.ok, data: await res.json().catch(() => ({ error: `HTTP ${res.status}` })) };
 }
 
 // ---------- three.js setup ----------
