@@ -568,6 +568,12 @@ const DE = {
   "Delete this item?": "Diesen Gegenstand löschen?",
   "Saved: {0} item(s). They drop as unique items of their base item; with the export they go into the mod.": "Gespeichert: {0} Gegenstand/Gegenstände. Sie fallen als einzigartige Gegenstände ihres Grundgegenstands; mit dem Export kommen sie in den Mod.",
   "Every item needs a name.": "Jeder Gegenstand braucht einen Namen.",
+  "Copy into the variants": "In die Varianten kopieren",
+  "Copies of the selected objects at the same places in the other variants of this map (the game picks one of them at random)": "Kopien der gewählten Objekte an denselben Stellen in den anderen Varianten dieser Karte (das Spiel wählt zufällig eine davon)",
+  "This map has no other variants": "Diese Karte hat keine anderen Varianten",
+  "Copy the {0} selected object(s) at the same places into these maps?\n{1}": "Die {0} gewählten Objekte an denselben Stellen in diese Karten kopieren?\n{1}",
+  "Copied into {0} variant(s): {1}": "In {0} Variante(n) kopiert: {1}",
+  "{0} game object(s) do not exist in this act": "{0} Spielobjekt(e) gibt es in diesem Akt nicht",
   // messages from the editor server
   "Size does not match: {0} instead of {1} tiles": "Größe passt nicht: {0} statt {1} Kacheln",
   "The game objects of this DS1 file cannot be edited.": "Die Objekte dieser DS1-Datei können nicht bearbeitet werden.",

@@ -425,6 +425,45 @@ def model_usage(model):
     return {"state": "ready", "maps": sorted(maps)}
 
 
+def map_variants(preset_path):
+    """The other maps the game may use at the same place (the other files of its lvlprest rows)."""
+    out = []
+    for row in preset_info(preset_path)["rows"]:
+        for f in row.get("files", []):
+            p = "data/hd/env/preset/" + f[:-4] + ".json"
+            if p != preset_path.lower() and p not in out and known_file(p):
+                out.append(p)
+    return out
+
+
+def copy_into(targets, entities):
+    """Copies of entities (with new ids) at the same places in other maps."""
+    import random
+    done = []
+    for t in targets:
+        key = t.replace("\\", "/").lower()
+        if not key.startswith("data/hd/env/preset/") or not known_file(key):
+            raise ValueError(f"unknown map {t}")
+        doc = json.loads(read_asset(key))
+        ids = {e.get("id") for e in doc.get("entities", [])}
+        deps = doc.setdefault("dependencies", {}).setdefault("models", [])
+        for e in entities:
+            c = json.loads(json.dumps(e))
+            while True:
+                c["id"] = random.randrange(1, 0x7FFFFFFF)
+                if c["id"] not in ids:
+                    break
+            ids.add(c["id"])
+            doc["entities"].append(c)
+            for comp in c.get("components", []):
+                fn = comp.get("filename") if comp.get("type") == "ModelDefinitionComponent" else None
+                if fn and not any(m.get("path", "").lower() == fn.lower() for m in deps):
+                    deps.append({"path": fn})
+        write_project(key, json.dumps(doc, indent=1).encode())
+        done.append(key)
+    return {"maps": done}
+
+
 def preset_info(preset_path):
     """How the game uses a map piece, from lvlprest.txt: level-specific (unique) or a generic
     piece (LevelId 0) that random level generation can place many times."""
@@ -436,7 +475,7 @@ def preset_info(preset_path):
             files = [r.get(f"File{i}", "0") for i in range(1, 7)]
             files = [f.replace("\\", "/").lower() for f in files if f and f != "0"]
             for f in files:
-                idx.setdefault(f, []).append({"name": r.get("Name"), "levelId": int(r.get("LevelId") or 0),
+                idx.setdefault(f, []).append({"name": r.get("Name"), "levelId": int(r.get("LevelId") or 0), "files": files,
                                               "level": levels.get(r.get("LevelId")), "variants": len(files),
                                               "outdoors": r.get("Outdoors") == "1"})
         _preset_index = idx
@@ -1532,6 +1571,8 @@ class Handler(BaseHTTPRequestHandler):
                     self.send(200, {"offset": free_offset(int(q["w"]), int(q["h"]), int(q.get("act", 4)), taken)})
                 except ValueError as e:
                     self.send(400, {"error": str(e)})
+            elif u.path == "/api/variants":
+                self.send(200, map_variants(q["path"]))
             elif u.path == "/api/presetinfo2":
                 info = preset_info(q["path"])
                 w, h = preset_size(q["path"])
@@ -1658,6 +1699,12 @@ class Handler(BaseHTTPRequestHandler):
                 body = self.body_json()
                 try:
                     self.send(200, (make_retexture if u.path.endswith("retexture") else make_import)(body))
+                except ValueError as e:
+                    self.send(400, {"error": str(e)})
+            elif u.path == "/api/copyto":
+                body = self.body_json()
+                try:
+                    self.send(200, copy_into(body.get("targets", []), body.get("entities", [])))
                 except ValueError as e:
                     self.send(400, {"error": str(e)})
             elif u.path == "/api/items":

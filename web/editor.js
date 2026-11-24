@@ -6,7 +6,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/addons/utils/SkeletonUtils.js";
-import { initI18n, locale, tr } from "./i18n.js?v=43";
+import { initI18n, locale, tr } from "./i18n.js?v=44";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -631,6 +631,7 @@ function showProps() {
   el.className = "";
   const buttons = `<div class="prop-buttons"><button id="b-dup" title="Ctrl+D">Duplicate</button><button id="b-del" title="Del">Delete</button></div>` +
     `<div class="prop-buttons"><button id="b-swap" title="Put the model in the preview (tab Models) in place of the selected models; position, rotation and size stay">Replace with the preview model</button><button id="b-same" title="Select every object of this map with the same model">Select same model</button></div>` +
+    `<div class="prop-buttons"><button id="b-variants" title="Copies of the selected objects at the same places in the other variants of this map (the game picks one of them at random)">Copy into the variants</button></div>` +
     `<div class="prop-buttons"><button id="b-mx" title="Mirror the selection along x (positions and rotations)">Mirror x</button><button id="b-mz" title="Mirror the selection along z (positions and rotations)">Mirror z</button></div>` +
     `<div class="prop-buttons"><button id="b-ground" title="G: put onto the terrain height">Drop to ground</button><button id="b-rand" title="Turn at random around the vertical axis (looks natural for plants and rocks)">Random rotation</button></div>` +
     `<div class="prop-buttons"><button id="b-coll" title="Block the tiles under the object; the blocked area moves with the object">Collision under object</button></div>`;
@@ -691,6 +692,7 @@ function showProps() {
   if ($("#b-row")) $("#b-row").onclick = makeRow;
   if ($("#b-circle")) $("#b-circle").onclick = makeCircle;
   $("#b-mx").onclick = () => mirror("x");
+  $("#b-variants").onclick = copyToVariants;
   $("#b-mz").onclick = () => mirror("z");
   if ($("#b-ax")) {
     $("#b-ax").onclick = () => alignTo("x");
@@ -1641,6 +1643,7 @@ async function paste(fromKit = null) {
   select(created);
   markDirty();
   setStatus(`${created.length} object(s) pasted`);
+  return [dx, dz];
 }
 
 // ---------- marquee (rectangle) selection with the left mouse button ----------
@@ -2953,18 +2956,37 @@ async function saveKit() {
   if (!name) return;
   const anchor = primary().position;
   const items = selection.map((o) => o.userData.entity);
-  const r = await postJSON("kit", { name: name.trim() }, { anchor: [anchor.x, anchor.y, anchor.z], items, from: presetPath });
+  // game objects (NPCs, monsters, chests) inside the selected area come along, by name
+  const box = new THREE.Box3();
+  for (const o of selection) box.expandByPoint(o.position);
+  box.expandByScalar(4);
+  const gameObjs = (gameObjects?.objects || []).filter((ob) => box.containsPoint(new THREE.Vector3(ob.x * 2 + 1, box.min.y + 0.1, ob.y * 2 + 1)))
+    .map((ob) => ({ type: ob.type, name: ob.name, dx: ob.x - Math.floor(anchor.x / 2), dy: ob.y - Math.floor(anchor.z / 2) }));
+  const r = await postJSON("kit", { name: name.trim() }, { anchor: [anchor.x, anchor.y, anchor.z], items, gameObjects: gameObjs, from: presetPath });
   if (!r.ok) return setStatus(tr("Kit not saved: {0}").replace("{0}", r.data.error));
   kitSel = name.trim();
   await loadKits();
-  setStatus(tr("Kit {0} saved ({1} objects)").replace("{0}", name).replace("{1}", items.length));
+  setStatus(tr("Kit {0} saved ({1} objects)").replace("{0}", name).replace("{1}", items.length + gameObjs.length));
 }
 async function placeKit(name) {
   if (!doc) return alert("Open a map first.");
   const kit = await (await fetch(api("kit", { name }))).json();
   if (!kit.items) return setStatus(tr("Kit not found"));
-  await paste(kit);
-  setStatus(tr("Kit {0} placed ({1} objects)").replace("{0}", name).replace("{1}", kit.items.length));
+  const [dx, dz] = await paste(kit);
+  let added = 0, missing = 0;
+  if ((kit.gameObjects || []).length && gameObjects?.editable) {
+    const cat = gameObjects.catalog, objs = currentObjects();
+    const ax = Math.floor((kit.anchor[0] + dx) / 2), ay = Math.floor((kit.anchor[2] + dz) / 2);
+    for (const g of kit.gameObjects) {
+      const hit = (g.type === 1 ? cat.npc : cat.obj).find((e) => e.name === g.name);  // ids differ per act
+      if (!hit) { missing++; continue; }
+      objs.push({ type: g.type, id: hit.id, x: ax + g.dx, y: ay + g.dy, flags: 0 });
+      added++;
+    }
+    if (added) await sendGameObjects(objs, undoStack[undoStack.length - 1] || beginEdit());
+  }
+  setStatus(tr("Kit {0} placed ({1} objects)").replace("{0}", name).replace("{1}", kit.items.length + added) +
+    (missing ? " · " + tr("{0} game object(s) do not exist in this act").replace("{0}", missing) : ""));
 }
 $("#kit-save").addEventListener("click", saveKit);
 $("#kit-place").addEventListener("click", () => kitSel ? placeKit(kitSel) : setStatus(tr("Choose a kit in the list first")));
@@ -4377,3 +4399,17 @@ $("#it-save").addEventListener("click", async () => {
   renderItems();
   $("#it-msg").textContent = tr("Saved: {0} item(s). They drop as unique items of their base item; with the export they go into the mod.").replace("{0}", r.data.items.length);
 });
+
+// ---------- copy the selection into the other variants of this map (the game picks one of them) ----------
+async function copyToVariants() {
+  if (!selection.length || !presetPath) return;
+  const variants = await (await fetch(api("variants", { path: presetPath }))).json();
+  if (!variants.length) return setStatus(tr("This map has no other variants"));
+  const names = variants.map((v) => v.replace("data/hd/env/preset/", "")).join("\n");
+  if (!confirm(tr("Copy the {0} selected object(s) at the same places into these maps?\n{1}").replace("{0}", selection.length).replace("{1}", names))) return;
+  if (dirty) await save();
+  const r = await postJSON("copyto", {}, { targets: variants, entities: selection.map((o) => o.userData.entity) });
+  if (!r.ok) return setStatus(r.data.error);
+  await loadEdited();
+  setStatus(tr("Copied into {0} variant(s): {1}").replace("{0}", r.data.maps.length).replace("{1}", r.data.maps.map((m) => m.split("/").pop()).join(", ")));
+}
