@@ -230,7 +230,7 @@ function copySelection() {
   localStorage.setItem("d2r-clipboard", JSON.stringify({ anchor: [anchor.x, anchor.y, anchor.z], items }));
   setStatus(`${items.length} object(s) copied`);
 }
-async function paste(fromKit = null) {
+async function paste(fromKit = null, inPlace = false) {
   const clip = fromKit || JSON.parse(localStorage.getItem("d2r-clipboard") || "null");
   if (!clip || !doc) return setStatus("The clipboard is empty");
   beginEdit();
@@ -238,7 +238,7 @@ async function paste(fromKit = null) {
   const step = +$("#snap-t").value || 0.5;
   const snap = (v) => ($("#snap").checked ? Math.round(v / step) * step : v);
   // snap the common offset only, so the copied group keeps its exact layout
-  const dx = snap(target.x - clip.anchor[0]), dz = snap(target.z - clip.anchor[2]);
+  const dx = inPlace ? 0 : snap(target.x - clip.anchor[0]), dz = inPlace ? 0 : snap(target.z - clip.anchor[2]);
   const created = [];
   for (const src of clip.items) {
     const ent = JSON.parse(JSON.stringify(src));
@@ -322,7 +322,8 @@ renderer.domElement.addEventListener("pointermove", () => {
   const { x, z } = cursorGround;
   const p = primary();
   const dist = p ? `  ·  ${tr("{0} from the selection").replace("{0}", Math.hypot(x - p.position.x, z - p.position.z).toFixed(1))}` : "";
-  $("#cursor-pos").textContent = `x ${x.toFixed(1)}  z ${z.toFixed(1)}  ·  tile ${Math.floor(x / 10)},${Math.floor(z / 10)}` + dist;
+  const y = root ? groundHeight(x, z) : 0;
+  $("#cursor-pos").textContent = `x ${x.toFixed(1)}  z ${z.toFixed(1)}  ${tr("height")} ${(y || 0).toFixed(1)}  ·  tile ${Math.floor(x / 10)},${Math.floor(z / 10)}` + dist;
 });
 
 // ---------- autosave drafts every 60 s while there are unsaved changes ----------

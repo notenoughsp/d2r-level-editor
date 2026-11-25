@@ -221,6 +221,7 @@ $("#btn-flight").addEventListener("click", startFlight);
 async function searchAll(q) {
   const ql = q.toLowerCase(), out = [];
   if (!ql) return out;
+  out.push(...paletteCoords(q), ...paletteCommands(ql));
   for (const p of presets) if (matches(p.replace("data/hd/env/preset/", ""), ql)) out.push({ kind: "Map", label: p.replace("data/hd/env/preset/", ""), run: () => openPreset(p) });
   if (doc) for (const e of doc.entities) if (matches(e.name, ql)) out.push({ kind: "Object", label: e.name, run: () => { const o = entityObjects.get(e.id); if (o) { select([o]); flyTo(o.getWorldPosition(new THREE.Vector3())); } } });
   // game objects of the map: NPCs, monsters, chests, waypoints

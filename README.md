@@ -71,8 +71,13 @@ Unsaved work is autosaved every 60 seconds and offered again when you reopen the
 | L | gizmo in world or object axes |
 | M, N, C | ruler, minimap, compare with the original |
 | Ctrl+G | save the selection as a group |
+| Ctrl+Shift+V, Ctrl+Shift+D | paste at the original places, duplicate at the cursor |
+| , / . , Ctrl+I | turn the selection by the rotation snap, invert the selection |
+| Home | the whole map in view |
+| Ctrl+K | search maps, models, objects, NPCs, kits, options, commands and places (`120 45`, `tile 12 4`) |
 | ? or F1 | keyboard and mouse help |
-| Esc | deselect |
+| Esc | close a dialog, deselect |
+| Click on the status line | earlier messages |
 
 ## Good to know
 

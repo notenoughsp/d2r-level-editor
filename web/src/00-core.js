@@ -6,14 +6,16 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/addons/utils/SkeletonUtils.js";
-import { initI18n, locale, tr } from "./i18n.js?v=49";
+import { initI18n, locale, tr } from "./i18n.js?v=50";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
 const statusEl = $("#status");
 let statusTimer = null;
+const statusLog = [];  // the last messages (a click on the status line shows them)
 const setStatus = (t) => {
   statusEl.textContent = t;
+  if (t) { statusLog.push([new Date().toLocaleTimeString(), t]); if (statusLog.length > 60) statusLog.shift(); }
   try { const top = undoStack[undoStack.length - 1]; if (top && !top.label) top.label = t; } catch { /* during start-up */ }
   statusEl.classList.remove("old");
   clearTimeout(statusTimer);
@@ -59,6 +61,15 @@ orbit.enableDamping = false;  // no mouse smoothing (can be switched on in the o
 const grid = new THREE.GridHelper(1000, 200, 0x3a3326, 0x221f19);
 grid.position.y = -0.05; // below the terrain to avoid z-fighting
 scene.add(grid);
+const tileGrid = new THREE.GridHelper(1000, 100, 0x5a4d36, 0x3a3326);  // a clearer line every tile (10 units)
+tileGrid.position.y = -0.04;
+scene.add(tileGrid);
+// the reach of selected lights (11-polish.js fills it)
+const radiusGroup = new THREE.Group();
+scene.add(radiusGroup);
+let radiusFor = null;
+const radiusMat = new THREE.MeshBasicMaterial({ color: 0xffe066, wireframe: true, transparent: true, opacity: 0.18, depthWrite: false });
+const ringMat = new THREE.LineBasicMaterial({ color: 0xffe066, transparent: true, opacity: 0.7 });
 
 // The gizmo moves an invisible pivot; the change is applied to every selected object, so the
 // same code handles one and many objects.
@@ -90,5 +101,7 @@ renderer.setAnimationLoop(() => {
   updateMapLights();
   updateFlight(frameDt);
   if (gameSelBox) gameSelBox.update();
+  updateLightRadius();
+  syncTileGrid();
   drawMinimap();
 });

@@ -24,7 +24,11 @@ function applySnap() {
   gizmo.setRotationSnap(on ? THREE.MathUtils.degToRad(+$("#snap-r").value || 15) : null);
   gizmo.setScaleSnap(on ? +$("#snap-s").value || null : null);
   for (const id of ["snap-t", "snap-r", "snap-s"]) localStorage.setItem(id, $("#" + id).value);
+  localStorage.setItem("snapOn", on ? "1" : "0");
 }
+if (localStorage.getItem("snapOn")) $("#snap").checked = localStorage.getItem("snapOn") === "1";
+if (localStorage.getItem("followGround")) $("#follow-ground").checked = localStorage.getItem("followGround") === "1";
+$("#follow-ground").addEventListener("change", () => localStorage.setItem("followGround", $("#follow-ground").checked ? "1" : "0"));
 for (const id of ["snap-t", "snap-r", "snap-s"]) {
   if (localStorage.getItem(id)) $("#" + id).value = localStorage.getItem(id);
   $("#" + id).addEventListener("change", applySnap);
@@ -133,6 +137,11 @@ window.addEventListener("keydown", (e) => {
   else if (e.key === "h" && e.shiftKey) showHidden();
   else if (e.key === "h") hideSelection();
   else if (e.key === "?" || e.key === "F1") { ev.preventDefault(); showHelp(); }
+  else if (e.ctrlKey && e.shiftKey && e.key === "d") { e.preventDefault(); duplicateAtCursor(); }
+  else if (e.ctrlKey && e.shiftKey && e.key === "v") { e.preventDefault(); pasteInPlace(); }
+  else if (e.ctrlKey && e.key === "i") { e.preventDefault(); invertSelection(); }
+  else if (!e.ctrlKey && (e.key === "," || e.key === ".")) turnSelection(e.key === "," ? -1 : 1);
+  else if (e.key === "Home") { e.preventDefault(); viewWholeMap(); }
   else if (e.ctrlKey && e.key === "d") { e.preventDefault(); duplicate(); }
   else if (e.ctrlKey && e.key === "a") { e.preventDefault(); selectAll(); }
   else if (e.key === "w") setMode("translate");

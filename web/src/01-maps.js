@@ -163,7 +163,7 @@ async function openPreset(path, opts = {}) {
   if (dirty && !opts.fromTab) await keepAsDraft();  // unsaved work stays as a draft of its tab
   addTab(path);
   rememberView();
-  localStorage.setItem("recentMaps", JSON.stringify([path, ...recentMaps().filter((p) => p !== path)].slice(0, 8)));
+  localStorage.setItem("recentMaps", JSON.stringify([path, ...recentMaps().filter((p) => p !== path)].slice(0, 12)));
   renderPresets();
   hiddenIds.clear();
   if (compareRoot) { scene.remove(compareRoot); compareRoot = null; $("#btn-compare").classList.remove("active"); }

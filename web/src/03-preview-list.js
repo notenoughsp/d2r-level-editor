@@ -32,7 +32,7 @@ async function showPreview(path) {
   const r = Math.max(size.x, size.y, size.z) || 1;
   previewCamera.position.set(0, r * 0.6, r * 1.9).multiplyScalar(previewZoom);
   previewCamera.lookAt(0, 0, 0);
-  $("#preview-info").textContent = `${path.replace("data/hd/", "")} · ${size.x.toFixed(1)} × ${size.y.toFixed(1)} × ${size.z.toFixed(1)}`;
+  $("#preview-info").textContent = `${path.replace("data/hd/", "")} · ${size.x.toFixed(1)} × ${size.y.toFixed(1)} × ${size.z.toFixed(1)} (${(size.x / 10).toFixed(1)} × ${(size.z / 10).toFixed(1)} ${tr("tiles")})`;
 }
 // drag the preview to turn the model, wheel to zoom; it turns by itself again after 3 s
 let previewDrag = null, previewTouched = 0, previewZoom = 1;
@@ -207,6 +207,7 @@ function renderObjectList() {
     li.onclick = (e) => {
       const o = entityObjects.get(ent.id);
       if (!o || o.userData.terrain) return;
+      if (hiddenIds.has(ent.id)) { hiddenIds.delete(ent.id); o.visible = true; li.classList.remove("hidden-obj"); }
       if (e.shiftKey) select(selection.includes(o) ? selection.filter((x) => x !== o) : [...selection, o]);
       else { select([o]); orbit.target.copy(o.position); }
     };

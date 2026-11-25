@@ -107,6 +107,18 @@ gizmo.addEventListener("objectChange", () => {
   markDirty();
 });
 
+// "3× barrel01, 2× crate02": the selection by model (or name), most first
+function groupedNames(objs) {
+  const counts = new Map();
+  for (const o of objs) {
+    const md = comp(o.userData.entity, "ModelDefinitionComponent");
+    const key = md?.filename ? md.filename.split("/").pop().replace(/(_lod\d)?\.model$/, "") : o.userData.entity.name;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  const rows = [...counts].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${n}× ${esc(k)}`);
+  return rows.slice(0, 12).join("<br>") + (rows.length > 12 ? `<br>… (${rows.length - 12} more)` : "");
+}
 function selectionExtent() {
   const box = new THREE.Box3();
   for (const o of selection) box.expandByPoint(o.position);
@@ -130,7 +142,7 @@ function showProps() {
     `<div class="prop-buttons"><button id="b-coll" title="Block the tiles under the object; the blocked area moves with the object">Collision under object</button></div>`;
   if (selection.length > 1) {
     el.innerHTML = `<div class="sel-count">${selection.length} objects selected</div>` +
-      `<div class="prop-model">${selection.map((o) => o.userData.entity.name).slice(0, 12).join("<br>")}${selection.length > 12 ? "<br>…" : ""}</div>` +
+      `<div class="prop-model">${groupedNames(selection)}</div>` +
       `<div class="prop-model">${selectionExtent()}</div>` +
       `<div class="prop-buttons"><button id="b-ax" title="Same x as the last picked object (yellow box)">Align x</button><button id="b-az" title="Same z as the last picked object (yellow box)">Align z</button><button id="b-ay" title="Same height as the last picked object (yellow box)">Align height</button></div>` +
       `<div class="prop-buttons"><button id="b-dx" title="Same distance between the objects along x (at least three objects)">Space along x</button><button id="b-dz" title="Same distance between the objects along z (at least three objects)">Space along z</button></div>` + buttons;

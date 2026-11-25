@@ -3,7 +3,7 @@ const OPTION_DEFAULTS = {
   uiScale: 100, fov: 45, rotateSpeed: 1, zoomSpeed: 1, panSpeed: 1, damping: false, showGrid: true, gridStep: 5,
   autosave: 60, undoSteps: 100, labels: true, labelScale: 0.6, hoverInfo: true, previewSpin: true, statusFade: 8,
   confirmDelete: 20, dupOffset: 2, minimapSize: 220, renderScale: 100, selColor: "#ffd400", bg: "", checkUpdates: true,
-  maxListEntries: 1500, tooltips: true, thumbs: true, effects: true, stamps: true, animations: true, figures: true, figureScale: 1, walkPaths: true, reopen: true,
+  maxListEntries: 1500, tooltips: true, thumbs: true, effects: true, stamps: true, animations: true, figures: true, figureScale: 1, walkPaths: true, reopen: true, zoomToCursor: true,
 };
 let options = { ...OPTION_DEFAULTS, ...JSON.parse(localStorage.getItem("options") || "{}") };
 if (!options.v2) { options.damping = false; options.v2 = true; localStorage.setItem("options", JSON.stringify(options)); }  // smoothing off since 0.5.1
@@ -25,6 +25,7 @@ const OPTION_FORM = [
     ["zoomSpeed", "Zoom speed", "number", 0.1, 5, 0.1],
     ["panSpeed", "Pan speed", "number", 0.1, 5, 0.1],
     ["damping", "Smooth camera movement", "check"],
+    ["zoomToCursor", "Zoom towards the mouse cursor", "check"],
     ["renderScale", "Render resolution (%, lower = faster)", "number", 25, 200, 5],
     ["bg", "Background colour (empty = from the light)", "color"],
   ]],
@@ -60,7 +61,9 @@ function applyOptions() {
   camera.fov = options.fov; camera.updateProjectionMatrix();
   orbit.rotateSpeed = options.rotateSpeed; orbit.zoomSpeed = options.zoomSpeed; orbit.panSpeed = options.panSpeed;
   orbit.enableDamping = options.damping;
+  orbit.zoomToCursor = options.zoomToCursor;
   grid.visible = options.showGrid;
+  updateTileGrid();
   const div = Math.max(1, Math.round(1000 / options.gridStep));
   if (grid.userData.div !== div) {
     const g = new THREE.GridHelper(1000, div, 0x3a3326, 0x221f19);
@@ -192,6 +195,8 @@ renderer.domElement.addEventListener("contextmenu", (e) => {
     [tr("Duplicate"), "Ctrl+D", has, duplicate],
     [tr("Copy"), "Ctrl+C", has, copySelection],
     [tr("Paste here"), "Ctrl+V", !!localStorage.getItem("d2r-clipboard"), paste],
+    [tr("Paste at the original places"), "Ctrl+Shift+V", !!localStorage.getItem("d2r-clipboard"), pasteInPlace],
+    [tr("Copy the position"), "", has, copyPosition],
     null,
     [tr("Replace with the preview model"), "", has && !!previewPath, replaceWithPreview],
     [tr("Select same model"), "", !!md, selectSameModel],
