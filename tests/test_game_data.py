@@ -72,6 +72,14 @@ class GameData(unittest.TestCase):
                 s.kit_file(name)
         self.assertFalse(s.reserved_name("console"))
 
+    def test_refused_mod_name_is_not_stored(self):
+        s = self.server
+        before = s.read_modinfo()["name"]
+        for bad in ("CON", "bad name", ""):
+            with self.assertRaises(ValueError, msg=bad):
+                s.write_modinfo({"name": bad})
+            self.assertEqual(s.read_modinfo()["name"], before)
+
     def test_export_never_replaces_another_mod(self):
         mods = pathlib.Path(TMP.name) / "mods"
         ok = self.server.export_target_ok

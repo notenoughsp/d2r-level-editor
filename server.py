@@ -1371,13 +1371,24 @@ def read_modinfo():
     return info
 
 
+def check_mod_name(name):
+    """A mod name the export can use: letters, digits, _ and -, no Windows device name, and not
+    the folder of a mod the editor did not make."""
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", name or ""):
+        raise ValueError("Mod name: only letters, digits, _ and -")
+    if reserved_name(name):
+        raise ValueError(f"{name} is a reserved name in Windows; choose another mod name.")
+    if not export_target_ok(pathlib.Path(casc.GAME) / "mods" / name):
+        raise ValueError(f"mods/{name} is another mod, not one the editor made; its files would be replaced. "
+                         "Choose another mod name.")
+
+
 def write_modinfo(body):
     info = read_modinfo()
     for k in info:
         if k in body:
             info[k] = str(body[k]).strip()[:2000 if k == "description" else 120]
-    if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", info["name"]):
-        raise ValueError("Mod name: only letters, digits, _ and -")
+    check_mod_name(info["name"])  # checked before anything is stored
     MODINFO.parent.mkdir(parents=True, exist_ok=True)
     MODINFO.write_text(json.dumps(info, indent=2, ensure_ascii=False), encoding="utf-8")
     return info
@@ -1472,13 +1483,9 @@ def export_mod(name, info=None, make_zip=False):
     A d2rloader/metadata.json lets D2RLoader list the mod as well.
     """
 
-    if reserved_name(name):
-        raise ValueError(f"{name} is a reserved name in Windows; choose another mod name.")
+    check_mod_name(name)
     mod = pathlib.Path(casc.GAME) / "mods" / name
     data_root = mod / f"{name}.mpq"
-    if not export_target_ok(mod):
-        raise ValueError(f"mods/{name} is another mod, not one the editor made; its files would be replaced. "
-                         "Choose another mod name.")
     files = [p for p in PROJECT.rglob("*") if p.is_file()]
     if data_root.exists():
         # Move the old export aside first: if the game has the files open the rename fails and
@@ -1787,8 +1794,10 @@ class Handler(BaseHTTPRequestHandler):
                     name = info["name"]
                 else:
                     info, name = None, q.get("name", "D2REditor")
-                if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", name):
-                    return self.send(400, {"error": "Mod name: only letters, digits, _ and -"})
+                try:
+                    check_mod_name(name)
+                except ValueError as e:
+                    return self.send(400, {"error": str(e)})
                 self.send(200, export_mod(name, info, bool(body.get("zip"))))
             elif u.path in ("/api/kit", "/api/kit/delete"):
                 length = int(self.headers.get("Content-Length") or 0)

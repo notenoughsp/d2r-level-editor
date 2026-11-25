@@ -64,7 +64,7 @@ $("#cursor-pos").title = tr("Click: copy the position");
 $("#cursor-pos").addEventListener("click", async () => {
   const text = $("#cursor-pos").textContent.trim();
   if (!text) return;
-  try { await navigator.clipboard.writeText(text); setStatus(tr("Copied: {0}").replace("{0}", text)); } catch { /* no clipboard */ }
+  try { await navigator.clipboard.writeText(text); setStatus(tr("Copied: {0}").replace("{0}", text)); } catch { setStatus(tr("The clipboard could not be used")); }
 });
 
 // ---------- map tabs: drag a tab to another place ----------

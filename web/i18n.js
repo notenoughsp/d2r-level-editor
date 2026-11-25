@@ -758,6 +758,7 @@ const DE = {
   "Hide every object in the list (view only; Shift+H shows them again)": "Jedes Objekt der Liste verstecken (nur Ansicht; Umschalt+H zeigt sie wieder)",
   "Show the map's border": "Die Kartengrenze zeigen",
   "Size of the symbols for lights, effects and sounds": "Größe der Symbole für Lichter, Effekte und Geräusche",
+  "{0} object(s) taken out of the selection": "{0} Objekt(e) aus der Auswahl genommen",
   // messages from the editor server
   "Size does not match: {0} instead of {1} tiles": "Größe passt nicht: {0} statt {1} Kacheln",
   "The game objects of this DS1 file cannot be edited.": "Die Objekte dieser DS1-Datei können nicht bearbeitet werden.",

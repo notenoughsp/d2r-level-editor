@@ -311,7 +311,9 @@ renderer.domElement.addEventListener("pointermove", (e) => {
   const r = renderer.domElement.getBoundingClientRect();
   raycaster.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
   let name = "", over = null;
-  for (const h of raycaster.intersectObject(root, true)) {
+  // game objects first, as a click picks them first too
+  const gob = gameObjectUnderMouse();
+  for (const h of gob ? [] : raycaster.intersectObject(root, true)) {
     let o = h.object;
     while (o && !o.userData.entity) o = o.parent;
     if (!o || o.parent !== root || o.userData.terrain || !o.visible) continue;
@@ -321,7 +323,6 @@ renderer.domElement.addEventListener("pointermove", (e) => {
     else over = o;
     break;
   }
-  const gob = name ? null : gameObjectUnderMouse();
   if (gob) name = `${gob.name} (${tr(gob.type === 1 ? "NPC / monster" : "Object")})`;
   $("#hover-info").textContent = name;
   showHoverBox(over || (gob && hoverGameGroup !== gameSel ? hoverGameGroup : null));

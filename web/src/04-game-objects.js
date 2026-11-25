@@ -302,7 +302,7 @@ window.addEventListener("pointerup", () => {
     if (sx >= x0 && sx <= x1 && sy >= y0 && sy <= y1) hits.push(o);
   }
   select(m.remove ? selection.filter((o) => !hits.includes(o)) : m.add ? [...new Set([...selection, ...hits])] : hits);
-  setStatus(`${hits.length} object(s) in the box`);
+  setStatus(m.remove ? tr("{0} object(s) taken out of the selection").replace("{0}", hits.length) : `${hits.length} object(s) in the box`);
   setTimeout(() => { marquee = null; }, 0); // let the click handler see that a rectangle was drawn
 });
 

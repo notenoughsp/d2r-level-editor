@@ -140,7 +140,7 @@ $("#preset-list").addEventListener("contextmenu", async (e) => {
   const li = e.target.closest("li[title]");
   if (!li || !li.title.startsWith("data/")) return;
   e.preventDefault();
-  try { await navigator.clipboard.writeText(li.title); setStatus(tr("Copied: {0}").replace("{0}", li.title)); } catch { /* no clipboard */ }
+  try { await navigator.clipboard.writeText(li.title); setStatus(tr("Copied: {0}").replace("{0}", li.title)); } catch { setStatus(tr("The clipboard could not be used")); }
 });
 
 // ---------- the last added game object kind is remembered ----------

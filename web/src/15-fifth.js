@@ -196,7 +196,7 @@ $("#opt-file").addEventListener("change", async () => {
 
 // ---------- the message window can be copied ----------
 $("#modal-copy").addEventListener("click", async () => {
-  try { await navigator.clipboard.writeText($("#modal-body").textContent); setStatus(tr("Copied to the clipboard")); } catch { /* no clipboard */ }
+  try { await navigator.clipboard.writeText($("#modal-body").textContent); setStatus(tr("Copied to the clipboard")); } catch { setStatus(tr("The clipboard could not be used")); }
 });
 
 // ---------- after the editor program was updated, the page asks to be reloaded ----------
