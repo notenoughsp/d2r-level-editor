@@ -293,3 +293,8 @@ input.prop-name:hover, input.prop-name:focus { border-color: #3a3326; background
 #object-list li.locked-obj { color: #8a8170; }
 #object-list li.locked-obj::after { content: " 🔒"; }
 #fps { margin-left: 10px; color: #888; }
+.map-star { display: inline-block; width: 16px; color: #6d6450; cursor: pointer; }
+.map-star.on, .map-star:hover { color: #ffd400; }
+.map-tab.drop { box-shadow: inset 3px 0 0 #ffd400; }
+#help-search { width: 100%; box-sizing: border-box; margin: 6px 0; padding: 6px; }
+#cursor-pos { cursor: copy; }

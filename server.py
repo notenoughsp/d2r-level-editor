@@ -1564,7 +1564,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         # editor files and JSON always fresh; converted assets are versioned by URL and can be cached
         fresh = ctype == "application/json" or ctype.startswith("text/")
-        self.send_header("Cache-Control", "no-cache" if fresh else "max-age=3600")
+        lib = self.path.startswith("/three/") and code == 200  # three.js only changes with an editor update
+        self.send_header("Cache-Control", "max-age=86400" if lib else "no-cache" if fresh else "max-age=3600")
         self.end_headers()
         self.wfile.write(body)
 

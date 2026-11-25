@@ -244,6 +244,7 @@ async function placeKit(name) {
     (missing ? " · " + tr("{0} game object(s) do not exist in this act").replace("{0}", missing) : ""));
 }
 $("#kit-save").addEventListener("click", saveKit);
+$("#kit-rename").addEventListener("click", () => renameKit());
 $("#kit-place").addEventListener("click", () => kitSel ? placeKit(kitSel) : setStatus(tr("Choose a kit in the list first")));
 $("#kit-del").addEventListener("click", async () => {
   if (!kitSel || !confirm(tr("Delete the kit {0}?").replace("{0}", kitSel))) return;

@@ -6,7 +6,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/addons/utils/SkeletonUtils.js";
-import { initI18n, locale, tr } from "./i18n.js?v=51";
+import { initI18n, locale, tr } from "./i18n.js?v=52";
 
 initI18n();
 const $ = (s) => document.querySelector(s);

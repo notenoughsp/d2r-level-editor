@@ -228,6 +228,7 @@ function copySelection() {
   const anchor = primary().position;
   const items = selection.map((o) => o.userData.entity);
   localStorage.setItem("d2r-clipboard", JSON.stringify({ anchor: [anchor.x, anchor.y, anchor.z], items }));
+  localStorage.setItem("d2r-clip-last", "entity");
   setStatus(`${items.length} object(s) copied`);
 }
 async function paste(fromKit = null, inPlace = false) {

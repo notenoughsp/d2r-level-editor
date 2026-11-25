@@ -4,7 +4,7 @@ const OPTION_DEFAULTS = {
   autosave: 60, undoSteps: 100, labels: true, labelScale: 0.6, hoverInfo: true, previewSpin: true, statusFade: 8,
   confirmDelete: 20, dupOffset: 2, minimapSize: 220, renderScale: 100, selColor: "#ffd400", bg: "", checkUpdates: true,
   maxListEntries: 1500, tooltips: true, thumbs: true, effects: true, stamps: true, animations: true, figures: true, figureScale: 1, walkPaths: true, reopen: true, zoomToCursor: true,
-  hoverBox: true, gizmoSize: 1, showFps: false, shotDouble: false,
+  hoverBox: true, gizmoSize: 1, showFps: false, shotDouble: false, invertZoom: false, swapMouse: false,
 };
 let options = { ...OPTION_DEFAULTS, ...JSON.parse(localStorage.getItem("options") || "{}") };
 if (!options.v2) { options.damping = false; options.v2 = true; localStorage.setItem("options", JSON.stringify(options)); }  // smoothing off since 0.5.1
@@ -27,6 +27,8 @@ const OPTION_FORM = [
     ["panSpeed", "Pan speed", "number", 0.1, 5, 0.1],
     ["damping", "Smooth camera movement", "check"],
     ["zoomToCursor", "Zoom towards the mouse cursor", "check"],
+    ["invertZoom", "Turn the wheel the other way to zoom", "check"],
+    ["swapMouse", "Right mouse pans, middle mouse turns", "check"],
     ["showFps", "Frames per second in the status bar", "check"],
     ["shotDouble", "Screenshots at double resolution", "check"],
     ["renderScale", "Render resolution (%, lower = faster)", "number", 25, 200, 5],
@@ -64,7 +66,8 @@ let autosaveTimer = null;
 function applyOptions() {
   document.body.style.zoom = options.uiScale / 100;
   camera.fov = options.fov; camera.updateProjectionMatrix();
-  orbit.rotateSpeed = options.rotateSpeed; orbit.zoomSpeed = options.zoomSpeed; orbit.panSpeed = options.panSpeed;
+  orbit.rotateSpeed = options.rotateSpeed; orbit.zoomSpeed = options.zoomSpeed * (options.invertZoom ? -1 : 1); orbit.panSpeed = options.panSpeed;
+  orbit.mouseButtons = options.swapMouse ? { LEFT: null, MIDDLE: THREE.MOUSE.ROTATE, RIGHT: THREE.MOUSE.PAN } : { LEFT: null, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE };
   orbit.enableDamping = options.damping;
   orbit.zoomToCursor = options.zoomToCursor;
   gizmo.size = options.gizmoSize;
@@ -212,6 +215,7 @@ renderer.domElement.addEventListener("contextmenu", (e) => {
     null,
     [tr("Replace with the preview model"), "", has && !!previewPath, replaceWithPreview],
     [tr("Select same model"), "", !!md, selectSameModel],
+    [tr("Select same kind"), "", has, selectSameKind],
     [tr("Drop to ground"), "G", has, dropToGround],
     [tr("Random rotation"), "", has, randomRotate],
     [tr("Focus the selection"), "F", has, focusSelection],
@@ -380,6 +384,7 @@ function renderTabs() {
     b.addEventListener("mousedown", (e) => { if (e.button === 1) e.preventDefault(); });  // no autoscroll
     bar.append(b);
   }
+  makeTabsDraggable();
 }
 function addTab(path) {
   if (!mapTabs.some((t) => t.path === path)) { mapTabs.push({ path, draft: false }); if (mapTabs.length > 12) mapTabs.shift(); }

@@ -77,6 +77,9 @@ Unsaved work is autosaved every 60 seconds and offered again when you reopen the
 | Ctrl+L, Ctrl+Shift+L | lock the selection (visible, not pickable), unlock all |
 | Shift+, / Shift+. | turn the whole selection around its middle |
 | + / - | bigger or smaller move/rotate handles |
+| Arrow keys, Ctrl+C / V / D on a game object | move it one subtile (Shift: five), copy, paste, duplicate |
+| Ctrl+E, Ctrl+, | export, options |
+| Ctrl while dragging a handle | snapping the other way round |
 | Ctrl+K | search maps, models, objects, NPCs, kits, options, commands and places (`120 45`, `tile 12 4`) |
 | ? or F1 | keyboard and mouse help |
 | Esc | close a dialog, deselect |

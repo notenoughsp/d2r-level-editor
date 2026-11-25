@@ -109,6 +109,7 @@ $("#ex-go").addEventListener("click", async () => {
     $("#ex-result").textContent = msg;
     $("#ex-open").classList.toggle("hidden", !r.data.zip);
     setStatus(tr("Exported: {0} file(s) to {1}").replace("{0}", r.data.files).replace("{1}", r.data.mod));
+    noteExport(infoBody.name);
   } finally { $("#ex-go").disabled = false; }
 });
 
@@ -120,6 +121,21 @@ window.addEventListener("keydown", (e) => {
   if (e.altKey || e.metaKey) return;
   if (document.querySelector(".dialog:not(.hidden), #modal:not(.hidden)") && e.key !== "Escape") return;  // a dialog is open
   const ev = e;
+  if (ev.ctrlKey && ev.code === "Comma") { ev.preventDefault(); renderOptions(); $("#options-dialog").classList.remove("hidden"); return; }
+  if (ev.ctrlKey && !ev.shiftKey && ev.key.toLowerCase() === "e") { ev.preventDefault(); openExport(); return; }
+  if (gameSel && !ev.altKey) {  // a selected game object (NPC, monster, chest ...)
+    const k = ev.key.toLowerCase();
+    if (ev.ctrlKey && k === "c") { ev.preventDefault(); return gameCopy(); }
+    if (ev.ctrlKey && k === "d") { ev.preventDefault(); return gameDuplicate(); }
+    const step = ev.shiftKey ? 5 : 1;
+    const arrows = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+    if (arrows[ev.key]) { ev.preventDefault(); return gameNudge(...arrows[ev.key]); }
+  }
+  if (ev.ctrlKey && !ev.shiftKey && ev.key.toLowerCase() === "v" && localStorage.getItem("d2r-clip-last") === "game") {
+    ev.preventDefault();
+    gamePaste();
+    return;
+  }
   // , and . by their place on the keyboard (Shift gives other characters on some layouts)
   if (!ev.ctrlKey && (ev.code === "Comma" || ev.code === "Period")) { (ev.shiftKey ? turnGroup : turnSelection)(ev.code === "Comma" ? -1 : 1); return; }
   if (!ev.ctrlKey && (ev.key === "+" || ev.key === "-")) {
@@ -150,7 +166,7 @@ window.addEventListener("keydown", (e) => {
   else if (e.key === "[" || e.key === "]") setBrush(e.key === "]" ? 1 : -1);
   else if (e.key === "h" && e.shiftKey) showHidden();
   else if (e.key === "h") hideSelection();
-  else if (e.key === "?" || e.key === "F1") { ev.preventDefault(); showHelp(); }
+  else if (e.key === "?" || e.key === "F1") { ev.preventDefault(); showHelpSearch(); }
   else if (e.ctrlKey && e.shiftKey && e.key === "d") { e.preventDefault(); duplicateAtCursor(); }
   else if (e.ctrlKey && e.shiftKey && e.key === "v") { e.preventDefault(); pasteInPlace(); }
   else if (e.ctrlKey && e.key === "i") { e.preventDefault(); invertSelection(); }
@@ -194,6 +210,22 @@ function renderPresets() {
   const f = $("#preset-filter").value.toLowerCase();
   const ul = $("#preset-list");
   ul.innerHTML = "";
+  const favs = f ? [] : favMaps().filter((p) => presets.includes(p));
+  if (favs.length) {
+    const head = document.createElement("li");
+    head.className = "list-head"; head.setAttribute("translate", "yes");
+    head.textContent = "Favourites";
+    ul.appendChild(head);
+    for (const p of favs) {
+      const li = document.createElement("li");
+      li.textContent = p.replace("data/hd/env/preset/", "");
+      li.className = "recent";
+      li.title = p;
+      li.prepend(starFor(p));
+      li.onclick = () => openPreset(p);
+      ul.appendChild(li);
+    }
+  }
   const recent = f ? [] : recentMaps().filter((p) => presets.includes(p));
   if (recent.length) {
     const head = document.createElement("li");
@@ -219,7 +251,7 @@ function renderPresets() {
     if (f && !matches(short, f)) continue;
     if (onlyEdited && !editedMaps.has(p)) continue;
     const li = document.createElement("li");
-    li.append(marked(short, f));
+    li.append(starFor(p), marked(short, f));
     li.dataset.path = p;
     li.title = p;
     if (editedMaps.has(p)) li.classList.add("edited");
