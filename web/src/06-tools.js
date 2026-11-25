@@ -128,7 +128,7 @@ for (const id of ["sc-count", "sc-radius", "sc-smin", "sc-smax", "sc-rot", "sc-g
 $("#sc-go").addEventListener("click", () => scatter(null));
 
 // ---------- keyboard help ----------
-const HELP_TEXT = "Mouse\n  Left click: select · Shift+click: add/remove · drag: box selection\n  Right mouse: turn the view · middle mouse: pan · wheel: zoom\n\nObjects\n  W / E / R: move / rotate / scale        Del: delete\n  Ctrl+C / Ctrl+V: copy / paste at the mouse cursor (also into other maps)\n  Ctrl+D: duplicate                        G: drop to the ground\n  Ctrl+A: select all\n  Arrow keys: move one snap step (Shift ×10), Page Up/Down: height\n  H: hide the selection                    Shift+H: show all hidden objects\n  F: focus the selection                   Esc: deselect\n\nPlacing\n  P: place the preview model at the mouse cursor\n  Shift+P: scatter the preview model around the mouse cursor (settings in the Models tab)\n  O: add a game object at the mouse cursor\n\nView and files\n  T: top view                              Ctrl+S: save\n  Ctrl+1..4: store the view, 1..4: go back to it\n  Ctrl+Z / Ctrl+Y: undo / redo             ? or F1: this help\n\nCollision\n  Q: objects tool    B: block (Shift+B: block + teleport)    X: clear    [ / ]: brush size\n\nGizmo\n  L: axes of the world or of the selected object\n  (every map opens again with the view you left it with)\n\nTools\n  M: ruler (click two points)    Mirror, circle and row copies: buttons under Selection\n  N: minimap    Ctrl+G: save the selection as a group (Objects tab)\n  C: compare with the game's original map\n  Game objects: NPCs can get a walking path (Draw a walking path), \"Add a group\" places several at once\n\nMaps and ground\n  Models tab: \"Decorate like the map\" fills an area with the map's own plants and rocks; \"Draw a path\" lays ground stamps along clicked points (Enter)\n  Maps tab: ⤓ saves the project as one file, ⤒ loads one as a new project\n  Double-click in the view: fly to the object there    Middle-click on a map tab: close it\n  Ctrl+K: search everything (maps, models, objects, NPCs, kits, options)    View menu: lights, camera flight, changes against the original\n\nMore keys\n  Home: the whole map    , / .: turn the selection by the rotation snap    Ctrl+I: invert the selection\n  Ctrl+Shift+D: duplicate at the mouse cursor    Ctrl+Shift+V: paste at the original places\n  Ctrl+K: also commands (e.g. \"minimap\") and places (\"120 45\" or \"tile 12 4\")\n  Click on the status line: earlier messages    Right click on a map tab: close the other tabs";
+const HELP_TEXT = "Mouse\n  Left click: select · Shift+click: add/remove · drag: box selection\n  Right mouse: turn the view · middle mouse: pan · wheel: zoom\n\nObjects\n  W / E / R: move / rotate / scale        Del: delete\n  Ctrl+C / Ctrl+V: copy / paste at the mouse cursor (also into other maps)\n  Ctrl+D: duplicate                        G: drop to the ground\n  Ctrl+A: select all\n  Arrow keys: move one snap step (Shift ×10), Page Up/Down: height\n  H: hide the selection                    Shift+H: show all hidden objects\n  F: focus the selection                   Esc: deselect\n\nPlacing\n  P: place the preview model at the mouse cursor\n  Shift+P: scatter the preview model around the mouse cursor (settings in the Models tab)\n  O: add a game object at the mouse cursor\n\nView and files\n  T: top view                              Ctrl+S: save\n  Ctrl+1..4: store the view, 1..4: go back to it\n  Ctrl+Z / Ctrl+Y: undo / redo             ? or F1: this help\n\nCollision\n  Q: objects tool    B: block (Shift+B: block + teleport)    X: clear    [ / ]: brush size\n\nGizmo\n  L: axes of the world or of the selected object\n  (every map opens again with the view you left it with)\n\nTools\n  M: ruler (click two points)    Mirror, circle and row copies: buttons under Selection\n  N: minimap    Ctrl+G: save the selection as a group (Objects tab)\n  C: compare with the game's original map\n  Game objects: NPCs can get a walking path (Draw a walking path), \"Add a group\" places several at once\n\nMaps and ground\n  Models tab: \"Decorate like the map\" fills an area with the map's own plants and rocks; \"Draw a path\" lays ground stamps along clicked points (Enter)\n  Maps tab: ⤓ saves the project as one file, ⤒ loads one as a new project\n  Double-click in the view: fly to the object there    Middle-click on a map tab: close it\n  Ctrl+K: search everything (maps, models, objects, NPCs, kits, options)    View menu: lights, camera flight, changes against the original\n\nMore keys\n  Home: the whole map    , / .: turn the selection by the rotation snap    Ctrl+I: invert the selection\n  Ctrl+Shift+D: duplicate at the mouse cursor    Ctrl+Shift+V: paste at the original places\n  Ctrl+K: also commands (e.g. \"minimap\") and places (\"120 45\" or \"tile 12 4\")\n  Click on the status line: earlier messages    Right click on a map tab: close the other tabs\n  Ctrl+L: lock the selection (stays visible, cannot be picked)    Ctrl+Shift+L: unlock all\n  Shift+, / Shift+.: turn the whole selection around its middle    + / -: bigger or smaller handles\n  View menu: statistics of the map    Map section: notes for the map";
 function showHelp() { modalShow(tr("Keyboard and mouse"), tr(HELP_TEXT)); }
 $("#btn-help").addEventListener("click", showHelp);
 $("#btn-help2").addEventListener("click", showHelp);
@@ -250,7 +250,7 @@ function selectSameModel() {
 }
 function selectAll() {
   if (!doc) return;
-  const all = [...entityObjects.values()].filter((o) => o.visible && !o.userData.terrain &&
+  const all = [...entityObjects.values()].filter((o) => o.visible && !o.userData.terrain && pickable(o) &&
     (showHelpers || !(o.children[0] && o.children[0].userData.helper)));
   select(all);
   setStatus(tr("{0} object(s) selected").replace("{0}", all.length));
@@ -258,14 +258,15 @@ function selectAll() {
 
 // ---------- screenshot of the view (PNG download, without the gizmo and selection boxes) ----------
 function screenshot() {
-  const hide = [gizmo.getHelper ? gizmo.getHelper() : gizmo, ...selectionBoxes].filter((o) => o.visible);
-  const shown = grid.visible;
+  const hide = [gizmo.getHelper ? gizmo.getHelper() : gizmo, ...selectionBoxes, grid, tileGrid, radiusGroup, hoverBox, scene.userData.border]
+    .filter((o) => o && o.visible);
   for (const o of hide) o.visible = false;
-  grid.visible = false;
+  const ratio = renderer.getPixelRatio();
+  if (options.shotDouble) renderer.setPixelRatio(ratio * 2);
   renderer.render(scene, camera);
   const url = renderer.domElement.toDataURL("image/png");
+  if (options.shotDouble) { renderer.setPixelRatio(ratio); resize(); }
   for (const o of hide) o.visible = true;
-  grid.visible = shown;
   const name = (presetPath ? presetPath.replace("data/hd/env/preset/", "").replace(/[\/.]+/g, "_").replace(/_json$/, "") : "view") +
     "_" + new Date().toISOString().slice(0, 19).replace(/[-:T]/g, "") + ".png";
   const a = Object.assign(document.createElement("a"), { href: url, download: name });
@@ -306,18 +307,21 @@ renderer.domElement.addEventListener("pointermove", (e) => {
   hoverTimer = now;
   const r = renderer.domElement.getBoundingClientRect();
   raycaster.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
-  let name = "";
+  let name = "", over = null;
   for (const h of raycaster.intersectObject(root, true)) {
     let o = h.object;
     while (o && !o.userData.entity) o = o.parent;
     if (!o || o.parent !== root || o.userData.terrain || !o.visible) continue;
     const md = comp(o.userData.entity, "ModelDefinitionComponent");
     name = md ? md.filename.split("/").pop().replace(/\.model$/, "") : o.userData.entity.name;
+    if (!pickable(o)) name += " 🔒";
+    else over = o;
     break;
   }
   $("#hover-info").textContent = name;
+  showHoverBox(over);
 });
-renderer.domElement.addEventListener("pointerleave", () => { $("#hover-info").textContent = ""; });
+renderer.domElement.addEventListener("pointerleave", () => { $("#hover-info").textContent = ""; showHoverBox(null); });
 
 // ---------- mirror the selection (layout and rotation; models themselves are not flipped) ----------
 function mirror(axis) {

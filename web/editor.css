@@ -285,3 +285,11 @@ button:focus:not(:focus-visible), select:focus:not(:focus-visible) { outline: no
 .change-row > span:first-child { width: 80px; } .change-row .cn { flex: 1; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .change-row.added > span:first-child { color: #7fd17f; } .change-row.removed > span:first-child { color: #ff7a6a; } .change-row.changed > span:first-child { color: #e5c55a; }
 #offline { position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 6; padding: 8px 12px; background: rgba(120, 40, 30, 0.95); border: 1px solid #ff7a5c; color: #fff; }
+#map-note { width: 100%; box-sizing: border-box; margin-top: 6px; resize: vertical; font: inherit; font-size: 12px; background: #1d1a14; color: #ddd; border: 1px solid #3a3326; }
+#opt-search { width: 100%; box-sizing: border-box; margin-bottom: 8px; padding: 6px; }
+#ex-check .link { cursor: pointer; text-decoration: underline dotted; }
+input.prop-name { width: 100%; box-sizing: border-box; background: transparent; border: 1px solid transparent; color: inherit; font: inherit; font-weight: bold; padding: 2px 3px; }
+input.prop-name:hover, input.prop-name:focus { border-color: #3a3326; background: #1d1a14; }
+#object-list li.locked-obj { color: #8a8170; }
+#object-list li.locked-obj::after { content: " 🔒"; }
+#fps { margin-left: 10px; color: #888; }

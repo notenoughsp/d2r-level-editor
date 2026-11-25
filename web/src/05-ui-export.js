@@ -72,6 +72,12 @@ async function runCheck() {
     const text = document.createElement("span");
     text.textContent = p.text;  // own node, so the language module can translate it
     d.append(icon, text);
+    const m = /^([\w./-]+\.json):/.exec(p.text);
+    if (m && presets.includes("data/hd/env/preset/" + m[1])) {
+      d.classList.add("link");
+      d.title = tr("Click: open this map");
+      d.onclick = () => { $("#export-dialog").classList.add("hidden"); openPreset("data/hd/env/preset/" + m[1]); };
+    }
     box.append(d);
   }
   return probs;
@@ -114,6 +120,14 @@ window.addEventListener("keydown", (e) => {
   if (e.altKey || e.metaKey) return;
   if (document.querySelector(".dialog:not(.hidden), #modal:not(.hidden)") && e.key !== "Escape") return;  // a dialog is open
   const ev = e;
+  // , and . by their place on the keyboard (Shift gives other characters on some layouts)
+  if (!ev.ctrlKey && (ev.code === "Comma" || ev.code === "Period")) { (ev.shiftKey ? turnGroup : turnSelection)(ev.code === "Comma" ? -1 : 1); return; }
+  if (!ev.ctrlKey && (ev.key === "+" || ev.key === "-")) {
+    options.gizmoSize = Math.max(0.3, Math.min(3, +(options.gizmoSize + (ev.key === "+" ? 0.1 : -0.1)).toFixed(1)));
+    gizmo.size = options.gizmoSize;
+    localStorage.setItem("options", JSON.stringify(options));
+    return setStatus(tr("Handle size {0}").replace("{0}", options.gizmoSize));
+  }
   if (ev.key.length === 1) {
     let key = ev.key.toLowerCase();
     if (!ev.ctrlKey && /^[a-z0-9]$/.test(key)) { key = translateKey(key); if (key === null) return; }  // own shortcuts
@@ -125,7 +139,7 @@ window.addEventListener("keydown", (e) => {
   else if (e.key === "p" && e.shiftKey && previewPath) scatter(cursorGround ? cursorGround.clone() : null);
   else if (e.key === "p" && previewPath && cursorGround) placeModel(previewPath, cursorGround.clone());
   else if (["1", "2", "3", "4"].includes(e.key)) { if (e.ctrlKey) { e.preventDefault(); storeView(e.key); } else recallView(e.key); }
-  else if (e.key === "l") { setSpace(gizmo.space !== "local"); setStatus(tr(gizmo.space === "local" ? "Gizmo: object axes" : "Gizmo: world axes")); }
+  else if (e.key === "l" && !e.ctrlKey) { setSpace(gizmo.space !== "local"); setStatus(tr(gizmo.space === "local" ? "Gizmo: object axes" : "Gizmo: world axes")); }
   else if (e.key === "m") toggleRuler();
   else if (e.key === "n") toggleMinimap();
   else if (e.key === "c" && !e.ctrlKey) toggleCompare();
@@ -140,7 +154,8 @@ window.addEventListener("keydown", (e) => {
   else if (e.ctrlKey && e.shiftKey && e.key === "d") { e.preventDefault(); duplicateAtCursor(); }
   else if (e.ctrlKey && e.shiftKey && e.key === "v") { e.preventDefault(); pasteInPlace(); }
   else if (e.ctrlKey && e.key === "i") { e.preventDefault(); invertSelection(); }
-  else if (!e.ctrlKey && (e.key === "," || e.key === ".")) turnSelection(e.key === "," ? -1 : 1);
+  else if (e.ctrlKey && e.shiftKey && e.key === "l") { e.preventDefault(); unlockAll(); }
+  else if (e.ctrlKey && e.key === "l") { e.preventDefault(); lockSelection(); }
   else if (e.key === "Home") { e.preventDefault(); viewWholeMap(); }
   else if (e.ctrlKey && e.key === "d") { e.preventDefault(); duplicate(); }
   else if (e.ctrlKey && e.key === "a") { e.preventDefault(); selectAll(); }

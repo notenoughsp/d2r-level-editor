@@ -23,7 +23,7 @@ renderer.domElement.addEventListener("pointerup", (e) => {
     if (!h.object.visible) continue;
     let o = h.object;
     while (o && !o.userData.entity) o = o.parent;
-    if (o && o.parent === root && !o.userData.terrain && o.visible) { hit = o; break; }
+    if (o && o.parent === root && !o.userData.terrain && o.visible && pickable(o)) { hit = o; break; }
   }
   if (e.shiftKey) {
     if (!hit) return;
@@ -139,6 +139,8 @@ function showProps() {
     `<div class="prop-buttons"><button id="b-variants" title="Copies of the selected objects at the same places in the other variants of this map (the game picks one of them at random)">Copy into the variants</button></div>` +
     `<div class="prop-buttons"><button id="b-mx" title="Mirror the selection along x (positions and rotations)">Mirror x</button><button id="b-mz" title="Mirror the selection along z (positions and rotations)">Mirror z</button></div>` +
     `<div class="prop-buttons"><button id="b-ground" title="G: put onto the terrain height">Drop to ground</button><button id="b-rand" title="Turn at random around the vertical axis (looks natural for plants and rocks)">Random rotation</button></div>` +
+    `<div class="prop-buttons"><button id="b-rsize" title="Each object a little bigger or smaller (±10%)">Random size</button><button id="b-grid" title="Positions onto the move snap grid">Onto the grid</button></div>` +
+    `<div class="prop-buttons"><button id="b-r0" title="Rotation back to 0">Reset rotation</button><button id="b-s0" title="Size back to 1">Reset size</button></div>` +
     `<div class="prop-buttons"><button id="b-coll" title="Block the tiles under the object; the blocked area moves with the object">Collision under object</button></div>`;
   if (selection.length > 1) {
     el.innerHTML = `<div class="sel-count">${selection.length} objects selected</div>` +
@@ -159,13 +161,15 @@ function showProps() {
     const linked = links[ent.id] ? `<div class="prop-model">Linked collision: ${links[ent.id].length} tile(s)</div>` : "";
     const explode = pf ? `<div class="prop-buttons"><button id="b-explode" title="Replace the prefab with its single objects so they can be edited one by one (on this map only)">Explode prefab</button></div>` : "";
     const rowBtn = `<div class="prop-buttons"><button id="b-row" title="Copies of the object in a straight line, e.g. a fence or a row of torches">Copies in a row</button><button id="b-circle" title="Copies around the object in a circle or an arc, e.g. a stone circle">Copies in a circle</button></div>`;
-    el.innerHTML = `<div class="prop-name">${ent.name}</div><div class="prop-model">${what}</div>` + linked + explode + rowBtn +
+    el.innerHTML = `<input class="prop-name" id="p-name" title="${tr("Name of the object (Enter keeps it)")}" spellcheck="false"><div class="prop-model">${what}</div>` + linked + explode + rowBtn +
       row("Position", "p", [o.position.x, o.position.y, o.position.z].map((v) => v.toFixed(2))) +
       row("Rotation°", "r", [deg(e.x), deg(e.y), deg(e.z)]) +
       row("Scaling", "s", [o.scale.x, o.scale.y, o.scale.z].map((v) => v.toFixed(3))) +
       lightProps(o) +
       `<div class="prop-row"><span title="${tr("Scale on all axes at once")}">${tr("Size")}</span><input type="number" step="0.05" min="0.01" id="p-uniform" value="${o.scale.x.toFixed(3)}"></div>` + buttons;
     wireLightProps(o);
+    $("#p-name").value = ent.name;
+    $("#p-name").addEventListener("change", (ev) => renameObject(o, ev.target.value));
     $("#p-uniform").addEventListener("change", (ev) => {
       ev.stopImmediatePropagation();
       const v = parseFloat(ev.target.value);
@@ -191,6 +195,10 @@ function showProps() {
   $("#b-same").onclick = selectSameModel;
   $("#b-ground").onclick = dropToGround;
   $("#b-rand").onclick = randomRotate;
+  $("#b-rsize").onclick = randomSize;
+  $("#b-grid").onclick = snapToGrid;
+  $("#b-r0").onclick = resetRotation;
+  $("#b-s0").onclick = resetSize;
   $("#b-coll").onclick = blockUnderSelection;
   $("#b-del").onclick = removeSelected;
   if ($("#b-explode")) $("#b-explode").onclick = explodePrefab;
@@ -259,8 +267,9 @@ async function restoreState(entry, direction) {
 function updateUndoButtons() {
   $("#btn-undo").disabled = !undoStack.length;
   $("#btn-redo").disabled = !redoStack.length;
-  $("#btn-undo").title = tr("Ctrl+Z · {0} step(s)").replace("{0}", undoStack.length);
-  $("#btn-redo").title = tr("Ctrl+Y · {0} step(s)").replace("{0}", redoStack.length);
+  const last = (s) => (s.length && s[s.length - 1].label ? ` · ${tr(s[s.length - 1].label)}` : "");
+  $("#btn-undo").title = tr("Ctrl+Z · {0} step(s)").replace("{0}", undoStack.length) + last(undoStack);
+  $("#btn-redo").title = tr("Ctrl+Y · {0} step(s)").replace("{0}", redoStack.length) + last(redoStack);
 }
 async function undo() {
   const entry = undoStack.pop();
@@ -412,6 +421,7 @@ function collisionTexture(c) {
 
 function showCollision(c) {
   coll = c;
+  if (c || !presetPath) updateMapBorder(c);
   if (collMesh) { scene.remove(collMesh); collMesh.geometry.dispose(); collMesh.material.map.dispose(); collMesh = null; }
   if (!c) return;
   const W = c.width * 10, H = c.height * 10;

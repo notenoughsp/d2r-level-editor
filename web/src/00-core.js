@@ -6,7 +6,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/addons/utils/SkeletonUtils.js";
-import { initI18n, locale, tr } from "./i18n.js?v=50";
+import { initI18n, locale, tr } from "./i18n.js?v=51";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -16,7 +16,7 @@ const statusLog = [];  // the last messages (a click on the status line shows th
 const setStatus = (t) => {
   statusEl.textContent = t;
   if (t) { statusLog.push([new Date().toLocaleTimeString(), t]); if (statusLog.length > 60) statusLog.shift(); }
-  try { const top = undoStack[undoStack.length - 1]; if (top && !top.label) top.label = t; } catch { /* during start-up */ }
+  try { const top = undoStack[undoStack.length - 1]; if (top && !top.label) { top.label = t; updateUndoButtons(); } } catch { /* during start-up */ }
   statusEl.classList.remove("old");
   clearTimeout(statusTimer);
   let fade = 8;
@@ -103,5 +103,6 @@ renderer.setAnimationLoop(() => {
   if (gameSelBox) gameSelBox.update();
   updateLightRadius();
   syncTileGrid();
+  countFrame();
   drawMinimap();
 });

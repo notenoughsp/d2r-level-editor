@@ -187,12 +187,19 @@ function renderObjectList() {
   const ks = $("#object-kind"), want = ks.value;
   ks.textContent = "";
   ks.append(new Option(tr("All kinds ({0})").replace("{0}", doc.entities.length), ""));
+  ks.append(new Option(tr("Only the selected ({0})").replace("{0}", selection.length), "__sel"));
+  if (lockedIds?.size) ks.append(new Option(tr("Only the locked ({0})").replace("{0}", lockedIds.size), "__lock"));
   for (const [k, n] of [...kinds].sort((a, b) => b[1] - a[1])) ks.append(new Option(`${tr(k)} (${n})`, k));
-  ks.value = kinds.has(want) ? want : "";
+  ks.value = kinds.has(want) || want === "__sel" || (want === "__lock" && lockedIds?.size) ? want : "";
   const order = $("#object-sort").value;
-  let list = doc.entities.filter((e) => !ks.value || kindOf(e)[1] === ks.value);
+  const selIds = new Set(selection.map((o) => o.userData.entity.id));
+  let list = doc.entities.filter((e) => !ks.value || (ks.value === "__sel" ? selIds.has(e.id) : ks.value === "__lock" ? !!lockedIds?.has(e.id) : kindOf(e)[1] === ks.value));
   if (order === "name") list = [...list].sort((a, b) => a.name.localeCompare(b.name));
   else if (order === "kind") list = [...list].sort((a, b) => kindOf(a)[1].localeCompare(kindOf(b)[1]) || a.name.localeCompare(b.name));
+  else if (order === "near") {
+    const d = (e) => entityObjects.get(e.id)?.position.distanceToSquared(orbit.target) ?? Infinity;
+    list = list.map((e) => [d(e), e]).sort((a, b) => a[0] - b[0]).map((x) => x[1]);
+  }
   for (const ent of list) {
     const [icon, kind] = kindOf(ent);
     // the kind can be searched in the shown language too (e.g. "Licht" for lights)
@@ -204,6 +211,7 @@ function renderObjectList() {
     li.appendChild(marked(ent.name, f));
     li.dataset.id = ent.id;
     if (hiddenIds.has(ent.id)) li.classList.add("hidden-obj");
+    if (lockedIds?.has(ent.id)) { li.classList.add("locked-obj"); li.title = tr("Locked (Ctrl+Shift+L unlocks all)"); }
     li.onclick = (e) => {
       const o = entityObjects.get(ent.id);
       if (!o || o.userData.terrain) return;

@@ -4,6 +4,7 @@ const OPTION_DEFAULTS = {
   autosave: 60, undoSteps: 100, labels: true, labelScale: 0.6, hoverInfo: true, previewSpin: true, statusFade: 8,
   confirmDelete: 20, dupOffset: 2, minimapSize: 220, renderScale: 100, selColor: "#ffd400", bg: "", checkUpdates: true,
   maxListEntries: 1500, tooltips: true, thumbs: true, effects: true, stamps: true, animations: true, figures: true, figureScale: 1, walkPaths: true, reopen: true, zoomToCursor: true,
+  hoverBox: true, gizmoSize: 1, showFps: false, shotDouble: false,
 };
 let options = { ...OPTION_DEFAULTS, ...JSON.parse(localStorage.getItem("options") || "{}") };
 if (!options.v2) { options.damping = false; options.v2 = true; localStorage.setItem("options", JSON.stringify(options)); }  // smoothing off since 0.5.1
@@ -26,6 +27,8 @@ const OPTION_FORM = [
     ["panSpeed", "Pan speed", "number", 0.1, 5, 0.1],
     ["damping", "Smooth camera movement", "check"],
     ["zoomToCursor", "Zoom towards the mouse cursor", "check"],
+    ["showFps", "Frames per second in the status bar", "check"],
+    ["shotDouble", "Screenshots at double resolution", "check"],
     ["renderScale", "Render resolution (%, lower = faster)", "number", 25, 200, 5],
     ["bg", "Background colour (empty = from the light)", "color"],
   ]],
@@ -33,6 +36,8 @@ const OPTION_FORM = [
     ["showGrid", "Show the grid", "check"],
     ["gridStep", "Grid line every (units, 10 = 1 tile)", "number", 1, 50, 1],
     ["selColor", "Colour of the selection box", "color"],
+    ["hoverBox", "Box around the object under the mouse", "check"],
+    ["gizmoSize", "Size of the move/rotate handles (+ and - keys)", "number", 0.3, 3, 0.1],
     ["dupOffset", "Offset of duplicates (units)", "number", 0, 50, 0.5],
     ["confirmDelete", "Ask before deleting more than (objects, 0 = never)", "number", 0, 10000, 1],
   ]],
@@ -62,6 +67,8 @@ function applyOptions() {
   orbit.rotateSpeed = options.rotateSpeed; orbit.zoomSpeed = options.zoomSpeed; orbit.panSpeed = options.panSpeed;
   orbit.enableDamping = options.damping;
   orbit.zoomToCursor = options.zoomToCursor;
+  gizmo.size = options.gizmoSize;
+  $("#fps").classList.toggle("hidden", !options.showFps);
   grid.visible = options.showGrid;
   updateTileGrid();
   const div = Math.max(1, Math.round(1000 / options.gridStep));
@@ -86,6 +93,9 @@ function applyOptions() {
 function renderOptions() {
   const box = $("#opt-body");
   box.textContent = "";
+  const search = Object.assign(document.createElement("input"), { id: "opt-search", placeholder: tr("Search the options …") });
+  search.addEventListener("input", () => filterOptions(search.value));
+  box.append(search);
   for (const [section, items] of OPTION_FORM) {
     const h = document.createElement("h4");
     h.textContent = tr(section);
@@ -94,6 +104,7 @@ function renderOptions() {
     grid2.className = "opt-grid";
     for (const [key, label, kind, min, max, step] of items) {
       const l = document.createElement("label");
+      l.dataset.en = label;  // the search finds the English words too
       const span = document.createElement("span");
       span.textContent = tr(label);
       const inp = document.createElement("input");
@@ -187,7 +198,7 @@ renderer.domElement.addEventListener("contextmenu", (e) => {
   for (const h of raycaster.intersectObject(root, true)) {
     let o = h.object;
     while (o && !o.userData.entity) o = o.parent;
-    if (o && o.parent === root && !o.userData.terrain && o.visible) { hit = o; break; }
+    if (o && o.parent === root && !o.userData.terrain && o.visible && pickable(o)) { hit = o; break; }
   }
   if (hit && !selection.includes(hit)) select([hit]);
   const has = selection.length > 0, md = has && comp(primary().userData.entity, "ModelDefinitionComponent");
@@ -197,6 +208,7 @@ renderer.domElement.addEventListener("contextmenu", (e) => {
     [tr("Paste here"), "Ctrl+V", !!localStorage.getItem("d2r-clipboard"), paste],
     [tr("Paste at the original places"), "Ctrl+Shift+V", !!localStorage.getItem("d2r-clipboard"), pasteInPlace],
     [tr("Copy the position"), "", has, copyPosition],
+    [tr("Copy as JSON"), "", has, copyAsJson],
     null,
     [tr("Replace with the preview model"), "", has && !!previewPath, replaceWithPreview],
     [tr("Select same model"), "", !!md, selectSameModel],
@@ -207,6 +219,7 @@ renderer.domElement.addEventListener("contextmenu", (e) => {
     [tr("Save as group"), "Ctrl+G", has, saveGroup],
     [tr("Save the selection as a kit"), "", has, saveKit],
     [tr("Hide the selection"), "H", has, hideSelection],
+    [tr("Lock the selection"), "Ctrl+L", has, lockSelection],
     null,
     [tr("Delete"), "Del", has, removeSelected],
   ];

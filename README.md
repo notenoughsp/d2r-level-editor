@@ -74,6 +74,9 @@ Unsaved work is autosaved every 60 seconds and offered again when you reopen the
 | Ctrl+Shift+V, Ctrl+Shift+D | paste at the original places, duplicate at the cursor |
 | , / . , Ctrl+I | turn the selection by the rotation snap, invert the selection |
 | Home | the whole map in view |
+| Ctrl+L, Ctrl+Shift+L | lock the selection (visible, not pickable), unlock all |
+| Shift+, / Shift+. | turn the whole selection around its middle |
+| + / - | bigger or smaller move/rotate handles |
 | Ctrl+K | search maps, models, objects, NPCs, kits, options, commands and places (`120 45`, `tile 12 4`) |
 | ? or F1 | keyboard and mouse help |
 | Esc | close a dialog, deselect |

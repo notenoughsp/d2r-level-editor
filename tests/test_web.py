@@ -18,6 +18,8 @@ def joined():
 
 @unittest.skipUnless(NODE, "Node.js not found")
 class Web(unittest.TestCase):
+    maxDiff = None
+
     def check(self, text):
         with tempfile.TemporaryDirectory() as d:
             f = pathlib.Path(d) / "script.mjs"

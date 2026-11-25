@@ -2,7 +2,7 @@
 function invertSelection() {
   if (!doc) return;
   const now = new Set(selection);
-  const all = [...entityObjects.values()].filter((o) => o.visible && !o.userData.terrain && !now.has(o) &&
+  const all = [...entityObjects.values()].filter((o) => o.visible && !o.userData.terrain && !now.has(o) && pickable(o) &&
     (showHelpers || !(o.children[0] && o.children[0].userData.helper)));
   select(all);
   setStatus(tr("{0} object(s) selected").replace("{0}", all.length));

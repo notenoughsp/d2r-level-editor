@@ -233,6 +233,8 @@ async function openPreset(path, opts = {}) {
   loadGameObjects();
   renderObjectList();
   showPresetInfo(path);
+  loadLocks();
+  showNote();
   setStatus(`${path} loaded`);
   document.querySelectorAll("#preset-list li").forEach((li) => li.classList.toggle("active", li.dataset.path === path));
   if (sd.on) { sd.path = null; sdLoad(); }  // the legacy view shows the newly opened map

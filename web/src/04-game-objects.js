@@ -288,7 +288,7 @@ window.addEventListener("pointerup", () => {
   const v = new THREE.Vector3();
   const hits = [];
   for (const o of entityObjects.values()) {
-    if (o.userData.terrain || !o.visible) continue;
+    if (o.userData.terrain || !o.visible || !pickable(o)) continue;
     if (!showHelpers && o.children[0] && o.children[0].userData.helper) continue;
     v.copy(o.position).project(camera);
     if (v.z > 1) continue;
