@@ -260,13 +260,16 @@ $("#object-select-all").addEventListener("click", () => {
 // ---------- place at the mouse cursor ----------
 let cursorGround = null;
 let previewPath = null;
-renderer.domElement.addEventListener("pointermove", (e) => {
+function trackCursor(e) {
   const r = renderer.domElement.getBoundingClientRect();
   const p = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
   raycaster.setFromCamera(p, camera);
   const hit = new THREE.Vector3();
   cursorGround = raycaster.ray.intersectPlane(groundPlane, hit) ? hit : null;
-});
+}
+renderer.domElement.addEventListener("pointermove", trackCursor);
+// also on the press itself (capture, before every tool): a pen tap or a click without a move before it
+renderer.domElement.addEventListener("pointerdown", trackCursor, true);
 
 // ---------- how the game uses this map piece ----------
 async function showPresetInfo(path) {
