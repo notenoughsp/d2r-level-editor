@@ -363,6 +363,7 @@ function serverLost() {
       offlineTimer = null;
       bar.classList.add("hidden");
       setStatus(tr("Connected to the editor program again"));
+      checkVersionAfterReconnect();
     } catch { /* still closed */ }
   }, 3000);
 }

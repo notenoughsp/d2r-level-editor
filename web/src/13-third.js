@@ -40,9 +40,12 @@ function gameNudge(dx, dy) {
 }
 
 // ---------- the game object under the mouse is named in the status bar ----------
+var hoverGameGroup = null;
 function gameObjectUnderMouse() {
+  hoverGameGroup = null;
   if (!gameRoot?.visible || !gameRoot.children.length) return null;
   const h = raycaster.intersectObjects(gameRoot.children.map((g) => g.userData.mesh), false)[0];
+  if (h) hoverGameGroup = h.object.parent;
   return h ? gameObjectAt(h.object.parent.userData.gameIndex) : null;
 }
 

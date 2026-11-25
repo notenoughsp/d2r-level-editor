@@ -157,7 +157,7 @@ function wireLightProps(o) {
   const lc = o.userData.entity.components.find((c) => /LightDefinitionComponent$/.test(c.type));
   if (!lc || !$("#lt-color")) return;
   wireLightPresets(lc);
-  $("#lt-color").addEventListener("change", (e) => { beginEdit(); lc.color = fromHex(e.target.value); markDirty(); setStatus(tr("Light colour changed")); });
+  $("#lt-color").addEventListener("change", (e) => { beginEdit(); lc.color = fromHex(e.target.value); markDirty(); tintLightMarkers(); setStatus(tr("Light colour changed")); });
   document.querySelectorAll("[data-light]").forEach((inp) => inp.addEventListener("change", () => {
     const v = parseFloat(inp.value);
     if (!Number.isFinite(v)) return;
@@ -207,9 +207,9 @@ async function loadKits() {
     ul.append(li);
   }
 }
-async function saveKit() {
+async function saveKit(fixedName) {
   if (!selection.length) return setStatus(tr("Select the objects of the kit first"));
-  const name = prompt("Name of the kit (e.g. camp with torches):", "");
+  const name = typeof fixedName === "string" ? fixedName : prompt("Name of the kit (e.g. camp with torches):", "");
   if (!name) return;
   const anchor = primary().position;
   const items = selection.map((o) => o.userData.entity);

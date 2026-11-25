@@ -115,6 +115,7 @@ function wireLightPresets(lc) {
     if ($("#lt-color")) $("#lt-color").value = toHex(lc.color);
     markDirty();
     lightTick = 0;
+    tintLightMarkers();
     setStatus(tr("Light colour: {0}").replace("{0}", tr(name)));
   }));
 }

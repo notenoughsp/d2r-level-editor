@@ -4,7 +4,7 @@ const OPTION_DEFAULTS = {
   autosave: 60, undoSteps: 100, labels: true, labelScale: 0.6, hoverInfo: true, previewSpin: true, statusFade: 8,
   confirmDelete: 20, dupOffset: 2, minimapSize: 220, renderScale: 100, selColor: "#ffd400", bg: "", checkUpdates: true,
   maxListEntries: 1500, tooltips: true, thumbs: true, effects: true, stamps: true, animations: true, figures: true, figureScale: 1, walkPaths: true, reopen: true, zoomToCursor: true,
-  hoverBox: true, gizmoSize: 1, showFps: false, shotDouble: false, invertZoom: false, swapMouse: false, smoothFly: true,
+  hoverBox: true, gizmoSize: 1, showFps: false, shotDouble: false, invertZoom: false, swapMouse: false, smoothFly: true, viewArrows: false, crosshair: false, helperSize: 1, showBorder: true,
 };
 let options = { ...OPTION_DEFAULTS, ...JSON.parse(localStorage.getItem("options") || "{}") };
 if (!options.v2) { options.damping = false; options.v2 = true; localStorage.setItem("options", JSON.stringify(options)); }  // smoothing off since 0.5.1
@@ -27,6 +27,9 @@ const OPTION_FORM = [
     ["panSpeed", "Pan speed", "number", 0.1, 5, 0.1],
     ["damping", "Smooth camera movement", "check"],
     ["smoothFly", "Short camera flights when jumping to an object", "check"],
+    ["crosshair", "A small cross in the middle of the view", "check"],
+    ["showBorder", "Show the map's border", "check"],
+    ["helperSize", "Size of the symbols for lights, effects and sounds", "number", 0.3, 4, 0.1],
     ["zoomToCursor", "Zoom towards the mouse cursor", "check"],
     ["invertZoom", "Turn the wheel the other way to zoom", "check"],
     ["swapMouse", "Right mouse pans, middle mouse turns", "check"],
@@ -40,6 +43,7 @@ const OPTION_FORM = [
     ["gridStep", "Grid line every (units, 10 = 1 tile)", "number", 1, 50, 1],
     ["selColor", "Colour of the selection box", "color"],
     ["hoverBox", "Box around the object under the mouse", "check"],
+    ["viewArrows", "Arrow keys move along the view (up = away from the camera)", "check"],
     ["gizmoSize", "Size of the move/rotate handles (+ and - keys)", "number", 0.3, 3, 0.1],
     ["dupOffset", "Offset of duplicates (units)", "number", 0, 50, 0.5],
     ["confirmDelete", "Ask before deleting more than (objects, 0 = never)", "number", 0, 10000, 1],
@@ -72,6 +76,8 @@ function applyOptions() {
   orbit.enableDamping = options.damping;
   orbit.zoomToCursor = options.zoomToCursor;
   gizmo.size = options.gizmoSize;
+  applyCrosshair();
+  if (scene.userData.border) scene.userData.border.visible = options.showBorder;
   $("#fps").classList.toggle("hidden", !options.showFps);
   grid.visible = options.showGrid;
   updateTileGrid();
@@ -213,6 +219,8 @@ renderer.domElement.addEventListener("contextmenu", (e) => {
     [tr("Paste at the original places"), "Ctrl+Shift+V", !!localStorage.getItem("d2r-clipboard"), pasteInPlace],
     [tr("Copy the position"), "", has, copyPosition],
     [tr("Copy as JSON"), "", has, copyAsJson],
+    [tr("Copy rotation and size"), "", has, copyTransform],
+    [tr("Paste rotation and size"), "", has && !!transformClip, pasteTransform],
     null,
     [tr("Replace with the preview model"), "", has && !!previewPath, replaceWithPreview],
     [tr("Select same model"), "", !!md, selectSameModel],

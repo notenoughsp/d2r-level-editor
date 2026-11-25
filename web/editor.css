@@ -302,3 +302,15 @@ input.prop-name:hover, input.prop-name:focus { border-color: #3a3326; background
 .light-presets button { width: 22px; height: 18px; padding: 0; border: 1px solid #3a3326; border-radius: 3px; }
 .light-presets button:hover { outline: 1px solid #ffd400; }
 label.snap-off { color: #e08a4a; }
+#status.error { color: #ff8a70; }
+#crosshair { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: rgba(255,255,255,.55); font: 22px monospace; pointer-events: none; z-index: 4; }
+#preview-box { position: relative; }
+#preview-bg { position: absolute; right: 4px; top: 4px; padding: 0 5px; font-size: 13px; opacity: .7; }
+#preview-bg:hover { opacity: 1; }
+.view-row { display: flex; align-items: center; gap: 4px; }
+.view-row #view-buttons button { min-width: 22px; padding: 1px 4px; }
+#preset-count { color: #888; font-size: 11px; }
+#sel-info, #proj-info { cursor: pointer; }
+.opt-files { border-top: none; padding-top: 0; }
+.list-clear { float: right; padding: 0 5px; font-size: 10px; }
+.map-note-mark { color: #c7a35a; }

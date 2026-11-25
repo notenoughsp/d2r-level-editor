@@ -124,6 +124,7 @@ window.addEventListener("keydown", (e) => {
   const ev = e;
   if (ev.ctrlKey && ev.code === "Comma") { ev.preventDefault(); renderOptions(); $("#options-dialog").classList.remove("hidden"); return; }
   if (ev.ctrlKey && !ev.shiftKey && ev.key.toLowerCase() === "e") { ev.preventDefault(); openExport(); return; }
+  if (ev.ctrlKey && !ev.shiftKey && ev.key.toLowerCase() === "f") { ev.preventDefault(); focusSearch(); return; }
   if (gameSel && !ev.altKey) {  // a selected game object (NPC, monster, chest ...)
     const k = ev.key.toLowerCase();
     if (ev.ctrlKey && k === "c") { ev.preventDefault(); return gameCopy(); }
@@ -136,6 +137,12 @@ window.addEventListener("keydown", (e) => {
     ev.preventDefault();
     gamePaste();
     return;
+  }
+  if (!ev.ctrlKey && /^Numpad(0|1|3|Add|Subtract)$/.test(ev.code)) {
+    ev.preventDefault();
+    if (ev.code === "Numpad0") return viewWholeMap();
+    if (ev.code === "NumpadAdd" || ev.code === "NumpadSubtract") return zoomStep(ev.code === "NumpadAdd" ? 0.8 : 1.25);
+    return axisView(ev.code === "Numpad3");
   }
   if (!ev.ctrlKey && /^Numpad[24568]$/.test(ev.code)) {  // view keys on the number pad
     ev.preventDefault();
@@ -205,10 +212,12 @@ window.addEventListener("keydown", (e) => {
   else if (e.key === "t") toggleTopView();
   else if (e.key === "i" && !e.ctrlKey) toggleIsolate();
   else if (e.key === "j" && !e.ctrlKey) nextSameModel();
+  else if (e.key === "u" && !e.ctrlKey) previousSelection();
   else if (e.key.startsWith("Arrow") || e.key === "PageUp" || e.key === "PageDown") {
     if (!selection.length) return;
     e.preventDefault();
     const d = (+$("#snap-t").value || 0.5) * (e.shiftKey ? 10 : 1);
+    if (options.viewArrows && e.key.startsWith("Arrow")) return viewNudge(e.key, d);
     const map = { ArrowLeft: [-d, 0, 0], ArrowRight: [d, 0, 0], ArrowUp: [0, 0, -d], ArrowDown: [0, 0, d], PageUp: [0, d, 0], PageDown: [0, -d, 0] };
     nudge(...map[e.key]);
   }
@@ -242,6 +251,9 @@ function renderPresets() {
     const head = document.createElement("li");
     head.className = "list-head"; head.setAttribute("translate", "yes");
     head.textContent = "Recently opened";
+    const clr = Object.assign(document.createElement("button"), { className: "list-clear", textContent: "✕", title: tr("Clear the list") });
+    clr.onclick = (e) => { e.stopPropagation(); clearRecentMaps(); };
+    head.append(clr);
     ul.appendChild(head);
     for (const p of recent) {
       const li = document.createElement("li");
@@ -263,6 +275,7 @@ function renderPresets() {
     if (onlyEdited && !editedMaps.has(p)) continue;
     const li = document.createElement("li");
     li.append(starFor(p), marked(short, f));
+    if (localStorage.getItem(`note:${window.projectName || ""}:${p}`)) li.append(Object.assign(document.createElement("span"), { className: "map-note-mark", textContent: " ✎", title: tr("This map has a note") }));
     li.dataset.path = p;
     li.title = p;
     if (editedMaps.has(p)) li.classList.add("edited");
@@ -270,7 +283,12 @@ function renderPresets() {
     ul.appendChild(li);
   }
 }
-$("#preset-filter").addEventListener("input", renderPresets);
+$("#preset-filter").addEventListener("input", () => { renderPresets(); countMaps(); });
+function countMaps() {
+  const n = document.querySelectorAll("#preset-list li[data-path]").length;
+  $("#preset-filter").title = tr("{0} of {1} maps").replace("{0}", n).replace("{1}", presets.length);
+  $("#preset-count").textContent = $("#preset-filter").value ? tr("{0} of {1} maps").replace("{0}", n).replace("{1}", presets.length) : tr("{0} maps").replace("{0}", presets.length);
+}
 
 let modelTimer = null;
 $("#model-cat").addEventListener("change", searchModels);
@@ -294,6 +312,10 @@ async function searchModels() {
     r = { items, total: items.length };
   } else if (cat === "__fav") {
     const items = favModels().filter((m) => matches(m, q));
+    r = { items, total: items.length };
+  } else if (cat === "__map") {
+    const used = doc ? [...new Set(doc.entities.map((e) => comp(e, "ModelDefinitionComponent")?.filename?.toLowerCase()).filter(Boolean))].sort() : [];
+    const items = used.filter((m) => matches(m, q));
     r = { items, total: items.length };
   } else if (cat === "__own") {
     r = await (await fetch(api("models", { limit: 2000, q, own: 1 }))).json();
@@ -320,7 +342,8 @@ async function searchModels() {
       thumbObserver.observe(img);
     }
     li.append(marked(m.replace("data/hd/", ""), q));
-    li.onclick = () => {
+    li.onclick = (e) => {
+      if (e.ctrlKey) return toggleFavModel(m);
       ul.querySelectorAll("li.active").forEach((x) => x.classList.remove("active"));
       li.classList.add("active");
       previewPath = m;

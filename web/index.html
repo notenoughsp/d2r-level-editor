@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>D2R Level Editor</title>
-<link rel="stylesheet" href="/web/editor.css?v=57">
+<link rel="stylesheet" href="/web/editor.css?v=58">
 <script type="importmap">
 { "imports": { "three": "/three/build/three.module.js", "three/addons/": "/three/examples/jsm/" } }
 </script>
@@ -41,6 +41,10 @@
         <label title="Hide all models and show the collision from above, for painting"><input type="checkbox" id="coll-only"> Collision only</label>
         <label title="The map's lights light the view (the nearest 12); best with the night light"><input type="checkbox" id="show-lights"> Lights</label>
         <label title="Models as wire frames: overlapping and hidden parts are easy to see"><input type="checkbox" id="wireframe"> Wireframe</label>
+        <label title="Distance fog: near things stand out"><input type="checkbox" id="fog"> Fog</label>
+        <label title="The camera turns slowly around the view centre (for looking or screenshots)"><input type="checkbox" id="turntable"> Turntable</label>
+        <hr>
+        <div class="view-row"><span>Views</span><span id="view-buttons"></span><button id="btn-whole" title="Home: the whole map in view">Whole map</button></div>
         <hr>
         <button id="btn-mini" title="N: minimap of the whole map; click it to look there">Minimap</button>
         <button id="btn-compare" title="C: show the game's original of this map (read-only), again to go back">Compare</button>
@@ -90,7 +94,7 @@
     <div class="pane" id="pane-presets">
       <div class="row-line"><span class="lbl">Project</span><select id="project-select" title="Each project has its own maps, NPCs, mod info and drafts"></select><button id="project-new" title="Start a new, empty project (the current one is kept)">New</button><button id="project-save" title="Save the project as one file, to share it or to move it to another PC">⤓</button><button id="project-load" title="Load a project file as a new project">⤒</button><input type="file" id="project-file" accept=".zip" class="hidden"></div>
       <div class="prop-buttons"><button id="preset-new" title="A copy of the open map under a new name, optionally empty, e.g. for a new area">New map …</button></div>
-      <input id="preset-filter" placeholder="Search maps, e.g. act1/town" title="↑/↓: walk the list · Enter: open the map">
+      <input id="preset-filter" placeholder="Search maps, e.g. act1/town" title="↑/↓: walk the list · Enter: open the map"><span id="preset-count"></span>
       <label class="check-line"><input type="checkbox" id="preset-edited"> Only maps edited in this project</label>
       <ul id="preset-list" class="list" translate="no"></ul>
     </div>
@@ -98,14 +102,14 @@
       <input id="object-filter" placeholder="Search objects of the map, e.g. palisade, light" title="Click: select · double-click: fly to the object">
       <div class="row-line"><select id="group-select" title="Groups of this map: choose one to select its objects"></select><button id="group-save" title="Ctrl+G: save the selection as a group">Save as group</button><button id="group-del" title="Delete the group (the objects stay)" disabled>✕</button></div>
       <div class="row-line"><select id="object-kind" title="Only objects of this kind"></select><select id="object-sort" title="Order of the list"><option value="map">Map order</option><option value="name">By name</option><option value="kind">By kind</option><option value="near">Nearest to the view centre</option></select></div>
-      <div class="row-line"><span id="object-count"></span><button id="object-select-all" title="Select every object in the list (use the search to narrow it down, e.g. tree)">Select all in the list</button></div>
+      <div class="row-line"><span id="object-count"></span><button id="object-select-all" title="Select every object in the list (use the search to narrow it down, e.g. tree)">Select all in the list</button><button id="object-hide-all" title="Hide every object in the list (view only; Shift+H shows them again)">Hide all</button></div>
       <ul id="object-list" class="list" translate="no"></ul>
     </div>
     <div class="pane hidden" id="pane-kits">
       <div class="npc-help">Building kits are groups of objects you saved (e.g. a camp with torches). They work in every map and project: double-click or "Place" puts one at the mouse cursor or the view centre.</div>
       <div class="prop-buttons"><button id="kit-save" title="Save the selected objects as a kit">Save the selection as a kit</button></div>
       <ul id="kit-list" class="list" translate="no"></ul>
-      <div class="prop-buttons"><button id="kit-place">Place</button><button id="kit-rename">Rename …</button><button id="kit-del">Delete</button></div>
+      <div class="prop-buttons"><button id="kit-place">Place</button><button id="kit-rename">Rename …</button><button id="kit-update" title="The selected objects become the content of the chosen kit">Update</button><button id="kit-del">Delete</button></div>
     </div>
     <div class="pane hidden" id="pane-npcs">
       <div class="npc-help">New NPCs for the mod. Save, then place them in a map with "Add game object" (NPC list) and export.</div>
@@ -140,7 +144,7 @@
     </div>
     <div class="pane hidden" id="pane-models">
       <input id="model-filter" placeholder="Search models, e.g. palisade, tree, barrel" title="↑/↓: walk the list with preview · Enter: place in the view centre">
-      <select id="model-cat" title="Area"><option value="">All areas</option><option value="__recent">Recently used</option><option value="__fav">Favourites</option>
+      <select id="model-cat" title="Area"><option value="">All areas</option><option value="__recent">Recently used</option><option value="__fav">Favourites</option><option value="__map">Used in this map</option>
         <option value="env/model/act1">Act 1</option><option value="env/model/act2">Act 2</option><option value="env/model/act3">Act 3</option>
         <option value="env/model/act4">Act 4</option><option value="env/model/expansion">Act 5</option><option value="env/model/global">Global</option>
         <option value="env/foliage">Plants</option><option value="objects/">Game objects</option><option value="character/">Characters</option><option value="__own">Own models (imported, recoloured)</option></select>
@@ -148,6 +152,7 @@
       <ul id="model-list" class="list" translate="no"></ul>
       <div id="preview-box">
         <canvas id="preview"></canvas>
+        <button id="preview-bg" title="Light or dark background for the preview">◐</button>
         <button id="fav-btn" title="Favourite: keep this model in the Favourites list">☆</button>
         <select id="anim-select" class="hidden" title="Animation of the character"></select>
         <button id="usage-btn" title="List the maps that use this model" disabled>Where used?</button>
@@ -197,7 +202,7 @@
     </div>
   </div>
   <div class="splitter" data-side="left" title="Drag to change the width; double-click: default width"></div>
-  <div id="viewport"><div id="empty-hint"><b>D2R Level Editor</b><br>Open a map in the Maps tab on the left, e.g. act1/town/townn1.json.<br>Ctrl+K searches everything · ? or F1 shows all keys.</div><div id="sd-view" class="hidden"><img id="sd-img" alt=""><div id="sd-hint">Legacy graphics (SD) · wheel: zoom · drag: pan · double-click: show this place in the HD view</div></div><div id="banner" class="hidden"></div><div id="offline" class="hidden"></div><div id="update-bar" class="hidden"></div><div id="progress" class="hidden"><div id="progress-bar"></div><span id="progress-text"></span></div><div id="marquee" class="hidden"></div><div id="minimap-hit" class="hidden" title="Click: look at this place"></div></div>
+  <div id="viewport"><div id="empty-hint"><b>D2R Level Editor</b><br>Open a map in the Maps tab on the left, e.g. act1/town/townn1.json.<br>Ctrl+K searches everything · ? or F1 shows all keys.</div><div id="sd-view" class="hidden"><img id="sd-img" alt=""><div id="sd-hint">Legacy graphics (SD) · wheel: zoom · drag: pan · double-click: show this place in the HD view</div></div><div id="banner" class="hidden"></div><div id="crosshair" class="hidden">+</div><div id="offline" class="hidden"></div><div id="update-bar" class="hidden"></div><div id="progress" class="hidden"><div id="progress-bar"></div><span id="progress-text"></span></div><div id="marquee" class="hidden"></div><div id="minimap-hit" class="hidden" title="Click: look at this place"></div></div>
   <div class="splitter" data-side="right" title="Drag to change the width; double-click: default width"></div>
   <div id="right">
     <h3>Selection</h3>
@@ -212,6 +217,7 @@
     </div>
     <h3>Map</h3>
     <div id="scene-info"></div>
+    <div class="prop-buttons"><button id="btn-revert" title="Load the map as last saved; unsaved changes are dropped">Reload as saved</button></div>
     <textarea id="map-note" rows="2" placeholder="Notes for this map (only for you)" spellcheck="false"></textarea>
     <div id="replace-box" title="Replaces this map with a copy of another map of the same size (tiles, collision, game objects, models, terrain). The game uses it at this place.">
       <select id="replace-src"><option value="">Take over a map of the same size … (experimental)</option></select>
@@ -275,6 +281,7 @@
 <div id="options-dialog" class="dialog hidden"><div class="dialog-box wide-box">
   <div class="modal-head"><span>Options</span></div>
   <div class="dialog-body" id="opt-body"></div>
+  <div class="dialog-foot opt-files"><button id="opt-save" title="All options and own keys as a file (e.g. for another PC)">Save options as a file</button><button id="opt-load" title="Options from a saved file">Load options</button><input type="file" id="opt-file" accept=".json" class="hidden"></div>
   <div class="dialog-foot"><button id="opt-reset">Reset all</button><span class="spacer"></span><button id="opt-close" class="primary">Close</button></div>
 </div></div>
 <datalist id="mon-list"></datalist>
@@ -304,7 +311,7 @@
   <div class="dialog-foot"><button id="ex-mods-folder" title="Open the game's mods folder in Explorer">Mods folder</button><button id="ex-open" class="hidden">Open the zip folder</button><span class="spacer"></span><button id="ex-cancel">Cancel</button><button id="ex-go" class="primary">Export</button></div>
 </div></div>
 <div id="statusbar"><span id="proj-info" title="Open project"></span><span id="status"></span><span id="hover-info" title="Object under the mouse"></span><span id="sel-info"></span><span id="cursor-pos"></span><span id="fps" class="hidden"></span></div>
-<div id="modal" class="hidden"><div class="modal-box"><div class="modal-head"><span id="modal-title"></span><button id="modal-close">Close</button></div><pre id="modal-body"></pre></div></div>
-<script type="module" src="/web/editor.js?v=108"></script>
+<div id="modal" class="hidden"><div class="modal-box"><div class="modal-head"><span id="modal-title"></span><button id="modal-copy" title="Copy the text">Copy</button><button id="modal-close">Close</button></div><pre id="modal-body"></pre></div></div>
+<script type="module" src="/web/editor.js?v=110"></script>
 </body>
 </html>

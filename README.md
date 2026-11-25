@@ -82,6 +82,8 @@ Unsaved work is autosaved every 60 seconds and offered again when you reopen the
 | Ctrl while dragging a handle | snapping the other way round |
 | Space, I, J | move/rotate/scale in turn, show only the selection, next object with the same model |
 | Shift+T, number pad 4 6 8 2 5 | top view above the selection, turn, tilt, top view |
+| Number pad 0 1 3 + - | whole map, front view, side view, zoom |
+| U, Ctrl+F | previous selection, search field of the open tab |
 | Ctrl+K | search maps, models, objects, NPCs, kits, options, commands and places (`120 45`, `tile 12 4`) |
 | ? or F1 | keyboard and mouse help |
 | Esc | close a dialog, deselect |

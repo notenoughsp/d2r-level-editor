@@ -6,7 +6,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/addons/utils/SkeletonUtils.js";
-import { initI18n, locale, tr } from "./i18n.js?v=53";
+import { initI18n, locale, tr } from "./i18n.js?v=54";
 
 initI18n();
 const $ = (s) => document.querySelector(s);
@@ -15,6 +15,8 @@ let statusTimer = null;
 const statusLog = [];  // the last messages (a click on the status line shows them)
 const setStatus = (t) => {
   statusEl.textContent = t;
+  try { statusEl.title = t ? `${tr(String(t))} · ${tr("Click: earlier messages")}` : ""; } catch { /* during start-up */ }
+  try { markStatusError(t); } catch { /* during start-up */ }
   if (t) { statusLog.push([new Date().toLocaleTimeString(), t]); if (statusLog.length > 60) statusLog.shift(); }
   try { const top = undoStack[undoStack.length - 1]; if (top && !top.label) { top.label = t; updateUndoButtons(); } } catch { /* during start-up */ }
   statusEl.classList.remove("old");

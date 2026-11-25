@@ -70,7 +70,8 @@ function keepMarkersUnscaled() {
     while (top.parent) top = top.parent;
     if (top !== scene) { helperMarkers.delete(m); continue; }  // its map was closed
     const s = m.parent.scale;
-    m.scale.set(1 / (s.x || 1), 1 / (s.y || 1), 1 / (s.z || 1));
+    const k = options.helperSize || 1;
+    m.scale.set(k / (s.x || 1), k / (s.y || 1), k / (s.z || 1));
     m.position.y = 1.5 / (s.y || 1);
   }
 }
@@ -236,6 +237,8 @@ async function openPreset(path, opts = {}) {
   loadLocks();
   showNote();
   applyWireframe();
+  tintLightMarkers();
+  countMaps();
   setStatus(`${path} loaded`);
   document.querySelectorAll("#preset-list li").forEach((li) => li.classList.toggle("active", li.dataset.path === path));
   if (sd.on) { sd.path = null; sdLoad(); }  // the legacy view shows the newly opened map

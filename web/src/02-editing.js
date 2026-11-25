@@ -40,6 +40,7 @@ function select(objs) {
   if (objs.length && gameSelBox) markFigure(null);
   if (objs.length && gameSel) { gameSel.userData.mesh.material = gameObjects.objects[gameSel.userData.gameIndex].type === 1 ? npcMaterial : objMaterial; gameSel = null; gizmo.showY = true; applySnap(); }
   selection = objs.filter(Boolean);
+  rememberSelection(selection);
   for (const b of selectionBoxes.splice(0)) { scene.remove(b); b.geometry.dispose(); }
   for (const o of selection) {
     const b = new THREE.BoxHelper(o, o === primary() ? options.selColor : 0xc7a35a);
@@ -148,7 +149,9 @@ function showProps() {
       `<div class="prop-model">${groupedNames(selection)}</div>` +
       `<div class="prop-model">${selectionExtent()}</div>` +
       `<div class="prop-buttons"><button id="b-ax" title="Same x as the last picked object (yellow box)">Align x</button><button id="b-az" title="Same z as the last picked object (yellow box)">Align z</button><button id="b-ay" title="Same height as the last picked object (yellow box)">Align height</button></div>` +
-      `<div class="prop-buttons"><button id="b-dx" title="Same distance between the objects along x (at least three objects)">Space along x</button><button id="b-dz" title="Same distance between the objects along z (at least three objects)">Space along z</button></div>` + buttons;
+      `<div class="prop-buttons"><button id="b-dx" title="Same distance between the objects along x (at least three objects)">Space along x</button><button id="b-dz" title="Same distance between the objects along z (at least three objects)">Space along z</button></div>` +
+      `<div class="prop-buttons"><button id="b-samer" title="All get the rotation of the last picked object (yellow box)">Same rotation</button><button id="b-sames" title="All get the size of the last picked object (yellow box)">Same size</button></div>` +
+      `<div class="prop-buttons"><button id="b-thin" title="Keep about every second object of the selection (at random), e.g. to thin out scattered plants">Thin out</button><button id="b-jitter" title="Move each object a little at random (up to the move snap, at least 2 units)">Shift at random</button></div>` + buttons;
   } else {
     const o = primary();
     const ent = o.userData.entity;
@@ -197,6 +200,7 @@ function showProps() {
   $("#b-ground").onclick = dropToGround;
   $("#b-rand").onclick = (e) => randomRotate(e.shiftKey);
   $("#b-rsize").onclick = randomSize;
+  if ($("#b-samer")) { $("#b-samer").onclick = sameRotation; $("#b-sames").onclick = sameSize; $("#b-thin").onclick = thinOut; $("#b-jitter").onclick = jitter; }
   $("#b-grid").onclick = snapToGrid;
   $("#b-r0").onclick = resetRotation;
   $("#b-s0").onclick = resetSize;
@@ -336,19 +340,23 @@ async function placeModel(modelPath, at = null) {
 
 async function duplicate() {
   if (!selection.length) return;
+  const repeat = duplicateOffset();  // the last copy was moved: the next one goes the same way
+  const from = selection.map((o) => o.position.clone());
   beginEdit();
   const copies = [];
   for (const o of selection) {
     const src = o.userData.entity;
     const ent = JSON.parse(JSON.stringify(src));
     ent.id = newId();
-    ent.name = `${src.name}_copy`;
+    ent.name = copyName(src.name);
     const t = comp(ent, "TransformDefinitionComponent");
-    if (t) { t.position.x += options.dupOffset; t.position.z += options.dupOffset; }
+    if (t && repeat) { t.position.x = o.position.x + repeat.x; t.position.y = o.position.y + repeat.y; t.position.z = o.position.z + repeat.z; }
+    else if (t) { t.position.x += options.dupOffset; t.position.z += options.dupOffset; }
     doc.entities.push(ent);
     copies.push(await addObjectFor(ent));
   }
   select(copies);
+  lastDup = { from, copies: copies.slice() };
   markDirty();
 }
 

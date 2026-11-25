@@ -32,7 +32,7 @@ async function showPreview(path) {
   const r = Math.max(size.x, size.y, size.z) || 1;
   previewCamera.position.set(0, r * 0.6, r * 1.9).multiplyScalar(previewZoom);
   previewCamera.lookAt(0, 0, 0);
-  $("#preview-info").textContent = `${path.replace("data/hd/", "")} · ${size.x.toFixed(1)} × ${size.y.toFixed(1)} × ${size.z.toFixed(1)} (${(size.x / 10).toFixed(1)} × ${(size.z / 10).toFixed(1)} ${tr("tiles")})`;
+  $("#preview-info").textContent = `${path.replace("data/hd/", "")} · ${size.x.toFixed(1)} × ${size.y.toFixed(1)} × ${size.z.toFixed(1)} (${(size.x / 10).toFixed(1)} × ${(size.z / 10).toFixed(1)} ${tr("tiles")}) · ${triangles(inner).toLocaleString(locale())} ${tr("triangles")}`;
 }
 // drag the preview to turn the model, wheel to zoom; it turns by itself again after 3 s
 let previewDrag = null, previewTouched = 0, previewZoom = 1;
@@ -210,6 +210,8 @@ function renderObjectList() {
     li.innerHTML = `<span class="kind" title="${kind}">${icon}</span>`;
     li.appendChild(marked(ent.name, f));
     li.dataset.id = ent.id;
+    const tp = comp(ent, "TransformDefinitionComponent")?.position;
+    if (tp) li.title = `${ent.name} · x ${(+tp.x).toFixed(1)}  z ${(+tp.z).toFixed(1)}`;
     if (hiddenIds.has(ent.id)) li.classList.add("hidden-obj");
     if (lockedIds?.has(ent.id)) { li.classList.add("locked-obj"); li.title = tr("Locked (Ctrl+Shift+L unlocks all)"); }
     li.onclick = (e) => {

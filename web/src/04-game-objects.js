@@ -246,7 +246,7 @@ async function paste(fromKit = null, inPlace = false) {
   for (const src of clip.items) {
     const ent = JSON.parse(JSON.stringify(src));
     ent.id = newId();
-    ent.name = `${src.name}_copy`;
+    ent.name = copyName(src.name);
     const t = comp(ent, "TransformDefinitionComponent");
     if (t) {
       t.position.x += dx;
@@ -329,7 +329,7 @@ renderer.domElement.addEventListener("pointermove", () => {
   const p = primary();
   const dist = p ? `  ·  ${tr("{0} from the selection").replace("{0}", Math.hypot(x - p.position.x, z - p.position.z).toFixed(1))}` : "";
   const y = root ? groundHeight(x, z) : 0;
-  $("#cursor-pos").textContent = `x ${x.toFixed(1)}  z ${z.toFixed(1)}  ${tr("height")} ${(y || 0).toFixed(1)}  ·  tile ${Math.floor(x / 10)},${Math.floor(z / 10)}` + dist;
+  $("#cursor-pos").textContent = `x ${x.toFixed(1)}  z ${z.toFixed(1)}  ${tr("height")} ${(y || 0).toFixed(1)}  ·  tile ${Math.floor(x / 10)},${Math.floor(z / 10)}  ·  subtile ${Math.floor(x / 2)},${Math.floor(z / 2)}` + dist;
 });
 
 // ---------- autosave drafts every 60 s while there are unsaved changes ----------

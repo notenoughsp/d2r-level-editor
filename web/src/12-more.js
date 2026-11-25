@@ -97,6 +97,7 @@ function updateMapBorder(c) {
     new THREE.LineDashedMaterial({ color: 0xc7a35a, dashSize: 4, gapSize: 3, transparent: true, opacity: 0.8 }));
   line.computeLineDistances();
   line.raycast = () => {};
+  line.visible = options.showBorder !== false;
   scene.add(line);
   scene.userData.border = line;
 }
@@ -118,6 +119,9 @@ function mapStats() {
     tr("{0} objects, {1} different models").replace("{0}", doc.entities.length).replace("{1}", models.size),
     tr("Game objects: {0} NPCs/monsters, {1} objects").replace("{0}", go.filter((g) => g.type === 1).length).replace("{1}", go.filter((g) => g.type !== 1).length),
     tr("Hidden: {0} · locked: {1}").replace("{0}", hiddenIds.size).replace("{1}", lockedIds.size),
+    tr("Lights: {0}").replace("{0}", doc.entities.filter((e) => (e.components || []).some((c) => /LightDefinitionComponent$/.test(c.type))).length),
+    coll ? tr("Outside the map border: {0} object(s)").replace("{0}", [...entityObjects.values()].filter((o) => !o.userData.terrain &&
+      (o.position.x < -5 || o.position.z < -5 || o.position.x > coll.width * 10 + 5 || o.position.z > coll.height * 10 + 5)).length) : "",
     "", tr("By kind"),
     ...[...kinds].sort((a, b) => b[1] - a[1]).map(([k, n]) => `  ${String(n).padStart(5)}  ${tr(k)}`),
     "", tr("Most used models"),
