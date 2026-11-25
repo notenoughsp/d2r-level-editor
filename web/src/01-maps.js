@@ -235,6 +235,7 @@ async function openPreset(path, opts = {}) {
   showPresetInfo(path);
   loadLocks();
   showNote();
+  applyWireframe();
   setStatus(`${path} loaded`);
   document.querySelectorAll("#preset-list li").forEach((li) => li.classList.toggle("active", li.dataset.path === path));
   if (sd.on) { sd.path = null; sdLoad(); }  // the legacy view shows the newly opened map

@@ -80,6 +80,8 @@ Unsaved work is autosaved every 60 seconds and offered again when you reopen the
 | Arrow keys, Ctrl+C / V / D on a game object | move it one subtile (Shift: five), copy, paste, duplicate |
 | Ctrl+E, Ctrl+, | export, options |
 | Ctrl while dragging a handle | snapping the other way round |
+| Space, I, J | move/rotate/scale in turn, show only the selection, next object with the same model |
+| Shift+T, number pad 4 6 8 2 5 | top view above the selection, turn, tilt, top view |
 | Ctrl+K | search maps, models, objects, NPCs, kits, options, commands and places (`120 45`, `tile 12 4`) |
 | ? or F1 | keyboard and mouse help |
 | Esc | close a dialog, deselect |

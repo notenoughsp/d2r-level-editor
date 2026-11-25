@@ -105,6 +105,7 @@ gizmo.addEventListener("objectChange", () => {
   }
   showProps();
   markDirty();
+  showDragAmount();
 });
 
 // "3× barrel01, 2× crate02": the selection by model (or name), most first
@@ -194,7 +195,7 @@ function showProps() {
   $("#b-swap").onclick = replaceWithPreview;
   $("#b-same").onclick = selectSameModel;
   $("#b-ground").onclick = dropToGround;
-  $("#b-rand").onclick = randomRotate;
+  $("#b-rand").onclick = (e) => randomRotate(e.shiftKey);
   $("#b-rsize").onclick = randomSize;
   $("#b-grid").onclick = snapToGrid;
   $("#b-r0").onclick = resetRotation;
@@ -376,6 +377,7 @@ async function removeSelected() {
 
 async function save() {
   if (!doc) return;
+  if (!dirty) return setStatus(tr("Nothing to save"));
   const r = await postJSON("preset", { path: presetPath }, doc);
   if (r.ok) {
     dirty = false;
@@ -384,6 +386,7 @@ async function save() {
     renderTabs();
     updateSceneInfo();
     setStatus("Saved: " + presetPath.replace("data/hd/env/preset/", ""));
+    $("#btn-save").title = tr("Ctrl+S · last saved {0}").replace("{0}", new Date().toLocaleTimeString(locale()));
     const li = document.querySelector(`#preset-list li[data-path="${presetPath}"]`);
     if (li) li.classList.add("edited");
     editedMaps.add(presetPath);

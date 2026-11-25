@@ -150,11 +150,13 @@ function lightProps(o) {
   const fields = ["power", "radius", "distance", "angle", "attenuation"].filter((k) => typeof lc[k] === "number");
   return `<div class="light-box"><div class="prop-model">${lc.type.replace("DefinitionComponent", "")}</div>` +
     `<div class="prop-row light-row"><span>${tr("Colour")}</span><input type="color" id="lt-color" value="${toHex(lc.color || { x: 1, y: 1, z: 1 })}"></div>` +
+    lightPresetButtons() +
     fields.map((k) => `<div class="prop-row light-row"><span>${tr(k)}</span><input type="number" step="any" data-light="${k}" value="${lc[k]}"></div>`).join("") + "</div>";
 }
 function wireLightProps(o) {
   const lc = o.userData.entity.components.find((c) => /LightDefinitionComponent$/.test(c.type));
   if (!lc || !$("#lt-color")) return;
+  wireLightPresets(lc);
   $("#lt-color").addEventListener("change", (e) => { beginEdit(); lc.color = fromHex(e.target.value); markDirty(); setStatus(tr("Light colour changed")); });
   document.querySelectorAll("[data-light]").forEach((inp) => inp.addEventListener("change", () => {
     const v = parseFloat(inp.value);

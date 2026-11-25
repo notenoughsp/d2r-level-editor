@@ -4,7 +4,7 @@ const OPTION_DEFAULTS = {
   autosave: 60, undoSteps: 100, labels: true, labelScale: 0.6, hoverInfo: true, previewSpin: true, statusFade: 8,
   confirmDelete: 20, dupOffset: 2, minimapSize: 220, renderScale: 100, selColor: "#ffd400", bg: "", checkUpdates: true,
   maxListEntries: 1500, tooltips: true, thumbs: true, effects: true, stamps: true, animations: true, figures: true, figureScale: 1, walkPaths: true, reopen: true, zoomToCursor: true,
-  hoverBox: true, gizmoSize: 1, showFps: false, shotDouble: false, invertZoom: false, swapMouse: false,
+  hoverBox: true, gizmoSize: 1, showFps: false, shotDouble: false, invertZoom: false, swapMouse: false, smoothFly: true,
 };
 let options = { ...OPTION_DEFAULTS, ...JSON.parse(localStorage.getItem("options") || "{}") };
 if (!options.v2) { options.damping = false; options.v2 = true; localStorage.setItem("options", JSON.stringify(options)); }  // smoothing off since 0.5.1
@@ -26,6 +26,7 @@ const OPTION_FORM = [
     ["zoomSpeed", "Zoom speed", "number", 0.1, 5, 0.1],
     ["panSpeed", "Pan speed", "number", 0.1, 5, 0.1],
     ["damping", "Smooth camera movement", "check"],
+    ["smoothFly", "Short camera flights when jumping to an object", "check"],
     ["zoomToCursor", "Zoom towards the mouse cursor", "check"],
     ["invertZoom", "Turn the wheel the other way to zoom", "check"],
     ["swapMouse", "Right mouse pans, middle mouse turns", "check"],

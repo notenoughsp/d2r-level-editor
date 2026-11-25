@@ -298,3 +298,7 @@ input.prop-name:hover, input.prop-name:focus { border-color: #3a3326; background
 .map-tab.drop { box-shadow: inset 3px 0 0 #ffd400; }
 #help-search { width: 100%; box-sizing: border-box; margin: 6px 0; padding: 6px; }
 #cursor-pos { cursor: copy; }
+.light-presets { display: flex; gap: 4px; margin: 4px 0 6px; }
+.light-presets button { width: 22px; height: 18px; padding: 0; border: 1px solid #3a3326; border-radius: 3px; }
+.light-presets button:hover { outline: 1px solid #ffd400; }
+label.snap-off { color: #e08a4a; }

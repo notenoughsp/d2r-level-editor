@@ -1880,9 +1880,10 @@ class Handler(BaseHTTPRequestHandler):
                     self.send(400, {"error": str(e)})
             elif u.path == "/api/reveal":
                 self.drain()
-                EXPORTS.mkdir(parents=True, exist_ok=True)
-                os.startfile(str(EXPORTS))  # noqa: S606 (fixed local folder)
-                self.send(200, {"opened": str(EXPORTS)})
+                folder = pathlib.Path(casc.GAME) / "mods" if q.get("what") == "mods" else EXPORTS
+                folder.mkdir(parents=True, exist_ok=True)
+                os.startfile(str(folder))  # noqa: S606 (one of two fixed local folders)
+                self.send(200, {"opened": str(folder)})
             elif u.path == "/api/collision":
                 body = self.body_json()
                 self.send(200, edit_collision(ds1_for_preset(q["path"]), body.get("ops", [])))

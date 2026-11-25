@@ -290,8 +290,10 @@ renderer.domElement.addEventListener("dblclick", (e) => {
 function flyTo(target, dist) {
   const dir = camera.position.clone().sub(orbit.target).normalize();
   dist ??= Math.min(camera.position.distanceTo(orbit.target), 40);
+  const pos = target.clone().addScaledVector(dir, dist);
+  if (options.smoothFly) return startCameraAnim(target, pos);
   orbit.target.copy(target);
-  camera.position.copy(target).addScaledVector(dir, dist);
+  camera.position.copy(pos);
   orbit.update();
 }
 // F: the whole selection fills the view (objects, or the selected game object)

@@ -83,7 +83,7 @@ async function loadGameObjects() {
     if (res.ok) gameObjects = await res.json();
   } catch { /* no ds1 */ }
   buildGameObjects();
-  fillAddObjectList();
+  restoreAddObject();
 }
 
 function selectGameObject(g) {
@@ -213,10 +213,12 @@ function dropToGround() {
   return transformSelection((o) => { o.position.y = groundHeight(o.position.x, o.position.z); },
     `${selection.length} object(s) dropped to the ground`);
 }
-function randomRotate() {
+function randomRotate(steps = false) {
+  const snap = THREE.MathUtils.degToRad(+$("#snap-r").value || 15);
   return transformSelection((o) => {
-    o.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.random() * Math.PI * 2));
-  }, "Rotated at random");
+    const a = Math.random() * Math.PI * 2;
+    o.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), steps ? Math.round(a / snap) * snap : a));
+  }, steps ? tr("Rotated at random in steps of {0}°").replace("{0}", $("#snap-r").value) : "Rotated at random");
 }
 function nudge(dx, dy, dz) {
   return transformSelection((o) => { o.position.x += dx; o.position.y += dy; o.position.z += dz; });
@@ -255,6 +257,9 @@ async function paste(fromKit = null, inPlace = false) {
     doc.entities.push(ent);
     created.push(await addObjectFor(ent));
   }
+  if ($("#follow-ground").checked && !inPlace) {
+    for (const o of created) { o.position.y = groundHeight(o.position.x, o.position.z); writeTransform(o); }
+  }
   select(created);
   markDirty();
   setStatus(`${created.length} object(s) pasted`);
@@ -265,7 +270,7 @@ async function paste(fromKit = null, inPlace = false) {
 let marquee = null;
 renderer.domElement.addEventListener("pointerdown", (e) => {
   if (tool !== "objects" || e.button !== 0 || gizmo.axis) return;
-  marquee = { x: e.clientX, y: e.clientY, active: false, add: e.shiftKey };
+  marquee = { x: e.clientX, y: e.clientY, active: false, add: e.shiftKey, remove: e.ctrlKey };
 });
 window.addEventListener("pointermove", (e) => {
   if (!marquee) return;
@@ -296,7 +301,7 @@ window.addEventListener("pointerup", () => {
     const sx = r.left + ((v.x + 1) / 2) * r.width, sy = r.top + ((1 - v.y) / 2) * r.height;
     if (sx >= x0 && sx <= x1 && sy >= y0 && sy <= y1) hits.push(o);
   }
-  select(m.add ? [...new Set([...selection, ...hits])] : hits);
+  select(m.remove ? selection.filter((o) => !hits.includes(o)) : m.add ? [...new Set([...selection, ...hits])] : hits);
   setStatus(`${hits.length} object(s) in the box`);
   setTimeout(() => { marquee = null; }, 0); // let the click handler see that a rectangle was drawn
 });

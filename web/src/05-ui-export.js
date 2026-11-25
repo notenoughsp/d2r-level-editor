@@ -25,6 +25,7 @@ function applySnap() {
   gizmo.setScaleSnap(on ? +$("#snap-s").value || null : null);
   for (const id of ["snap-t", "snap-r", "snap-s"]) localStorage.setItem(id, $("#" + id).value);
   localStorage.setItem("snapOn", on ? "1" : "0");
+  $("#snap").parentElement.classList.toggle("snap-off", !on);
 }
 if (localStorage.getItem("snapOn")) $("#snap").checked = localStorage.getItem("snapOn") === "1";
 if (localStorage.getItem("followGround")) $("#follow-ground").checked = localStorage.getItem("followGround") === "1";
@@ -136,6 +137,13 @@ window.addEventListener("keydown", (e) => {
     gamePaste();
     return;
   }
+  if (!ev.ctrlKey && /^Numpad[24568]$/.test(ev.code)) {  // view keys on the number pad
+    ev.preventDefault();
+    if (ev.code === "Numpad5") return toggleTopView();
+    const q = Math.PI / 4, t = Math.PI / 12;
+    return turnView(ev.code === "Numpad4" ? -q : ev.code === "Numpad6" ? q : 0, ev.code === "Numpad8" ? -t : ev.code === "Numpad2" ? t : 0);
+  }
+  if (ev.key === " " && !ev.ctrlKey) { ev.preventDefault(); return cycleMode(); }
   // , and . by their place on the keyboard (Shift gives other characters on some layouts)
   if (!ev.ctrlKey && (ev.code === "Comma" || ev.code === "Period")) { (ev.shiftKey ? turnGroup : turnSelection)(ev.code === "Comma" ? -1 : 1); return; }
   if (!ev.ctrlKey && (ev.key === "+" || ev.key === "-")) {
@@ -193,7 +201,10 @@ window.addEventListener("keydown", (e) => {
   else if (e.ctrlKey && e.key === "c") { e.preventDefault(); copySelection(); }
   else if (e.ctrlKey && e.key === "v") { e.preventDefault(); paste(); }
   else if (e.key === "g") dropToGround();
+  else if (e.key === "t" && e.shiftKey) topViewOnSelection();
   else if (e.key === "t") toggleTopView();
+  else if (e.key === "i" && !e.ctrlKey) toggleIsolate();
+  else if (e.key === "j" && !e.ctrlKey) nextSameModel();
   else if (e.key.startsWith("Arrow") || e.key === "PageUp" || e.key === "PageDown") {
     if (!selection.length) return;
     e.preventDefault();
